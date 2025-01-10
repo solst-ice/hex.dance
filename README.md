@@ -1,8 +1,17 @@
-# React + Vite
+# HEX.DANCE
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Simple client-side binary analysis and hex dump viewer.
 
-Currently, two official plugins are available:
+## Technical Details
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+HEX.DANCE is built with:
+- React + Vite for the frontend
+- Custom Mach-O binary parser
+- CSS animations for visual effects
+- No backend required - all processing happens in the browser
+
+### Supported Binary Types
+- Mach-O 32-bit (`MH_MAGIC`: 0xfeedface)
+- Mach-O 64-bit (`MH_MAGIC_64`: 0xfeedfacf)
+- Universal binaries (`FAT_MAGIC`: 0xcafebabe)
+- Handles both native and byte-swapped variants

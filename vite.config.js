@@ -7,5 +7,5 @@ export default defineConfig({
   server: {
     port: 5173
   },
-  base: '/hex.dance/',
+  base: '/',
 })
