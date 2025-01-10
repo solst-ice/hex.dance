@@ -1,0 +1,88 @@
+<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    .hex { 
+      font: bold 20px 'Courier New', monospace; 
+      fill: #0ff;
+      filter: drop-shadow(0 0 2px #0ff);
+    }
+    @media (prefers-color-scheme: light) {
+      .hex { fill: #0088ff; }
+    }
+    @keyframes glitch {
+      0% { 
+        transform: translate(0, 0) skew(0deg); 
+        fill: #0ff;
+        opacity: 1;
+      }
+      20% { 
+        transform: translate(-2px, 1px) skew(3deg);
+        fill: #ff36ab;
+        opacity: 0.8;
+      }
+      40% { 
+        transform: translate(1px, -1px) skew(-2deg);
+        fill: #0ff;
+        opacity: 0.9;
+      }
+      60% { 
+        transform: translate(-1px, 2px) skew(1deg);
+        fill: #ff36ab;
+        opacity: 0.8;
+      }
+      80% { 
+        transform: translate(2px, 1px) skew(-3deg);
+        fill: #0ff;
+        opacity: 1;
+      }
+      100% { 
+        transform: translate(0, 0) skew(0deg); 
+        fill: #0ff;
+        opacity: 1;
+      }
+    }
+    @keyframes colorShift {
+      0% { fill: #0ff; }
+      33% { fill: #ff36ab; }
+      66% { fill: #0ff; }
+      100% { fill: #0ff; }
+    }
+    .glitch {
+      animation: glitch 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94) infinite;
+    }
+    .shadow {
+      fill: #060714;
+      filter: url(#glow);
+      animation: colorShift 2s linear infinite;
+    }
+    .hex {
+      animation: colorShift 2s linear infinite reverse;
+    }
+  </style>
+  
+  <defs>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="1.5" />
+      <feComposite in2="SourceGraphic" operator="out" />
+      <feFlood flood-color="#0ff" flood-opacity="0.6" />
+      <feComposite in2="SourceGraphic" operator="atop" />
+    </filter>
+  </defs>
+
+  <rect width="32" height="32" fill="#060714"/>
+  
+  <!-- Shadow/Glow layers with offset for more glitch effect -->
+  <g class="glitch" style="animation-delay: -0.1s">
+    <text x="4" y="22" class="shadow" style="opacity: 0.5">0x</text>
+  </g>
+  <g class="glitch" style="animation-delay: -0.2s">
+    <text x="4" y="22" class="shadow" style="opacity: 0.3">0x</text>
+  </g>
+  
+  <!-- Main text layers -->
+  <g class="glitch" style="animation-delay: -0.15s">
+    <text x="4" y="22" class="hex">0x</text>
+  </g>
+  <g class="glitch">
+    <text x="4" y="22" class="hex">0x</text>
+  </g>
+</svg> 
