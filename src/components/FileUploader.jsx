@@ -7,7 +7,7 @@ function FileUploader({ onFileAnalysis }) {
   const [isDragging, setIsDragging] = useState(false)
   const [isHovering, setIsHovering] = useState(false)
 
-  const isMachO = (buffer) => {
+const isMachO = (buffer) => {
     const view = new DataView(buffer)
     const magic = view.getUint32(0, false)
     console.log('Magic number:', magic.toString(16))
@@ -194,18 +194,46 @@ function FileUploader({ onFileAnalysis }) {
       reader.onload = (e) => {
         const buffer = e.target.result
         try {
-          if (!isMachO(buffer)) {
-            throw new Error('Not a valid Mach-O file')
+          // Check file type by magic numbers
+          const view = new DataView(buffer)
+          const magic = view.getUint32(0, false)
+          const firstBytes = view.getUint16(0, false)  // For JPEG detection
+          
+          // Image format signatures
+          const isPNG = magic === 0x89504E47
+          const isJPG = firstBytes === 0xFFD8  // JPEG starts with FF D8
+          const isGIF = magic === 0x47494638
+
+          // Mach-O signatures
+          const isMachO = magic === 0xfeedface || // 32-bit
+                         magic === 0xfeedfacf || // 64-bit
+                         magic === 0xcefaedfe || // 32-bit reversed
+                         magic === 0xcffaedfe || // 64-bit reversed
+                         magic === 0xcafebabe || // Universal
+                         magic === 0xbebafeca    // Universal reversed
+
+          if (isMachO) {
+            const functions = parseMachO(buffer)
+            onFileAnalysis(functions, buffer, 'macho', file)
+          } else if (isPNG) {
+            const metadata = parsePNG(buffer)
+            onFileAnalysis(metadata, buffer, 'png', file)
+          } else if (isJPG) {
+            const metadata = parseJPEG(buffer)
+            onFileAnalysis(metadata, buffer, 'jpeg', file)
+          } else if (isGIF) {
+            const metadata = parseGIF(buffer)
+            onFileAnalysis(metadata, buffer, 'gif', file)
+          } else {
+            throw new Error('Unsupported file format. Please upload a Mach-O binary or image file (PNG, JPEG, GIF).')
           }
-          const functions = parseMachO(buffer)
-          onFileAnalysis(functions, buffer)  // Pass both functions and buffer
         } catch (err) {
           setError(err.message)
         }
       }
       reader.readAsArrayBuffer(file)
     } catch (err) {
-      console.error('Error parsing file:', err)
+      console.error('Error processing file:', err)
       setError('Error processing file: ' + err.message)
     } finally {
       setLoading(false)
@@ -290,6 +318,102 @@ function FileUploader({ onFileAnalysis }) {
       {error && <p className="error">{error}</p>}
     </div>
   )
+}
+
+// Image format parsers
+function parsePNG(buffer) {
+  const view = new DataView(buffer)
+  const metadata = new Set()
+  
+  // PNG Header: 89 50 4E 47 0D 0A 1A 0A
+  // Then chunks: Length (4) + Type (4) + Data + CRC (4)
+  let offset = 8 // Skip signature
+
+  while (offset < buffer.byteLength) {
+    const length = view.getUint32(offset, false)
+    offset += 4
+    
+    // Read chunk type
+    const type = String.fromCharCode(
+      view.getUint8(offset),
+      view.getUint8(offset + 1),
+      view.getUint8(offset + 2),
+      view.getUint8(offset + 3)
+    )
+    
+    if (type === 'IHDR') {
+      const width = view.getUint32(offset + 4, false)
+      const height = view.getUint32(offset + 8, false)
+      const bitDepth = view.getUint8(offset + 12)
+      const colorType = view.getUint8(offset + 13)
+      
+      metadata.add(`Width: ${width}px`)
+      metadata.add(`Height: ${height}px`)
+      metadata.add(`Bit Depth: ${bitDepth}`)
+      metadata.add(`Color Type: ${colorType}`)
+    }
+    
+    offset += 4 + length + 4 // Type + Data + CRC
+  }
+
+  return metadata
+}
+
+function parseJPEG(buffer) {
+  const view = new DataView(buffer)
+  const metadata = new Set()
+  let offset = 2 // Skip SOI marker
+
+  while (offset < buffer.byteLength) {
+    const marker = view.getUint16(offset, false)
+    offset += 2
+    
+    // SOFn markers contain dimensions
+    if ((marker & 0xFFF0) === 0xFFC0) {
+      const length = view.getUint16(offset, false)
+      const precision = view.getUint8(offset + 2)
+      const height = view.getUint16(offset + 3, false)
+      const width = view.getUint16(offset + 5, false)
+      const components = view.getUint8(offset + 7)
+      
+      metadata.add(`Width: ${width}px`)
+      metadata.add(`Height: ${height}px`)
+      metadata.add(`Precision: ${precision} bits`)
+      metadata.add(`Components: ${components}`)
+      break
+    }
+    
+    const length = view.getUint16(offset, false)
+    offset += length
+  }
+
+  return metadata
+}
+
+function parseGIF(buffer) {
+  const view = new DataView(buffer)
+  const metadata = new Set()
+  
+  // GIF Header
+  const version = String.fromCharCode(
+    view.getUint8(3),
+    view.getUint8(4),
+    view.getUint8(5)
+  )
+  
+  const width = view.getUint16(6, true)
+  const height = view.getUint16(8, true)
+  const flags = view.getUint8(10)
+  const bgColor = view.getUint8(11)
+  
+  metadata.add(`Version: GIF${version}`)
+  metadata.add(`Width: ${width}px`)
+  metadata.add(`Height: ${height}px`)
+  metadata.add(`Background Color Index: ${bgColor}`)
+  metadata.add(`Color Resolution: ${((flags >> 4) & 7) + 1} bits`)
+  metadata.add(`Global Color Table: ${(flags & 0x80) ? 'Yes' : 'No'}`)
+  
+  return metadata
 }
 
 export default FileUploader

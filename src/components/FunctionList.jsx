@@ -35,7 +35,19 @@ const functionDescriptions = {
   'ares_timeout': "Gets c-ares timeout value"
 }
 
-function FunctionItem({ func, isSelected, onSelect, isExpanded }) {
+function FunctionItem({ func, isSelected, onSelect, isExpanded, isMetadata }) {
+  if (isMetadata) {
+    // Handle metadata items
+    const [label, value] = func.split(': ')
+    return (
+      <div className="metadata-item">
+        <span className="metadata-label">{label}</span>
+        <span className="metadata-value">{value}</span>
+      </div>
+    )
+  }
+
+  // Handle Mach-O symbols
   const name = func.slice(0, -4)  // Remove the (T) or (U) suffix
   const type = func.slice(-2, -1) // Get T or U
 
@@ -56,37 +68,74 @@ function FunctionItem({ func, isSelected, onSelect, isExpanded }) {
   )
 }
 
-function FunctionList({ functions }) {
+function FunctionList({ functions, title = 'Found Symbols' }) {
   const [selectedFunction, setSelectedFunction] = useState(null)
   const [expandAll, setExpandAll] = useState(false)
+  const isMetadata = title === 'File Metadata'
 
   // Check if we have any functions using Set.size
   const hasFunctions = functions instanceof Set && functions.size > 0
 
   if (!hasFunctions) return null
 
+  const sortMetadataFields = (items) => {
+    const order = ['Width', 'Height']; // Priority order
+    return [...items].sort((a, b) => {
+      const aLabel = a.split(':')[0].trim();
+      const bLabel = b.split(':')[0].trim();
+      
+      // Get indices from order array, -1 if not found
+      const aIndex = order.indexOf(aLabel);
+      const bIndex = order.indexOf(bLabel);
+      
+      // If both items are in order array, sort by their position
+      if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
+      // If only a is in order array, it comes first
+      if (aIndex !== -1) return -1;
+      // If only b is in order array, it comes first
+      if (bIndex !== -1) return 1;
+      // Otherwise, sort alphabetically
+      return aLabel.localeCompare(bLabel);
+    });
+  };
+
   return (
-    <div className="function-list">
+    <div className={`function-list ${isMetadata ? 'metadata-grid' : ''}`}>
       <div className="function-list-header">
-        <h2>Found Symbols</h2>
-        <button 
-          className="expand-toggle" 
-          onClick={() => setExpandAll(!expandAll)}
-        >
-          {expandAll ? 'Collapse All' : 'Expand All'}
-        </button>
+        <h2>{isMetadata ? 'METADATA' : title}</h2>
+        {!isMetadata && (
+          <button 
+            className="expand-toggle" 
+            onClick={() => setExpandAll(!expandAll)}
+          >
+            {expandAll ? 'Collapse All' : 'Expand All'}
+          </button>
+        )}
       </div>
-      <ul>
-        {[...functions].sort().map((func, index) => (
-          <FunctionItem 
-            key={index} 
-            func={func} 
-            isSelected={selectedFunction === func}
-            onSelect={() => setSelectedFunction(func === selectedFunction ? null : func)}
-            isExpanded={expandAll}
-          />
-        ))}
-      </ul>
+      {isMetadata ? (
+        <div className="metadata-grid">
+          {sortMetadataFields([...functions]).map((func, index) => (
+            <FunctionItem 
+              key={index} 
+              func={func} 
+              isMetadata={true}
+            />
+          ))}
+        </div>
+      ) : (
+        <ul>
+          {[...functions].sort().map((func, index) => (
+            <FunctionItem 
+              key={index} 
+              func={func} 
+              isSelected={selectedFunction === func}
+              onSelect={() => setSelectedFunction(func === selectedFunction ? null : func)}
+              isExpanded={expandAll}
+              isMetadata={false}
+            />
+          ))}
+        </ul>
+      )}
     </div>
   )
 }

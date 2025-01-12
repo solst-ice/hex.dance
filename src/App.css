@@ -1,3 +1,11 @@
+/* Import Unifont */
+@font-face {
+  font-family: 'Unifont';
+  src: url('/unifont.woff') format('woff');
+  font-weight: normal;
+  font-style: normal;
+}
+
 /* Cyberpunk theme colors */
 :root {
   --neon-blue: #0ff;
@@ -15,6 +23,7 @@ body {
   color: #fff;
   margin: 0;
   padding: 0;
+  font-family: 'Unifont', monospace;
 }
 
 .container {
@@ -55,6 +64,7 @@ body {
   font-size: 2.2em;
   text-transform: uppercase;
   letter-spacing: 2px;
+  font-family: 'Unifont', monospace;
 }
 
 /* File uploader */
@@ -206,7 +216,7 @@ body {
   background: #2f3542;
   color: #e4e4e4;
   border-radius: 4px;
-  font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+  font-family: 'Unifont', monospace;
   font-size: 0.9em;
   line-height: 1.4;
   cursor: pointer;
@@ -271,7 +281,7 @@ body {
 .hex-dump-container h2 {
   color: var(--neon-blue);
   margin: 0;
-  font-family: 'Courier New', monospace;
+  font-family: 'Unifont', monospace;
   text-transform: uppercase;
   letter-spacing: 2px;
 }
@@ -285,6 +295,7 @@ body {
 .hex-dump-wrapper {
   position: relative;
   height: calc(100% - 50px);
+  margin-top: 10px;
 }
 
 .nav-arrow {
@@ -326,7 +337,7 @@ body {
 
 /* Update hex-dump to account for nav arrows */
 .hex-dump {
-  padding-right: 30px; /* Increased to make room for arrows */
+  padding-right: 36px !important;  /* Increased from previous value */
 }
 
 /* Remove old nav styles */
@@ -338,14 +349,15 @@ body {
 }
 
 .hex-dump {
-  font-family: 'Courier New', monospace;
+  font-family: 'Unifont', monospace;
   font-size: 14px;
   line-height: 1.5;
-  height: calc(100% - 50px);
+  height: 100%;
   overflow-y: auto;
   overflow-x: auto;
   outline: none;
-  padding-right: 10px;
+  padding: 0 36px 0 0;
+  margin: 0;
 }
 
 .hex-row {
@@ -490,7 +502,7 @@ body {
   padding: 6px 12px;
   border-radius: 4px;
   cursor: pointer;
-  font-family: 'Courier New', monospace;
+  font-family: 'Unifont', monospace;
   font-size: 0.9em;
   display: flex;
   align-items: center;
@@ -520,12 +532,13 @@ body {
 .scroll-indicator {
   position: absolute;
   right: 0;
-  top: 0;
-  bottom: 0;
+  top: 24px;
+  bottom: 24px;
   width: 24px;
   background: var(--darker-bg);
   border-left: 1px solid var(--neon-blue);
   z-index: 1;
+  margin: 0;
 }
 
 .scroll-thumb {
@@ -537,6 +550,7 @@ body {
   min-height: 20px;
   cursor: grab;
   user-select: none;
+  margin: 0;
 }
 
 .scroll-thumb:active {
@@ -579,7 +593,7 @@ body {
   padding: 6px 12px;
   border-radius: 4px;
   cursor: pointer;
-  font-family: 'Courier New', monospace;
+  font-family: 'Unifont', monospace;
   font-size: 0.9em;
   transition: all 0.2s ease;
   text-transform: uppercase;
@@ -622,7 +636,7 @@ body {
 .glitch-title {
   position: relative;
   color: var(--neon-blue);
-  font-family: 'Courier New', monospace;
+  font-family: 'Unifont', monospace;
   text-transform: uppercase;
   letter-spacing: 4px;
   text-shadow: 
@@ -665,4 +679,160 @@ body {
   20%, 30% { clip-path: inset(0 0 60% 0); }
   40%, 50% { clip-path: inset(0 0 40% 0); }
   60%, 70% { clip-path: inset(0 0 20% 0); }
+}
+
+/* Position arrows at the edges */
+.nav-arrow.up {
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--darker-bg);
+  border-left: 1px solid var(--neon-blue);
+  z-index: 2;
+}
+
+.nav-arrow.down {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--darker-bg);
+  border-left: 1px solid var(--neon-blue);
+  z-index: 2;
+}
+
+/* File Metadata styles */
+.file-metadata {
+  background: var(--darker-bg);
+  border-radius: 8px;
+  padding: 20px;
+  margin: 20px 0;
+  border: 1px solid var(--neon-blue);
+  box-shadow: 0 0 20px rgba(0, 255, 255, 0.1);
+}
+
+.file-metadata h2 {
+  color: var(--neon-blue);
+  margin: 0 0 20px 0;
+  font-family: 'Unifont', monospace;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  font-size: 1.5em;
+}
+
+.metadata-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 15px;
+}
+
+/* Remove duplicate styles and keep only these metadata styles */
+.metadata-item {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.metadata-label {
+  color: var(--neon-pink);
+  font-size: 0.9em;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.metadata-value {
+  color: var(--neon-blue);
+  font-family: 'Unifont', monospace;
+  background: rgba(0, 255, 255, 0.1);
+  padding: 8px;
+  border-radius: 4px;
+  word-break: break-all;
+}
+
+/* Function list metadata styles */
+.function-list.metadata-grid {
+  background: var(--darker-bg);
+  border-radius: 8px;
+  padding: 20px 20px 20px 60px;  /* Increased left padding */
+  margin: 20px 0;
+  border: 1px solid var(--neon-blue);
+  box-shadow: 0 0 20px rgba(0, 255, 255, 0.1);
+  position: relative;
+  min-height: 120px;
+  display: flex;
+  align-items: stretch;
+}
+
+.function-list.metadata-grid .function-list-header {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 40px;  /* Fixed width for label area */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.function-list.metadata-grid .function-list-header h2 {
+  position: absolute;
+  left: 50%;
+  top: 55%;
+  transform: translate(-50%, -50%) rotate(-90deg);
+  transform-origin: center center;
+  color: var(--neon-blue);
+  font-family: 'Unifont', monospace;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  font-size: 1.5em;
+  white-space: nowrap;
+  background: var(--darker-bg);
+  padding: 8px 12px;
+  border: 1px solid var(--neon-blue);
+  border-radius: 4px;
+  box-shadow: 0 0 10px rgba(0, 255, 255, 0.1);
+  margin: 0;
+}
+
+.function-list.metadata-grid .metadata-grid {
+  flex: 1;
+  margin-left: 15px;  /* Added space between label and content */
+  padding-left: 5px;
+}
+
+.file-metadata h2 {
+  color: var(--neon-blue);
+  margin: 0 0 20px 0;
+  font-family: 'Unifont', monospace;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  font-size: 1.5em;
+}
+
+/* Function list styles - specifically for Found Symbols */
+.function-list:not(.metadata-grid) {
+  background: var(--darker-bg);
+  border-radius: 8px;
+  padding: 20px;
+  margin: 20px 0;
+  border: 1px solid var(--neon-blue);
+  box-shadow: 0 0 20px rgba(0, 255, 255, 0.1);
+}
+
+.function-list:not(.metadata-grid) .function-list-header h2 {
+  color: var(--neon-blue);
+  font-family: 'Unifont', monospace;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  font-size: 1.5em;
+  margin: 0;
 }
