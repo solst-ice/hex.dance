@@ -37,12 +37,21 @@ const functionDescriptions = {
 
 function FunctionItem({ func, isSelected, onSelect, isExpanded, isMetadata }) {
   if (isMetadata) {
-    // Handle metadata items
-    const [label, value] = func.split(': ')
+    const [label, ...valueParts] = func.split(': ')
+    const value = valueParts.join(': ') // Rejoin in case value contains colons
     return (
       <div className="metadata-item">
         <span className="metadata-label">{label}</span>
-        <span className="metadata-value">{value}</span>
+        <span className="metadata-value">
+          {value && value.includes('\n') 
+            ? value.split('\n').map((line, i) => (
+                <div key={i} className="tree-line" style={{fontFamily: 'monospace'}}>
+                  {line}
+                </div>
+              ))
+            : value
+          }
+        </span>
       </div>
     )
   }

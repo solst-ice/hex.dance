@@ -36,6 +36,16 @@ function FileMetadata({ file, buffer, fileType }) {
         return 'JPEG Image'
       case 'gif':
         return 'GIF Image'
+      case 'pdf':
+        return 'PDF Document'
+      case 'zip':
+        return 'ZIP Archive'
+      case 'unknown':
+        return file.type || 'Unknown Format'
+      case 'pe':
+        return 'Windows PE Executable'
+      case 'elf':
+        return 'Linux ELF Executable'
       default:
         return 'Unknown format'
     }

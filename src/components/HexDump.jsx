@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 
-function HexDump({ buffer }) {
+function HexDump({ buffer, fileName }) {
   const [offset, setOffset] = useState(0)
   const [hoveredByte, setHoveredByte] = useState(null)
   const containerRef = useRef(null)
@@ -9,9 +9,75 @@ function HexDump({ buffer }) {
   const [isDragging, setIsDragging] = useState(false)
   const [dragStartY, setDragStartY] = useState(0)
   const scrollRef = useRef(null)
+  const [editMode, setEditMode] = useState(false)
+  const [modifiedBuffer, setModifiedBuffer] = useState(null)
+  const [hasModifications, setHasModifications] = useState(false)
+  const [showDownload, setShowDownload] = useState(false)
+  const hexInputRefs = useRef({})
   
   if (!buffer) return null
   const view = new DataView(buffer)
+
+  useEffect(() => {
+    setModifiedBuffer(new Uint8Array(buffer))
+    setHasModifications(false)
+    setShowDownload(false)
+  }, [buffer])
+
+  const toggleEditMode = () => {
+    if (editMode) {
+      setShowDownload(hasModifications)
+      setEditMode(false)
+    } else {
+      setEditMode(true)
+    }
+  }
+
+  const handleHexChange = (offset, value) => {
+    const hex = value.replace(/[^0-9A-Fa-f]/g, '')
+    if (hex.length === 2) {
+      const byte = parseInt(hex, 16)
+      const newBuffer = new Uint8Array(modifiedBuffer)
+      newBuffer[offset] = byte
+      setModifiedBuffer(newBuffer)
+      setHasModifications(true)
+    }
+  }
+
+  const renderHexByte = (byte, offset) => {
+    if (editMode) {
+      return (
+        <input
+          ref={el => hexInputRefs.current[offset] = el}
+          type="text"
+          maxLength="2"
+          className="hex-input"
+          defaultValue={byte.toString(16).padStart(2, '0')}
+          onChange={(e) => handleHexChange(offset, e.target.value)}
+        />
+      )
+    }
+    return byte.toString(16).padStart(2, '0')
+  }
+
+  const downloadModifiedFile = () => {
+    const blob = new Blob([modifiedBuffer], { type: 'application/octet-stream' })
+    const url = URL.createObjectURL(blob)
+    
+    // Parse the filename and add -hexdance before the extension
+    const lastDot = fileName.lastIndexOf('.')
+    const newFileName = lastDot !== -1
+      ? `${fileName.slice(0, lastDot)}-hexdance${fileName.slice(lastDot)}`
+      : `${fileName}-hexdance`
+
+    const a = document.createElement('a')
+    a.href = url
+    a.download = newFileName
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
 
   const isZeroRow = (startOffset) => {
     if (startOffset >= buffer.byteLength) return false
@@ -161,7 +227,8 @@ function HexDump({ buffer }) {
       const byteOffset = rowOffset + col
       if (byteOffset >= buffer.byteLength) break
 
-      const byte = view.getUint8(byteOffset)
+      // Always use modifiedBuffer if it exists
+      const byte = modifiedBuffer ? modifiedBuffer[byteOffset] : view.getUint8(byteOffset)
       const isHovered = hoveredByte === byteOffset
       
       bytes.push(
@@ -171,7 +238,7 @@ function HexDump({ buffer }) {
           onMouseEnter={() => setHoveredByte(byteOffset)}
           onMouseLeave={() => setHoveredByte(null)}
         >
-          {byte.toString(16).padStart(2, '0')}
+          {renderHexByte(byte, byteOffset)}
         </span>
       )
 
@@ -260,7 +327,11 @@ function HexDump({ buffer }) {
   // Calculate scroll progress based on actual displayed rows
   const totalDisplayableRows = countDisplayableRows()
   const currentDisplayedRow = findDisplayedRowNumber(offset)
-  const scrollProgress = (currentDisplayedRow / Math.max(totalDisplayableRows - ROWS_TO_DISPLAY, 1)) * 100
+  const maxScroll = editMode ? 95 : 98  // Higher limit when not in edit mode
+  const scrollProgress = Math.min(
+    (currentDisplayedRow / Math.max(totalDisplayableRows - ROWS_TO_DISPLAY, 1)) * 100,
+    maxScroll  // Use conditional max scroll value
+  )
   const visiblePercentage = Math.min((ROWS_TO_DISPLAY / totalDisplayableRows) * 100, 100)
 
   // Add drag handlers
@@ -323,9 +394,26 @@ function HexDump({ buffer }) {
   }, [isDragging, dragStartY])
 
   return (
-    <div className="hex-dump-container">
+    <div className={`hex-dump-container ${editMode ? 'edit-mode' : ''}`}>
       <div className="hex-dump-header">
         <h2>Hex Dump <span className="cyberpunk-subtitle">// memory analysis</span></h2>
+        <div className="header-controls">
+          {editMode && <span className="edit-mode-label">EDIT MODE ENABLED</span>}
+          <button 
+            className={`edit-button ${editMode ? 'active' : ''}`} 
+            onClick={toggleEditMode}
+          >
+            {editMode ? 'SAVE' : 'EDIT'}
+          </button>
+          {showDownload && (
+            <button 
+              className="download-button" 
+              onClick={downloadModifiedFile}
+            >
+              DOWNLOAD
+            </button>
+          )}
+        </div>
       </div>
       <div className="hex-dump-wrapper">
         <button 
@@ -347,8 +435,8 @@ function HexDump({ buffer }) {
             className="scroll-thumb" 
             style={{ 
               height: `${visiblePercentage}%`,
-              top: `${scrollProgress}%`,
-              transform: `translateY(-${scrollProgress}%)`
+              top: `${Math.min(scrollProgress, maxScroll)}%`,  // Use same conditional max
+              transform: `translateY(-${Math.min(scrollProgress, maxScroll)}%)`
             }}
             onMouseDown={handleScrollMouseDown}
           />

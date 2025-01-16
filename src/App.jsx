@@ -11,12 +11,16 @@ function App() {
   const [fileBuffer, setFileBuffer] = useState(null)
   const [fileType, setFileType] = useState(null)
   const [currentFile, setCurrentFile] = useState(null)
+  const [zipContents, setZipContents] = useState(null)
 
   const handleFileAnalysis = (data, buffer, type, file) => {
-    setFunctions(new Set(data))
+    setFunctions(type === 'zip' ? data.metadata : new Set(data))
     setFileBuffer(buffer)
     setFileType(type)
     setCurrentFile(file)
+    if (type === 'zip') {
+      setZipContents(data.contents)
+    }
   }
 
   return (
@@ -41,7 +45,18 @@ function App() {
                 title="File Metadata" 
               />
             )}
-            <HexDump buffer={fileBuffer} />
+            {fileType === 'zip' && zipContents && (
+              <div className="zip-contents">
+                <h2>Archive Contents</h2>
+                <pre className="tree-view">
+                  {[...zipContents][0]}
+                </pre>
+              </div>
+            )}
+            <HexDump 
+              buffer={fileBuffer} 
+              fileName={currentFile.name}
+            />
             {fileType === 'macho' && functions.size > 0 && (
               <FunctionList 
                 functions={functions} 

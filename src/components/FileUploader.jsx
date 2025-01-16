@@ -183,6 +183,230 @@ const isMachO = (buffer) => {
     }
   }
 
+  // Add PE file detection
+  const isPE = (buffer) => {
+    const view = new DataView(buffer)
+    // Check for MZ signature
+    if (view.getUint16(0, true) !== 0x5A4D) return false
+    
+    // Get PE header offset from e_lfanew
+    const peOffset = view.getUint32(0x3C, true)
+    // Check for PE signature
+    return view.getUint32(peOffset, true) === 0x4550 // "PE\0\0"
+  }
+
+  // Add PE parser function
+  function parsePE(buffer) {
+    const view = new DataView(buffer)
+    const functions = new Set()
+    
+    try {
+      // Get PE header offset
+      const peOffset = view.getUint32(0x3C, true)
+      
+      // Read COFF header fields
+      const numberOfSections = view.getUint16(peOffset + 6, true)
+      const optionalHeaderSize = view.getUint16(peOffset + 20, true)
+      
+      // Optional header offset
+      const optOffset = peOffset + 24
+      
+      // Check if 32-bit or 64-bit PE
+      const is64 = view.getUint16(optOffset, true) === 0x20B
+      
+      // Get data directory offset
+      const dataDirectoryOffset = is64 
+        ? optOffset + 112  // PE32+
+        : optOffset + 96   // PE32
+      
+      // Get export directory RVA and size
+      const exportDirRVA = view.getUint32(dataDirectoryOffset, true)
+      const exportDirSize = view.getUint32(dataDirectoryOffset + 4, true)
+      
+      if (exportDirRVA === 0) {
+        return functions // No exports
+      }
+      
+      // Parse section headers to find export section
+      const sectionHeadersOffset = optOffset + optionalHeaderSize
+      let exportFileOffset = null
+      
+      for (let i = 0; i < numberOfSections; i++) {
+        const sectionOffset = sectionHeadersOffset + (i * 40)
+        const virtualAddress = view.getUint32(sectionOffset + 12, true)
+        const rawAddress = view.getUint32(sectionOffset + 20, true)
+        const sectionSize = view.getUint32(sectionOffset + 16, true)
+        
+        // Check if export directory is in this section
+        if (exportDirRVA >= virtualAddress && exportDirRVA < virtualAddress + sectionSize) {
+          exportFileOffset = rawAddress + (exportDirRVA - virtualAddress)
+          break
+        }
+      }
+      
+      if (exportFileOffset === null) return functions
+      
+      // Read export directory
+      const numberOfNames = view.getUint32(exportFileOffset + 24, true)
+      const addressOfNames = view.getUint32(exportFileOffset + 32, true)
+      
+      // Find section containing name RVAs
+      let nameTableOffset = null
+      for (let i = 0; i < numberOfSections; i++) {
+        const sectionOffset = sectionHeadersOffset + (i * 40)
+        const virtualAddress = view.getUint32(sectionOffset + 12, true)
+        const rawAddress = view.getUint32(sectionOffset + 20, true)
+        const sectionSize = view.getUint32(sectionOffset + 16, true)
+        
+        if (addressOfNames >= virtualAddress && addressOfNames < virtualAddress + sectionSize) {
+          nameTableOffset = rawAddress + (addressOfNames - virtualAddress)
+          break
+        }
+      }
+      
+      if (nameTableOffset === null) return functions
+      
+      // Read function names
+      for (let i = 0; i < numberOfNames; i++) {
+        const nameRVA = view.getUint32(nameTableOffset + (i * 4), true)
+        
+        // Find section containing this name
+        for (let j = 0; j < numberOfSections; j++) {
+          const sectionOffset = sectionHeadersOffset + (j * 40)
+          const virtualAddress = view.getUint32(sectionOffset + 12, true)
+          const rawAddress = view.getUint32(sectionOffset + 20, true)
+          const sectionSize = view.getUint32(sectionOffset + 16, true)
+          
+          if (nameRVA >= virtualAddress && nameRVA < virtualAddress + sectionSize) {
+            const nameOffset = rawAddress + (nameRVA - virtualAddress)
+            
+            // Read null-terminated function name
+            let name = ''
+            let k = 0
+            while (k < 256) { // Prevent infinite loop
+              const char = view.getUint8(nameOffset + k)
+              if (char === 0) break
+              name += String.fromCharCode(char)
+              k++
+            }
+            
+            if (name) {
+              functions.add(`${name} (E)`) // E for Export
+            }
+            break
+          }
+        }
+      }
+      
+    } catch (err) {
+      console.error('Error parsing PE file:', err)
+      throw new Error('Invalid PE file structure: ' + err.message)
+    }
+    
+    return functions
+  }
+
+  // Add ELF detection
+  const isELF = (buffer) => {
+    const view = new DataView(buffer)
+    // Check for ELF magic number: 0x7F 'ELF'
+    return view.getUint32(0, false) === 0x7F454C46
+  }
+
+  // Add ELF parser function
+  function parseELF(buffer) {
+    const view = new DataView(buffer)
+    const functions = new Set()
+    
+    try {
+      // Verify ELF magic number
+      if (!isELF(buffer)) throw new Error('Not a valid ELF file')
+      
+      // Check if 32 or 64 bit
+      const is64 = view.getUint8(4) === 2
+      const isLittleEndian = view.getUint8(5) === 1
+      
+      // Get section header info
+      const shoff = is64 ? view.getBigUint64(40, isLittleEndian) : view.getUint32(32, isLittleEndian)
+      const shentsize = view.getUint16(is64 ? 58 : 46, isLittleEndian)
+      const shnum = view.getUint16(is64 ? 60 : 48, isLittleEndian)
+      const shstrndx = view.getUint16(is64 ? 62 : 50, isLittleEndian)
+      
+      // Find string table section
+      const strTableOffset = Number(shoff) + (shstrndx * shentsize)
+      const strTableAddr = is64
+        ? view.getBigUint64(strTableOffset + 24, isLittleEndian)
+        : view.getUint32(strTableOffset + 16, isLittleEndian)
+      
+      // Helper to read null-terminated string
+      const readString = (offset) => {
+        let str = ''
+        let i = 0
+        while (offset + i < buffer.byteLength) {
+          const char = view.getUint8(offset + i)
+          if (char === 0) break
+          str += String.fromCharCode(char)
+          i++
+        }
+        return str
+      }
+      
+      // Find symbol tables
+      for (let i = 0; i < shnum; i++) {
+        const sectionOffset = Number(shoff) + (i * shentsize)
+        const sectionType = view.getUint32(sectionOffset + 4, isLittleEndian)
+        
+        // SHT_SYMTAB = 2, SHT_DYNSYM = 11
+        if (sectionType === 2 || sectionType === 11) {
+          const symtabOffset = is64
+            ? view.getBigUint64(sectionOffset + 24, isLittleEndian)
+            : view.getUint32(sectionOffset + 16, isLittleEndian)
+          const symtabSize = is64
+            ? view.getBigUint64(sectionOffset + 32, isLittleEndian)
+            : view.getUint32(sectionOffset + 20, isLittleEndian)
+          const symtabEntsize = is64
+            ? view.getBigUint64(sectionOffset + 56, isLittleEndian)
+            : view.getUint32(sectionOffset + 36, isLittleEndian)
+          
+          // Get associated string table
+          const linkIdx = view.getUint32(sectionOffset + 8, isLittleEndian)
+          const strOffset = Number(shoff) + (linkIdx * shentsize)
+          const strAddr = is64
+            ? view.getBigUint64(strOffset + 24, isLittleEndian)
+            : view.getUint32(strOffset + 16, isLittleEndian)
+          
+          // Parse symbols
+          const numSymbols = Number(symtabSize) / Number(symtabEntsize)
+          for (let j = 0; j < numSymbols; j++) {
+            const symOffset = Number(symtabOffset) + (j * Number(symtabEntsize))
+            
+            // Get symbol info
+            const nameOffset = view.getUint32(symOffset, isLittleEndian)
+            const info = view.getUint8(is64 ? symOffset + 4 : symOffset + 12)
+            const type = info & 0xf
+            
+            // ST_FUNC = 2, STT_OBJECT = 1
+            if (type === 2 || type === 1) {
+              const name = readString(Number(strAddr) + nameOffset)
+              if (name) {
+                const bind = info >> 4
+                // Add symbol type: L=local, G=global, W=weak
+                const bindType = bind === 0 ? 'L' : bind === 1 ? 'G' : bind === 2 ? 'W' : 'U'
+                functions.add(`${name} (${bindType})`)
+              }
+            }
+          }
+        }
+      }
+      
+    } catch (err) {
+      console.error('Error parsing ELF file:', err)
+      throw new Error('Invalid ELF file structure: ' + err.message)
+    }
+    
+    return functions
+  }
+
   const processFile = async (file) => {
     if (!file) return
 
@@ -194,41 +418,55 @@ const isMachO = (buffer) => {
       reader.onload = (e) => {
         const buffer = e.target.result
         try {
-          // Check file type by magic numbers
           const view = new DataView(buffer)
           const magic = view.getUint32(0, false)
-          const firstBytes = view.getUint16(0, false)  // For JPEG detection
+          const firstBytes = view.getUint16(0, false)
           
-          // Image format signatures
-          const isPNG = magic === 0x89504E47
-          const isJPG = firstBytes === 0xFFD8  // JPEG starts with FF D8
-          const isGIF = magic === 0x47494638
+          // Basic metadata for any file
+          const basicMetadata = new Set([
+            `File Size: ${formatBytes(buffer.byteLength)}`,
+            `First Bytes: 0x${magic.toString(16).padStart(8, '0').toUpperCase()}`,
+            `File Type: ${file.type || 'application/octet-stream'}`
+          ])
 
-          // Mach-O signatures
-          const isMachO = magic === 0xfeedface || // 32-bit
-                         magic === 0xfeedfacf || // 64-bit
-                         magic === 0xcefaedfe || // 32-bit reversed
-                         magic === 0xcffaedfe || // 64-bit reversed
-                         magic === 0xcafebabe || // Universal
-                         magic === 0xbebafeca    // Universal reversed
-
-          if (isMachO) {
+          // Try to identify and process known formats
+          if (isMachO(buffer)) {
             const functions = parseMachO(buffer)
             onFileAnalysis(functions, buffer, 'macho', file)
-          } else if (isPNG) {
+          } else if (isPE(buffer)) {
+            const functions = parsePE(buffer)
+            onFileAnalysis(functions, buffer, 'pe', file)
+          } else if (isELF(buffer)) {
+            const functions = parseELF(buffer)
+            onFileAnalysis(functions, buffer, 'elf', file)
+          } else if (magic === 0x89504E47) {
             const metadata = parsePNG(buffer)
             onFileAnalysis(metadata, buffer, 'png', file)
-          } else if (isJPG) {
+          } else if (firstBytes === 0xFFD8) {
             const metadata = parseJPEG(buffer)
             onFileAnalysis(metadata, buffer, 'jpeg', file)
-          } else if (isGIF) {
+          } else if (magic === 0x47494638) {
             const metadata = parseGIF(buffer)
             onFileAnalysis(metadata, buffer, 'gif', file)
+          } else if (String.fromCharCode(...new Uint8Array(buffer.slice(0, 5))) === '%PDF-') {
+            const metadata = parsePDF(buffer)
+            onFileAnalysis(metadata, buffer, 'pdf', file)
+          } else if (magic === 0x504B0304) {
+            const { metadata, contents } = parseZIP(buffer)
+            onFileAnalysis({ metadata, contents }, buffer, 'zip', file)
           } else {
-            throw new Error('Unsupported file format. Please upload a Mach-O binary or image file (PNG, JPEG, GIF).')
+            // Unknown file type - show basic metadata and hex dump
+            setError('Note: This file format is not specifically supported, showing basic information.')
+            onFileAnalysis(basicMetadata, buffer, 'unknown', file)
           }
         } catch (err) {
-          setError(err.message)
+          // On parsing error, still show basic metadata and hex dump
+          setError('Error parsing file: ' + err.message)
+          const basicMetadata = new Set([
+            `File Size: ${formatBytes(buffer.byteLength)}`,
+            `File Type: ${file.type || 'application/octet-stream'}`
+          ])
+          onFileAnalysis(basicMetadata, buffer, 'unknown', file)
         }
       }
       reader.readAsArrayBuffer(file)
@@ -306,7 +544,7 @@ const isMachO = (buffer) => {
         <input
           type="file"
           onChange={handleFileUpload}
-          accept=".o,.dylib,*"
+          accept=".o,.dylib,.pdf,.zip,image/*"
           disabled={loading}
           id="file-input"
         />
@@ -414,6 +652,211 @@ function parseGIF(buffer) {
   metadata.add(`Global Color Table: ${(flags & 0x80) ? 'Yes' : 'No'}`)
   
   return metadata
+}
+
+// Add PDF parser function
+function parsePDF(buffer) {
+  const view = new DataView(buffer)
+  const metadata = new Set()
+  
+  // Helper function to clean PDF strings
+  const cleanPDFString = (str) => {
+    return str
+      .replace(/[\x00-\x1F\x7F-\x9F]/g, '') // Remove control characters
+      .replace(/\uFFFD/g, '') // Remove replacement character
+      .replace(/\s+/g, ' ') // Normalize whitespace
+      .trim()
+  }
+
+  // Get PDF version
+  let version = ''
+  for (let i = 5; i < 8; i++) {
+    const char = String.fromCharCode(view.getUint8(i))
+    if (char === '\n' || char === '\r') break
+    version += char
+  }
+  metadata.add(`Version: PDF ${version}`)
+  
+  // Get file size
+  metadata.add(`File Size: ${formatBytes(buffer.byteLength)}`)
+  
+  // Look for metadata in PDF
+  const text = new TextDecoder().decode(buffer)
+  
+  // Try to find creation date
+  const creationMatch = text.match(/\/CreationDate\s*\((D:)?([^)]+)\)/)
+  if (creationMatch) {
+    let date = creationMatch[2]
+    // Format PDF date (YYYYMMDDHHmmSS) to readable format
+    if (date.length >= 14) {
+      const year = date.slice(0, 4)
+      const month = date.slice(4, 6)
+      const day = date.slice(6, 8)
+      const hour = date.slice(8, 10)
+      const minute = date.slice(10, 12)
+      const second = date.slice(12, 14)
+      date = `${year}-${month}-${day} ${hour}:${minute}:${second}`
+    }
+    metadata.add(`Creation Date: ${cleanPDFString(date)}`)
+  }
+  
+  // Try to find author
+  const authorMatch = text.match(/\/Author\s*\(([^)]+)\)/)
+  if (authorMatch) {
+    metadata.add(`Author: ${cleanPDFString(authorMatch[1])}`)
+  }
+  
+  // Try to find title
+  const titleMatch = text.match(/\/Title\s*\(([^)]+)\)/)
+  if (titleMatch) {
+    const cleanTitle = cleanPDFString(titleMatch[1])
+    if (cleanTitle) { // Only add if there's actual content after cleaning
+      metadata.add(`Title: ${cleanTitle}`)
+    }
+  }
+  
+  // Try to find producer
+  const producerMatch = text.match(/\/Producer\s*\(([^)]+)\)/)
+  if (producerMatch) {
+    metadata.add(`Producer: ${cleanPDFString(producerMatch[1])}`)
+  }
+  
+  // Try to find page count
+  const pageCountMatch = text.match(/\/Count\s+(\d+)/)
+  if (pageCountMatch) {
+    metadata.add(`Pages: ${pageCountMatch[1]}`)
+  }
+  
+  return metadata
+}
+
+// Add ZIP parser function
+function parseZIP(buffer) {
+  const view = new DataView(buffer)
+  const metadata = new Set()
+  const contents = new Set()  // Separate set for contents
+  let offset = 0
+  const files = []
+  const treeItems = new Set()
+
+  // Get file size
+  metadata.add(`File Size: ${formatBytes(buffer.byteLength)}`)
+
+  // Parse central directory
+  while (offset < buffer.byteLength - 4) {
+    const signature = view.getUint32(offset, true)
+    
+    if (signature === 0x04034b50) {
+      offset += 4
+      offset += 4 // Skip version and flags
+      const compressionMethod = view.getUint16(offset, true)
+      offset += 2
+      offset += 4 // Skip time and date
+      offset += 4 // Skip CRC
+      const compressedSize = view.getUint32(offset, true)
+      offset += 4
+      const uncompressedSize = view.getUint32(offset, true)
+      offset += 4
+      const fileNameLength = view.getUint16(offset, true)
+      offset += 2
+      const extraFieldLength = view.getUint16(offset, true)
+      offset += 2
+
+      // Read filename
+      let fileName = ''
+      for (let i = 0; i < fileNameLength; i++) {
+        fileName += String.fromCharCode(view.getUint8(offset + i))
+      }
+      
+      // Skip data
+      offset += fileNameLength + extraFieldLength + compressedSize
+
+      files.push({
+        name: fileName,
+        size: uncompressedSize,
+        compressed: compressionMethod !== 0,
+        isDirectory: fileName.endsWith('/')
+      })
+    } else {
+      offset++
+    }
+  }
+
+  // Build tree structure
+  const tree = {}
+  files.forEach(file => {
+    const parts = file.name.split('/')
+    let current = tree
+    
+    parts.forEach((part, index) => {
+      if (!part && index === parts.length - 1) return // Skip empty parts at end (directories)
+      
+      if (!current[part]) {
+        current[part] = {
+          _files: [],
+          _meta: file.name === parts.slice(0, index + 1).join('/') ? file : null
+        }
+      }
+      
+      if (index === parts.length - 1 && !file.isDirectory) {
+        current[part]._files.push(file)
+      }
+      
+      current = current[part]
+    })
+  })
+
+  // Convert tree to ASCII format
+  function renderTree(node, prefix = '', isLast = true, parentPrefix = '') {
+    const entries = Object.entries(node)
+      .filter(([key]) => !key.startsWith('_'))
+      .sort(([a], [b]) => a.localeCompare(b))
+
+    entries.forEach(([name, subNode], index) => {
+      const isLastEntry = index === entries.length - 1
+      const displayPrefix = parentPrefix + (isLast ? '└── ' : '├── ')
+      const newParentPrefix = parentPrefix + (isLast ? '    ' : '│   ')
+      
+      // Add directory name
+      if (subNode._meta?.isDirectory) {
+        treeItems.add(`${displayPrefix}${name}/`)
+      } else if (subNode._files.length === 0) {
+        treeItems.add(`${displayPrefix}${name}/`)
+      } else {
+        treeItems.add(`${displayPrefix}${name}`)
+      }
+
+      // Add files in this directory
+      subNode._files.forEach((file, fileIndex) => {
+        const isLastFile = fileIndex === subNode._files.length - 1 && entries.length === 0
+        const filePrefix = newParentPrefix + (isLastFile ? '└── ' : '├── ')
+        treeItems.add(`${filePrefix}${file.name.split('/').pop()} (${formatBytes(file.size)}${file.compressed ? ', compressed' : ''})`)
+      })
+
+      // Recurse into subdirectories
+      renderTree(subNode, prefix + '  ', isLastEntry, newParentPrefix)
+    })
+  }
+
+  // Add file count
+  const fileCount = files.filter(f => !f.isDirectory).length
+  metadata.add(`Total Files: ${fileCount}`)
+  
+  // Add the tree structure to contents instead of metadata
+  treeItems.add('.')
+  renderTree(tree, '', true)
+  contents.add(`${Array.from(treeItems).join('\n')}`)
+
+  return { metadata, contents }  // Return both sets
+}
+
+// Helper function to format bytes
+function formatBytes(bytes) {
+  if (bytes === 0) return '0 Bytes'
+  const k = 1024
+  const sizes = ['Bytes', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`
 }
 
 export default FileUploader
