@@ -443,22 +443,10 @@ const isMachO = (buffer) => {
         // ZIP file
         const { metadata, contents } = parseZIP(buffer)
         onFileAnalysis(metadata, buffer, 'zip', file, contents)
-      } else if (view.getUint32(0, false) === 0x89504E47) {
-        // PNG file
-        const metadata = parsePNG(buffer)
-        onFileAnalysis(metadata, buffer, 'png', file)
-      } else if (view.getUint16(0, false) === 0xFFD8) {
-        // JPEG file
-        const metadata = parseJPEG(buffer)
-        onFileAnalysis(metadata, buffer, 'jpeg', file)
-      } else if (view.getUint32(0, false) === 0x47494638) {
-        // GIF file
-        const metadata = parseGIF(buffer)
-        onFileAnalysis(metadata, buffer, 'gif', file)
-      } else if (String.fromCharCode(...new Uint8Array(buffer.slice(0, 5))) === '%PDF-') {
-        // PDF file
-        const metadata = parsePDF(buffer)
-        onFileAnalysis(metadata, buffer, 'pdf', file)
+      } else if (view.getUint32(0, false) === 0x7F454C46) {
+        // ELF file
+        const symbols = analyzeBinary(buffer)
+        onFileAnalysis(symbols, buffer, 'elf', file)
       } else {
         // Unsupported file - show basic info and hex dump
         setError('Note: This file format is not specifically supported. Showing basic information.')

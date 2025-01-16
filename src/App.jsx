@@ -45,7 +45,7 @@ function App() {
               buffer={fileBuffer}
               fileType={fileType}
             />
-            {fileType !== 'macho' && functions.size > 0 && (
+            {fileType !== 'macho' && fileType !== 'pe' && fileType !== 'elf' && functions.size > 0 && (
               <FunctionList 
                 functions={functions} 
                 title="File Metadata" 
@@ -63,10 +63,14 @@ function App() {
               buffer={fileBuffer} 
               fileName={currentFile.name}
             />
-            {fileType === 'macho' && functions.size > 0 && (
+            {(fileType === 'macho' || fileType === 'pe' || fileType === 'elf') && functions.size > 0 && (
               <FunctionList 
                 functions={functions} 
-                title="Found Symbols" 
+                title={
+                  fileType === 'macho' ? "Found Symbols" : 
+                  fileType === 'pe' ? "PE Exports & Symbols" :
+                  "ELF Symbols"
+                } 
               />
             )}
           </>

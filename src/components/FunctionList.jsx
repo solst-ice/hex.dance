@@ -38,7 +38,7 @@ const functionDescriptions = {
 function FunctionItem({ func, isSelected, onSelect, isExpanded, isMetadata }) {
   if (isMetadata) {
     const [label, ...valueParts] = func.split(': ')
-    const value = valueParts.join(': ') // Rejoin in case value contains colons
+    const value = valueParts.join(': ')
     return (
       <div className="metadata-item">
         <span className="metadata-label">{label}</span>
@@ -56,28 +56,68 @@ function FunctionItem({ func, isSelected, onSelect, isExpanded, isMetadata }) {
     )
   }
 
-  // Handle Mach-O symbols
-  const name = func.slice(0, -4)  // Remove the (T) or (U) suffix
-  const type = func.slice(-2, -1) // Get T or U
+  // Check if this is an ELF symbol with encoded details
+  if (func.includes('\x00')) {
+    const [title, detailsJson] = func.split('\x00')
+    return (
+      <div className="function-item">
+        <li 
+          onClick={onSelect}
+          className={isSelected || isExpanded ? 'selected' : ''}
+        >
+          {title}
+        </li>
+        <div 
+          className={`function-description inline ${isSelected || isExpanded ? 'show' : ''}`}
+        >
+          {JSON.parse(detailsJson).map((detail, index) => (
+            <div key={index}>{detail}</div>
+          ))}
+        </div>
+      </div>
+    )
+  }
 
+  // Handle Mach-O and PE symbols
+  const match = func.match(/^(.+?)\s*\(([A-Z])\)/)
+  if (match) {
+    const [, name, type] = match
+    return (
+      <div className="function-item">
+        <li 
+          onClick={onSelect}
+          className={isSelected || isExpanded ? 'selected' : ''}
+        >
+          {name} <span className="symbol-type">({type})</span>
+        </li>
+        <div 
+          className={`function-description inline ${isSelected || isExpanded ? 'show' : ''}`}
+        >
+          {functionDescriptions[name] || "No description available for this function."}
+        </div>
+      </div>
+    )
+  }
+
+  // Fallback for any other format
   return (
     <div className="function-item">
       <li 
         onClick={onSelect}
         className={isSelected || isExpanded ? 'selected' : ''}
       >
-        {name} <span className="symbol-type">({type})</span>
+        {func}
       </li>
       <div 
         className={`function-description inline ${isSelected || isExpanded ? 'show' : ''}`}
       >
-        {functionDescriptions[name] || "No description available for this function."}
+        No description available.
       </div>
     </div>
   )
 }
 
-function FunctionList({ functions, title = 'Found Symbols' }) {
+function FunctionList({ functions, title }) {
   const [selectedFunction, setSelectedFunction] = useState(null)
   const [expandAll, setExpandAll] = useState(false)
   const isMetadata = title === 'File Metadata'
@@ -107,6 +147,31 @@ function FunctionList({ functions, title = 'Found Symbols' }) {
       return aLabel.localeCompare(bLabel);
     });
   };
+
+  const renderItem = (item) => {
+    // Check if item has encoded details
+    const [title, detailsJson] = item.split('\x00')
+    const details = detailsJson ? JSON.parse(detailsJson) : null
+    const isExpanded = expandAll || selectedFunction === item
+
+    return (
+      <div key={item} className="function-item">
+        <li 
+          onClick={() => details ? setSelectedFunction(isExpanded ? null : item) : null}
+          className={isExpanded ? 'selected' : ''}
+        >
+          {title}
+        </li>
+        {isExpanded && details && (
+          <div className="function-description inline show">
+            {details.map((detail, index) => (
+              detail && <div key={index}>{detail}</div>
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className={`function-list ${isMetadata ? 'metadata-grid' : ''}`}>
