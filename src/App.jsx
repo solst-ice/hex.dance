@@ -29,7 +29,8 @@ function App() {
       <div className="container">
         <div className="description">
           <h1 className="glitch-title">HEX.DANCE</h1>
-          <p>Drop a binary or image file to analyze its contents and view the hex dump.</p>
+          <p>client-side binary/file analysis, hex dump viewer & editor.<br />
+          by <a href="https://x.com/IceSolst/">solst/ICE</a> (<a href="https://github.com/solst-ice/hex.dance">code</a>)</p>
         </div>
         <FileUploader onFileAnalysis={handleFileAnalysis} />
         {fileBuffer && (
