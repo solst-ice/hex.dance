@@ -13,13 +13,18 @@ function App() {
   const [currentFile, setCurrentFile] = useState(null)
   const [zipContents, setZipContents] = useState(null)
 
-  const handleFileAnalysis = (data, buffer, type, file) => {
-    setFunctions(type === 'zip' ? data.metadata : new Set(data))
+  const handleFileAnalysis = (metadata, buffer, type, file, contents) => {
+    if (type === 'zip') {
+      setFunctions(metadata)
+    } else {
+      setFunctions(new Set(metadata))
+    }
+    
     setFileBuffer(buffer)
     setFileType(type)
     setCurrentFile(file)
-    if (type === 'zip') {
-      setZipContents(data.contents)
+    if (contents) {
+      setZipContents(contents)
     }
   }
 

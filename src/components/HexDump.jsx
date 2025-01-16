@@ -5,7 +5,7 @@ function HexDump({ buffer, fileName }) {
   const [hoveredByte, setHoveredByte] = useState(null)
   const containerRef = useRef(null)
   const BYTES_PER_ROW = 16
-  const ROWS_TO_DISPLAY = 16
+  const [rowsToDisplay, setRowsToDisplay] = useState(16)
   const [isDragging, setIsDragging] = useState(false)
   const [dragStartY, setDragStartY] = useState(0)
   const scrollRef = useRef(null)
@@ -14,6 +14,7 @@ function HexDump({ buffer, fileName }) {
   const [hasModifications, setHasModifications] = useState(false)
   const [showDownload, setShowDownload] = useState(false)
   const hexInputRefs = useRef({})
+  const [isFullscreen, setIsFullscreen] = useState(false)
   
   if (!buffer) return null
   const view = new DataView(buffer)
@@ -52,12 +53,12 @@ function HexDump({ buffer, fileName }) {
           type="text"
           maxLength="2"
           className="hex-input"
-          defaultValue={byte.toString(16).padStart(2, '0')}
+          defaultValue={byte?.toString(16).padStart(2, '0') || '00'}
           onChange={(e) => handleHexChange(offset, e.target.value)}
         />
       )
     }
-    return byte.toString(16).padStart(2, '0')
+    return byte !== undefined ? byte.toString(16).padStart(2, '0') : '00'
   }
 
   const downloadModifiedFile = () => {
@@ -130,7 +131,7 @@ function HexDump({ buffer, fileName }) {
         case 'ArrowDown':
           setOffset(prev => {
             const next = findNextOffset(prev + BYTES_PER_ROW)
-            return Math.min(next, buffer.byteLength - BYTES_PER_ROW * ROWS_TO_DISPLAY)
+            return Math.min(next, buffer.byteLength - BYTES_PER_ROW * rowsToDisplay)
           })
           break
         case 'ArrowUp':
@@ -141,13 +142,13 @@ function HexDump({ buffer, fileName }) {
           break
         case 'PageDown':
           setOffset(prev => {
-            const next = findNextOffset(prev + BYTES_PER_ROW * ROWS_TO_DISPLAY)
-            return Math.min(next, buffer.byteLength - BYTES_PER_ROW * ROWS_TO_DISPLAY)
+            const next = findNextOffset(prev + BYTES_PER_ROW * rowsToDisplay)
+            return Math.min(next, buffer.byteLength - BYTES_PER_ROW * rowsToDisplay)
           })
           break
         case 'PageUp':
           setOffset(prev => {
-            const next = findNextOffset(prev - BYTES_PER_ROW * ROWS_TO_DISPLAY, -1)
+            const next = findNextOffset(prev - BYTES_PER_ROW * rowsToDisplay, -1)
             return Math.max(0, next)
           })
           break
@@ -172,7 +173,7 @@ function HexDump({ buffer, fileName }) {
           const next = findNextOffset(prev + direction * BYTES_PER_ROW, direction)
           return Math.max(0, Math.min(
             next,
-            buffer.byteLength - BYTES_PER_ROW * ROWS_TO_DISPLAY
+            buffer.byteLength - BYTES_PER_ROW * rowsToDisplay
           ))
         })
       }
@@ -185,7 +186,7 @@ function HexDump({ buffer, fileName }) {
   const rows = []
   let currentOffset = offset
 
-  while (rows.length < ROWS_TO_DISPLAY && currentOffset < buffer.byteLength) {
+  while (rows.length < rowsToDisplay && currentOffset < buffer.byteLength) {
     if (isZeroRow(currentOffset)) {
       // Found start of zero sequence
       const sequenceEnd = findZeroSequenceEnd(currentOffset)
@@ -223,11 +224,11 @@ function HexDump({ buffer, fileName }) {
     const bytes = []
     const ascii = []
 
-    for (let col = 0; col < BYTES_PER_ROW; col++) {
-      const byteOffset = rowOffset + col
+    for (let i = 0; i < BYTES_PER_ROW; i++) {
+      const byteOffset = rowOffset + i
       if (byteOffset >= buffer.byteLength) break
 
-      // Always use modifiedBuffer if it exists
+      // Always use modifiedBuffer if it exists, with fallback for undefined values
       const byte = modifiedBuffer ? modifiedBuffer[byteOffset] : view.getUint8(byteOffset)
       const isHovered = hoveredByte === byteOffset
       
@@ -268,7 +269,7 @@ function HexDump({ buffer, fileName }) {
   }
 
   const handleSkipToBottom = () => {
-    setOffset(Math.max(0, buffer.byteLength - BYTES_PER_ROW * ROWS_TO_DISPLAY))
+    setOffset(Math.max(0, buffer.byteLength - BYTES_PER_ROW * rowsToDisplay))
   }
 
   // Count actual displayed rows (excluding skipped zero rows)
@@ -329,10 +330,10 @@ function HexDump({ buffer, fileName }) {
   const currentDisplayedRow = findDisplayedRowNumber(offset)
   const maxScroll = editMode ? 95 : 98  // Higher limit when not in edit mode
   const scrollProgress = Math.min(
-    (currentDisplayedRow / Math.max(totalDisplayableRows - ROWS_TO_DISPLAY, 1)) * 100,
+    (currentDisplayedRow / Math.max(totalDisplayableRows - rowsToDisplay, 1)) * 100,
     maxScroll  // Use conditional max scroll value
   )
-  const visiblePercentage = Math.min((ROWS_TO_DISPLAY / totalDisplayableRows) * 100, 100)
+  const visiblePercentage = Math.min((rowsToDisplay / totalDisplayableRows) * 100, 100)
 
   // Add drag handlers
   const handleScrollMouseDown = (e) => {
@@ -351,7 +352,7 @@ function HexDump({ buffer, fileName }) {
 
     // Calculate new offset based on scroll position
     const newProgress = Math.max(0, Math.min(100, scrollProgress + deltaPercent))
-    const newRow = Math.floor((newProgress / 100) * (totalDisplayableRows - ROWS_TO_DISPLAY))
+    const newRow = Math.floor((newProgress / 100) * (totalDisplayableRows - rowsToDisplay))
     
     // Find the actual offset for this row number
     let currentOffset = 0
@@ -393,14 +394,48 @@ function HexDump({ buffer, fileName }) {
     }
   }, [isDragging, dragStartY])
 
+  // Calculate visible rows based on container height
+  useEffect(() => {
+    const updateVisibleRows = () => {
+      if (!containerRef.current) return
+      const containerHeight = containerRef.current.clientHeight
+      const rowHeight = 24 // Approximate height of each row in pixels
+      const newRowCount = Math.floor(containerHeight / rowHeight)
+      setRowsToDisplay(isFullscreen ? newRowCount : 16)
+    }
+
+    updateVisibleRows()
+    window.addEventListener('resize', updateVisibleRows)
+    return () => window.removeEventListener('resize', updateVisibleRows)
+  }, [isFullscreen])
+
+  // Update rows when toggling fullscreen
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const containerHeight = containerRef.current?.clientHeight || 0
+      const rowHeight = 24 // Approximate height of each row in pixels
+      const newRowCount = Math.floor(containerHeight / rowHeight)
+      setRowsToDisplay(isFullscreen ? newRowCount : 16)
+    }, 100) // Small delay to allow transition to complete
+
+    return () => clearTimeout(timer)
+  }, [isFullscreen])
+
   return (
-    <div className={`hex-dump-container ${editMode ? 'edit-mode' : ''}`}>
+    <div className={`hex-dump-container ${editMode ? 'edit-mode' : ''} ${isFullscreen ? 'fullscreen' : ''}`}>
       <div className="hex-dump-header">
-        <h2>Hex Dump <span className="cyberpunk-subtitle">// memory analysis</span></h2>
+        <h2>Hex Dump</h2>
         <div className="header-controls">
           {editMode && <span className="edit-mode-label">EDIT MODE ENABLED</span>}
           <button 
-            className={`edit-button ${editMode ? 'active' : ''}`} 
+            className="fullscreen-button"
+            onClick={() => setIsFullscreen(!isFullscreen)}
+            title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
+          >
+            <span>{isFullscreen ? '⊠' : '⛶'}</span>
+          </button>
+          <button 
+            className={`edit-button ${editMode ? 'active' : ''}`}
             onClick={toggleEditMode}
           >
             {editMode ? 'SAVE' : 'EDIT'}
@@ -435,7 +470,7 @@ function HexDump({ buffer, fileName }) {
             className="scroll-thumb" 
             style={{ 
               height: `${visiblePercentage}%`,
-              top: `${Math.min(scrollProgress, maxScroll)}%`,  // Use same conditional max
+              top: `${Math.min(scrollProgress, maxScroll)}%`,
               transform: `translateY(-${Math.min(scrollProgress, maxScroll)}%)`
             }}
             onMouseDown={handleScrollMouseDown}
@@ -453,4 +488,4 @@ function HexDump({ buffer, fileName }) {
   )
 }
 
-export default HexDump 
+export default HexDump

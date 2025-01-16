@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
 import MatrixRain from './MatrixRain'
+import { analyzeBinary } from '../utils/binaryAnalysis'
 
 function FileUploader({ onFileAnalysis }) {
   const [error, setError] = useState('')
@@ -414,65 +415,65 @@ const isMachO = (buffer) => {
     setError('')
 
     try {
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        const buffer = e.target.result
-        try {
-          const view = new DataView(buffer)
-          const magic = view.getUint32(0, false)
-          const firstBytes = view.getUint16(0, false)
-          
-          // Basic metadata for any file
-          const basicMetadata = new Set([
-            `File Size: ${formatBytes(buffer.byteLength)}`,
-            `First Bytes: 0x${magic.toString(16).padStart(8, '0').toUpperCase()}`,
-            `File Type: ${file.type || 'application/octet-stream'}`
-          ])
+      const buffer = await file.arrayBuffer()
+      const view = new DataView(buffer)
+      
+      // Create basic metadata set for any file
+      const basicMetadata = new Set([
+        `File Size: ${formatBytes(buffer.byteLength)}`,
+        `File Type: ${file.type || 'application/octet-stream'}`,
+        `First Bytes: 0x${view.getUint32(0, false).toString(16).toUpperCase().padStart(8, '0')}`
+      ])
 
-          // Try to identify and process known formats
-          if (isMachO(buffer)) {
-            const functions = parseMachO(buffer)
-            onFileAnalysis(functions, buffer, 'macho', file)
-          } else if (isPE(buffer)) {
-            const functions = parsePE(buffer)
-            onFileAnalysis(functions, buffer, 'pe', file)
-          } else if (isELF(buffer)) {
-            const functions = parseELF(buffer)
-            onFileAnalysis(functions, buffer, 'elf', file)
-          } else if (magic === 0x89504E47) {
-            const metadata = parsePNG(buffer)
-            onFileAnalysis(metadata, buffer, 'png', file)
-          } else if (firstBytes === 0xFFD8) {
-            const metadata = parseJPEG(buffer)
-            onFileAnalysis(metadata, buffer, 'jpeg', file)
-          } else if (magic === 0x47494638) {
-            const metadata = parseGIF(buffer)
-            onFileAnalysis(metadata, buffer, 'gif', file)
-          } else if (String.fromCharCode(...new Uint8Array(buffer.slice(0, 5))) === '%PDF-') {
-            const metadata = parsePDF(buffer)
-            onFileAnalysis(metadata, buffer, 'pdf', file)
-          } else if (magic === 0x504B0304) {
-            const { metadata, contents } = parseZIP(buffer)
-            onFileAnalysis({ metadata, contents }, buffer, 'zip', file)
-          } else {
-            // Unknown file type - show basic metadata and hex dump
-            setError('Note: This file format is not specifically supported, showing basic information.')
-            onFileAnalysis(basicMetadata, buffer, 'unknown', file)
-          }
-        } catch (err) {
-          // On parsing error, still show basic metadata and hex dump
-          setError('Error parsing file: ' + err.message)
-          const basicMetadata = new Set([
-            `File Size: ${formatBytes(buffer.byteLength)}`,
-            `File Type: ${file.type || 'application/octet-stream'}`
-          ])
-          onFileAnalysis(basicMetadata, buffer, 'unknown', file)
-        }
+      // Check for known binary formats
+      if (view.getUint16(0, true) === 0x5A4D) {
+        // PE file
+        const symbols = analyzeBinary(buffer)
+        onFileAnalysis(symbols, buffer, 'pe', file)
+      } else if (view.getUint32(0) === 0xfeedface || 
+                 view.getUint32(0) === 0xcefaedfe ||
+                 view.getUint32(0) === 0xfeedfacf || 
+                 view.getUint32(0) === 0xcffaedfe ||
+                 view.getUint32(0) === 0xcafebabe || 
+                 view.getUint32(0) === 0xbebafeca) {
+        // Mach-O file
+        const symbols = analyzeBinary(buffer)
+        onFileAnalysis(symbols, buffer, 'macho', file)
+      } else if (view.getUint32(0, true) === 0x04034b50) {
+        // ZIP file
+        const { metadata, contents } = parseZIP(buffer)
+        onFileAnalysis(metadata, buffer, 'zip', file, contents)
+      } else if (view.getUint32(0, false) === 0x89504E47) {
+        // PNG file
+        const metadata = parsePNG(buffer)
+        onFileAnalysis(metadata, buffer, 'png', file)
+      } else if (view.getUint16(0, false) === 0xFFD8) {
+        // JPEG file
+        const metadata = parseJPEG(buffer)
+        onFileAnalysis(metadata, buffer, 'jpeg', file)
+      } else if (view.getUint32(0, false) === 0x47494638) {
+        // GIF file
+        const metadata = parseGIF(buffer)
+        onFileAnalysis(metadata, buffer, 'gif', file)
+      } else if (String.fromCharCode(...new Uint8Array(buffer.slice(0, 5))) === '%PDF-') {
+        // PDF file
+        const metadata = parsePDF(buffer)
+        onFileAnalysis(metadata, buffer, 'pdf', file)
+      } else {
+        // Unsupported file - show basic info and hex dump
+        setError('Note: This file format is not specifically supported. Showing basic information.')
+        onFileAnalysis(basicMetadata, buffer, 'unknown', file)
       }
-      reader.readAsArrayBuffer(file)
-    } catch (err) {
-      console.error('Error processing file:', err)
-      setError('Error processing file: ' + err.message)
+    } catch (error) {
+      console.error('Error processing file:', error)
+      // Even on error, try to show basic file info
+      const buffer = await file.arrayBuffer()
+      const basicMetadata = new Set([
+        `File Size: ${formatBytes(buffer.byteLength)}`,
+        `File Type: ${file.type || 'application/octet-stream'}`
+      ])
+      setError('Error analyzing file: ' + error.message)
+      onFileAnalysis(basicMetadata, buffer, 'unknown', file)
     } finally {
       setLoading(false)
     }
