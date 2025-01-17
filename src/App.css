@@ -298,6 +298,9 @@ body {
   display: flex;
   height: calc(100% - 50px);
   margin-top: 10px;
+  max-height: 70vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .nav-arrow {
@@ -340,6 +343,8 @@ body {
 /* Update hex-dump to account for nav arrows */
 .hex-dump {
   padding-right: 28px !important;
+  min-height: 100%;
+  padding-bottom: 60px;
 }
 
 /* Remove old nav styles */
@@ -1119,21 +1124,34 @@ body {
 
 /* Keep header and content clean in fullscreen */
 .hex-dump-container.fullscreen .hex-dump-header {
-  width: auto;
-  min-width: 800px;
-  max-width: 1000px;
-  margin: 0 auto;
-  padding: 0;
+  width: 100%;
+  padding: 10px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--darker-bg);
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.hex-dump-container.fullscreen .hex-dump-header h2 {
+  margin: 0;
+  flex-shrink: 0;
+  white-space: nowrap;
+  font-size: 1.2em;
 }
 
 .hex-dump-container.fullscreen .hex-dump-wrapper {
-  width: auto;
-  min-width: 800px;
-  max-width: 1000px;
-  margin: 0 auto;
-  height: calc(100vh - 90px);
-  position: relative;
-  border: none;
+  width: 100%;
+  min-width: auto;
+  max-width: 100%;
+  height: calc(100vh - 70px);
+  margin: 0;
+  padding: 10px;
 }
 
 /* Ensure nav arrows stay in view */
@@ -1222,4 +1240,59 @@ body {
 /* Hide the original text content */
 .fullscreen-button span {
   display: none;
+}
+
+/* Make sure buttons are always visible */
+.hex-dump-controls {
+  position: relative;
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+  margin: 0;
+}
+
+/* Adjust button size for mobile */
+@media (max-width: 768px) {
+  .edit-button,
+  .fullscreen-button,
+  .download-button {
+    padding: 4px 6px;
+    min-width: 28px;
+    min-height: 28px;
+  }
+
+  .hex-dump-container.fullscreen {
+    padding: 10px;
+  }
+
+  .hex-dump-container.fullscreen .hex-dump-header {
+    padding: 8px;
+    gap: 8px;
+  }
+
+  .hex-dump-container.fullscreen .hex-dump-header h2 {
+    font-size: 1.1em;
+  }
+}
+
+/* Adjust button sizes */
+.hex-dump-container.fullscreen .edit-button,
+.hex-dump-container.fullscreen .fullscreen-button,
+.hex-dump-container.fullscreen .download-button {
+  padding: 4px 6px;
+  min-width: 28px;
+  min-height: 28px;
+  font-size: 14px;
+}
+
+/* Mobile adjustments */
+@media (max-width: 768px) {
+  .hex-dump-container.fullscreen .hex-dump-header {
+    padding: 8px;
+    gap: 8px;
+  }
+
+  .hex-dump-container.fullscreen .hex-dump-header h2 {
+    font-size: 1.1em;
+  }
 }
