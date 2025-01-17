@@ -408,6 +408,48 @@ const isMachO = (buffer) => {
     return functions
   }
 
+  // Add image metadata parsing functions
+  function parseImageMetadata(buffer) {
+    const view = new DataView(buffer)
+    const metadata = new Set()
+
+    // PNG
+    if (view.getUint32(0, false) === 0x89504E47) {
+      metadata.add(`File Type: PNG Image`)
+      metadata.add(`Width: ${view.getUint32(16, false)}px`)
+      metadata.add(`Height: ${view.getUint32(20, false)}px`)
+      return metadata
+    }
+
+    // JPEG
+    if (view.getUint16(0, false) === 0xFFD8) {
+      metadata.add(`File Type: JPEG Image`)
+      // Find SOF0 marker
+      let offset = 2
+      while (offset < buffer.byteLength) {
+        const marker = view.getUint16(offset, false)
+        const size = view.getUint16(offset + 2, false)
+        if ((marker & 0xFFF0) === 0xFFC0) {
+          metadata.add(`Height: ${view.getUint16(offset + 5, false)}px`)
+          metadata.add(`Width: ${view.getUint16(offset + 7, false)}px`)
+          break
+        }
+        offset += 2 + size
+      }
+      return metadata
+    }
+
+    // GIF
+    if (view.getUint32(0, false) === 0x47494638) {
+      metadata.add(`File Type: GIF Image`)
+      metadata.add(`Width: ${view.getUint16(6, true)}px`)
+      metadata.add(`Height: ${view.getUint16(8, true)}px`)
+      return metadata
+    }
+
+    return null
+  }
+
   const processFile = async (file) => {
     if (!file) return
 
@@ -418,14 +460,21 @@ const isMachO = (buffer) => {
       const buffer = await file.arrayBuffer()
       const view = new DataView(buffer)
       
-      // Create basic metadata set for any file
+      // Create basic metadata set
       const basicMetadata = new Set([
         `File Size: ${formatBytes(buffer.byteLength)}`,
         `File Type: ${file.type || 'application/octet-stream'}`,
         `First Bytes: 0x${view.getUint32(0, false).toString(16).toUpperCase().padStart(8, '0')}`
       ])
 
-      // Check for known binary formats
+      // Check for image files first
+      const imageMetadata = parseImageMetadata(buffer)
+      if (imageMetadata) {
+        onFileAnalysis(imageMetadata, buffer, 'image', file)
+        return
+      }
+
+      // Continue with existing binary format checks
       if (view.getUint16(0, true) === 0x5A4D) {
         // PE file
         const symbols = analyzeBinary(buffer)

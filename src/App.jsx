@@ -67,9 +67,9 @@ function App() {
               <FunctionList 
                 functions={functions} 
                 title={
-                  fileType === 'macho' ? "Found Symbols" : 
-                  fileType === 'pe' ? "PE Exports & Symbols" :
-                  "ELF Symbols"
+                  fileType === 'macho' ? "Mach-O Symbols" : 
+                  fileType === 'pe' ? "PE Exports" :
+                  "ELF Analysis"
                 } 
               />
             )}
