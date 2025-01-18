@@ -2,6 +2,24 @@
 
 Basic client-side binary and file analysis and hex dump viewer and editor.
 
+## Quick Start
+
+### Requirements
+* NPM
+
+Install the dependancies:
+
+```sh
+npm install
+```
+
+Run the development environment
+
+```sh
+npm run dev
+```
+
+
 ## Features
 
 - Privacy: Runs fully client-side in the browser (files are never sent to a server)
@@ -26,3 +44,20 @@ HEX.DANCE is built with:
 - Images (JPG, PNG, GIF)
 - PDF
 - Zip files with content listing
+
+
+## Run it as a docker
+
+### Build the image
+You can build the image from the Repo by running:
+
+```sh
+docker build -t hex-dance:local . 
+```
+
+### Run the container
+To run app using the container use the following commands:
+
+```sh
+docker run -it -p 5173:5173 hex-dance:local
+```
