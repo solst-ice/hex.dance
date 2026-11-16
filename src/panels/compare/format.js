@@ -73,12 +73,21 @@ export function verdict(stats) {
   }
 }
 
-/** One-line description of a detected shift. */
-export function shiftText(shift, at) {
+/**
+ * One-line description of a confirmed shift.
+ * @param {{ shift: number, from: number, to: number, exact: boolean, mixed: boolean }} shift
+ */
+export function shiftText({ shift, from, to, exact, mixed }) {
   const n = plural(Math.abs(shift), 'byte')
-  return shift > 0
-    ? `B has ${n} inserted at ${hexOffset(at)}`
-    : `B has ${n} removed at ${hexOffset(at)} (A has them at ${hexOffset(at)}–${hexOffset(at - shift - 1)})`
+  const where = `${hexOffset(from)}–${hexOffset(to)}`
+  if (shift > 0) {
+    if (exact) return `B has ${n} inserted at ${hexOffset(from)}`
+    if (mixed) return `B has about ${n} inserted around ${where}, where other bytes changed too`
+    return `B has ${n} inserted somewhere in ${where} (inside a run of repeated bytes, so the exact point cannot be told)`
+  }
+  if (exact) return `B has ${n} removed at ${hexOffset(from)} (A has them at ${hexOffset(from)}–${hexOffset(from - shift - 1)})`
+  if (mixed) return `B lacks about ${n} of A around ${where}, where other bytes changed too`
+  return `B has ${n} removed somewhere in ${where} (inside a run of repeated bytes, so the exact point cannot be told)`
 }
 
 /**
@@ -99,7 +108,7 @@ export function exportText({ a, b, stats, ranges, shift = null, cap = EXPORT_CAP
     `# ${verdict(stats).title}: ${verdict(stats).detail}`,
     `# Ranges merge differences separated by up to ${plural(stats.gap, 'equal byte')}.`
   ]
-  if (shift) lines.push(`# ${shiftText(shift.shift, shift.at)}.`)
+  if (shift) lines.push(`# ${shiftText(shift)}.`)
   const shown = Math.min(cap, ranges.length)
   if (shown < stats.rangeCount) lines.push(`# Showing the first ${count(shown)} of ${count(stats.rangeCount)} ranges.`)
   const previews = []

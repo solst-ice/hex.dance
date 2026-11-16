@@ -18,7 +18,6 @@ import './compare.css'
 // Below this share of matching bytes, with no shift found, an equal-offset
 // comparison says little
 const MEANINGFUL_MATCH = 0.5
-const GOOD_SHIFT = 0.9
 
 const sameOffset = (offset) => offset
 
@@ -152,12 +151,9 @@ function Verdict({ comparison, running, stale, onRerun, onJump }) {
         )}
       </dl>
       {shift && (
-        <p className={shift.ratio >= GOOD_SHIFT ? 'compare-shift' : 'compare-shift hd-warning'}>
-          {shiftText(shift.shift, shift.at)}
-          {shift.ratio >= GOOD_SHIFT
-            ? ' (content after that matches again). '
-            : ` but only ${percent(Math.round(shift.ratio * shift.checked), shift.checked)} of the content after it matches again, so the files differ in other ways too. `}
-          Differences listed after {hexOffset(shift.at)} come from the shift, not from changed bytes.
+        <p className="compare-shift">
+          {shiftText(shift)}. The content after it matches again ({percent(Math.round(shift.ratio * shift.checked), shift.checked)} of
+          {' '}{plural(shift.checked, 'checked block')}), so equal-offset differences from {hexOffset(shift.at)} on come from the shift, not from changed bytes.
         </p>
       )}
       {tooDifferent && (

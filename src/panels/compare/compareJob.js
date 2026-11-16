@@ -1,9 +1,10 @@
-import { MAX_SHIFT, WINDOW_EXTRA, shouldLookForShift, verifyShift } from './shift.js'
+import { LOOK_AHEAD, LOOK_BACK, confirmShift, shouldLookForShift } from './shift.js'
 
 const IN_FLIGHT = 2
 
 /**
- * @typedef {{ shift: number, at: number, ratio: number, checked: number }} ShiftResult
+ * @typedef {{ shift: number, at: number, from: number, to: number, exact: boolean, mixed: boolean, ratio: number, checked: number }} ShiftResult
+ *   `at` is the first difference; the edit lies in `from`–`to`
  */
 
 /**
@@ -28,6 +29,7 @@ export function startCompare({ a, b, gap, chunkSize = 4 << 20, onProgress, onCom
   let next = 0
   let inFlight = 0
   let stats = null
+  let shiftBase = 0
 
   const stop = () => {
     finished = true
@@ -52,11 +54,19 @@ export function startCompare({ a, b, gap, chunkSize = 4 << 20, onProgress, onCom
   }
 
   const lookForShift = () => {
-    const at = stats.firstDiff
-    const length = MAX_SHIFT + WINDOW_EXTRA
-    const windowA = a.slice(at, at + length).buffer
-    const windowB = b.slice(at, at + length).buffer
-    worker.postMessage({ type: 'shift', a: windowA, b: windowB }, [windowA, windowB])
+    const base = Math.max(0, stats.firstDiff - LOOK_BACK)
+    const end = stats.firstDiff + LOOK_AHEAD
+    const windowA = a.slice(base, end).buffer
+    const windowB = b.slice(base, end).buffer
+    worker.postMessage({
+      type: 'shift',
+      a: windowA,
+      b: windowB,
+      at: stats.firstDiff - base,
+      endA: end >= a.length,
+      endB: end >= b.length
+    }, [windowA, windowB])
+    shiftBase = base
   }
 
   try {
@@ -84,13 +94,8 @@ export function startCompare({ a, b, gap, chunkSize = 4 << 20, onProgress, onCom
       }
     } else if (message.type === 'shift') {
       stop()
-      const { shift } = message
-      if (shift === null || shift === 0) {
-        onDone(null, true)
-        return
-      }
-      const { ratio, checked } = verifyShift(a, b, stats.firstDiff, shift)
-      onDone({ shift, at: stats.firstDiff, ratio, checked }, true)
+      const shift = confirmShift(a, b, stats.firstDiff, message.candidates || [], shiftBase)
+      onDone(shift, true)
     }
   }
   worker.onerror = (event) => {

@@ -42,8 +42,10 @@ test('hex previews', () => {
 })
 
 test('shift text', () => {
-  assert.equal(shiftText(16, 0x100), 'B has 16 bytes inserted at 0x00000100')
-  assert.equal(shiftText(-2, 0x10), 'B has 2 bytes removed at 0x00000010 (A has them at 0x00000010–0x00000011)')
+  assert.equal(shiftText({ shift: 16, from: 0x100, to: 0x100, exact: true }), 'B has 16 bytes inserted at 0x00000100')
+  assert.equal(shiftText({ shift: -2, from: 0x10, to: 0x10, exact: true }), 'B has 2 bytes removed at 0x00000010 (A has them at 0x00000010–0x00000011)')
+  assert.match(shiftText({ shift: 4, from: 0x10, to: 0x40, exact: false }), /inserted somewhere in 0x00000010–0x00000040/)
+  assert.match(shiftText({ shift: -4, from: 0x10, to: 0x40, exact: false, mixed: true }), /lacks about 4 bytes of A around/)
 })
 
 test('export lists ranges and the size difference', () => {

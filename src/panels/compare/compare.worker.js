@@ -1,10 +1,10 @@
 import { createDiffer } from './diff.js'
-import { findShift } from './shift.js'
+import { findShifts } from './shift.js'
 
 // Protocol (see compareJob.js):
 //   { type: 'begin', params }                    starts a comparison
 //   { type: 'chunk', a, b, offset, last }        equal-length chunks of A and B
-//   { type: 'shift', a, b }                      windows from the divergence on
+//   { type: 'shift', a, b, at, endA, endB }      windows around the divergence
 // Replies: 'progress' after each chunk (also the acknowledgement), 'done'
 // after the last one, 'shift' with the result.
 
@@ -28,6 +28,7 @@ self.onmessage = (event) => {
       post({ type: 'progress', stats: differ.stats(), ranges: differ.takeRanges() })
     }
   } else if (message.type === 'shift') {
-    self.postMessage({ type: 'shift', shift: findShift(new Uint8Array(message.a), new Uint8Array(message.b)) })
+    const { at, endA, endB } = message
+    self.postMessage({ type: 'shift', candidates: findShifts(new Uint8Array(message.a), new Uint8Array(message.b), at, { endA, endB }) })
   }
 }
