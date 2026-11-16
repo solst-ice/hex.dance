@@ -1,3 +1,5 @@
+import { item, startsWith } from './shared.js'
+
 // Only the start and end of large files are scanned: the header, linearization
 // dictionary and first objects live at the start, the trailer and the objects
 // written by incremental updates at the end.
@@ -196,36 +198,55 @@ export function formatPDFDate(value) {
   return out
 }
 
-export function parsePDF(buffer) {
-  const metadata = new Set()
-  const bytes = new Uint8Array(buffer)
+function parsePDF(bytes) {
+  const summary = []
+  const warnings = []
   const head = bytesToLatin1(bytes, 0, Math.min(bytes.length, 32))
   const version = /^%PDF-(\d+\.\d+)/.exec(head)
-  metadata.add(`Version: PDF ${version ? version[1] : 'unknown'}`)
+  summary.push(item('Version', `PDF ${version ? version[1] : 'unknown'}`))
+  const headerLength = version ? version[0].length : Math.min(bytes.length, 5)
+  const fields = [{
+    name: 'Header',
+    offset: 0,
+    length: headerLength,
+    value: head.slice(0, headerLength),
+    kind: 'magic',
+    description: 'PDF signature and version'
+  }]
+  const result = () => ({ summary, fields, warnings })
 
   try {
     const text = scanText(bytes)
     const objects = collectObjects(text)
 
     const pages = findPageCount(text, objects)
-    if (pages !== null) metadata.add(`Pages: ${pages}`)
+    if (pages !== null) summary.push(item('Pages', pages))
 
     if (lastMatch(text, /\/Encrypt\s+(?:\d+\s+\d+\s+R|<<)/)) {
-      metadata.add('Encrypted: Yes')
-      return metadata
+      summary.push(item('Encrypted', 'Yes'))
+      return result()
     }
 
     const infoText = findInfoDictionary(text, objects)
-    if (!infoText) return metadata
+    if (!infoText) return result()
     for (const [key, label] of INFO_FIELDS) {
       const raw = readStringValue(infoText, key, objects)
       if (raw === null) continue
       const value = cleanText(key.endsWith('Date') ? formatPDFDate(raw) : raw)
-      if (value) metadata.add(`${label}: ${value}`)
+      if (value) summary.push(item(label, value))
     }
   } catch (err) {
-    metadata.add(`Warning: Could not read document structure (${err.message})`)
+    warnings.push(`Could not read document structure (${err.message})`)
   }
 
-  return metadata
+  return result()
+}
+
+/** @type {import('../analysis/types.js').FormatModule} */
+export default {
+  id: 'pdf',
+  name: 'PDF Document',
+  category: 'document',
+  detect: bytes => startsWith(bytes, [0x25, 0x50, 0x44, 0x46, 0x2D]),
+  parse: parsePDF
 }

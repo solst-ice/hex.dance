@@ -35,4 +35,10 @@ export default [
       ],
     },
   },
+  {
+    files: ['src/analysis/worker.js'],
+    languageOptions: {
+      globals: globals.worker,
+    },
+  },
 ]

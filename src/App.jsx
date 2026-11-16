@@ -1,82 +1,46 @@
-import React, { useState } from 'react'
 import FileUploader from './components/FileUploader'
-import FunctionList from './components/FunctionList'
-import HexDump from './components/HexDump'
 import GlitchFavicon from './components/GlitchFavicon'
-import FileMetadata from './components/FileMetadata'
+import Workspace from './components/Workspace'
+import useWindowFileDrop from './components/useWindowFileDrop'
+import { FileProvider, SelectionProvider, WorkspaceProvider, useFile } from './state/index.js'
 import './App.css'
+import './styles/ui.css'
+import './styles/workspace.css'
 
-function App() {
-  const [functions, setFunctions] = useState(new Set())
-  const [fileBuffer, setFileBuffer] = useState(null)
-  const [fileType, setFileType] = useState(null)
-  const [currentFile, setCurrentFile] = useState(null)
-  const [zipContents, setZipContents] = useState(null)
-
-  const handleFileAnalysis = (metadata, buffer, type, file, contents) => {
-    if (type === 'zip') {
-      setFunctions(metadata)
-    } else {
-      setFunctions(new Set(metadata))
-    }
-    
-    setFileBuffer(buffer)
-    setFileType(type)
-    setCurrentFile(file)
-    if (contents) {
-      setZipContents(contents)
-    }
-  }
+function Shell() {
+  const { file, openFile } = useFile()
+  const isDragging = useWindowFileDrop(openFile)
 
   return (
     <>
       <GlitchFavicon />
-      <div className="container">
+      <div className={`container ${file ? 'has-file' : ''}`}>
         <div className="description">
           <h1 className="glitch-title">HEX.DANCE</h1>
           <p>client-side binary/file analysis, hex dump viewer & editor.<br />
           by <a href="https://x.com/IceSolst/">solst/ICE</a> (<a href="https://github.com/solst-ice/hex.dance">code</a>)</p>
         </div>
-        <FileUploader onFileAnalysis={handleFileAnalysis} />
-        {fileBuffer && (
-          <>
-            <FileMetadata 
-              file={currentFile}
-              buffer={fileBuffer}
-              fileType={fileType}
-            />
-            {fileType !== 'macho' && fileType !== 'pe' && fileType !== 'elf' && functions.size > 0 && (
-              <FunctionList 
-                functions={functions} 
-                title="File Metadata" 
-              />
-            )}
-            {fileType === 'zip' && zipContents && (
-              <div className="zip-contents">
-                <h2>Archive Contents</h2>
-                <pre className="tree-view">
-                  {[...zipContents][0]}
-                </pre>
-              </div>
-            )}
-            <HexDump 
-              buffer={fileBuffer} 
-              fileName={currentFile.name}
-            />
-            {(fileType === 'macho' || fileType === 'pe' || fileType === 'elf') && functions.size > 0 && (
-              <FunctionList 
-                functions={functions} 
-                title={
-                  fileType === 'macho' ? "Mach-O Symbols" : 
-                  fileType === 'pe' ? "PE Exports" :
-                  "ELF Analysis"
-                } 
-              />
-            )}
-          </>
-        )}
+        <FileUploader onFile={openFile} isDragging={isDragging} fileName={file ? file.name : null} />
+        {file && <Workspace />}
       </div>
+      {file && isDragging && (
+        <div className="drop-overlay" aria-hidden="true">
+          <span>Drop to open</span>
+        </div>
+      )}
     </>
+  )
+}
+
+function App() {
+  return (
+    <FileProvider>
+      <SelectionProvider>
+        <WorkspaceProvider>
+          <Shell />
+        </WorkspaceProvider>
+      </SelectionProvider>
+    </FileProvider>
   )
 }
 

@@ -1,14 +1,17 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseZIP, decodeEntryName, buildTree, renderTree } from './zip.js'
+import zip, { decodeEntryName } from './zip.js'
+import { buildTree, renderTree } from '../panels/archive/tree.js'
 import { buildZip, zip64Extra, truncate } from './__fixtures__/fileFormats.js'
 
+const parseZIP = buffer => zip.parse(new Uint8Array(buffer), {})
+
 function tree(result) {
-  return [...result.contents][0]
+  return renderTree(buildTree(result.entries))
 }
 
 function meta(result) {
-  return [...result.metadata]
+  return result.summary.map(entry => `${entry.label}: ${entry.value}`)
 }
 
 const PACKAGE_ENTRIES = [
@@ -39,6 +42,16 @@ test('lists every entry once, keeping duplicate basenames in different directori
   assert.ok(meta(result).includes('Total Files: 6'))
   assert.ok(meta(result).includes('Directories: 3'))
   assert.ok(meta(result).includes('Uncompressed Size: 410 Bytes'))
+})
+
+test('describes entries as structured records', () => {
+  const result = parseZIP(buildZip([{ name: 'dir/' }, { name: 'dir/a.txt', data: 'abc', method: 8 }]))
+  assert.deepEqual(result.entries, [
+    { path: 'dir/', isDirectory: true, size: 0, compressedSize: 0, method: 'stored', encrypted: false },
+    { path: 'dir/a.txt', isDirectory: false, size: 3, compressedSize: 3, method: 'deflated', encrypted: false }
+  ])
+  assert.equal(result.fields[0].kind, 'magic')
+  assert.deepEqual(result.regions.map(region => region.name), ['Central directory', 'End of central directory'])
 })
 
 test('reads sizes from the central directory when data descriptors are used', () => {
@@ -108,7 +121,7 @@ test('handles an archive with zero entries', () => {
   const result = parseZIP(buildZip([]))
   assert.equal(tree(result), '.')
   assert.ok(meta(result).includes('Total Files: 0'))
-  assert.ok(!meta(result).some(item => item.startsWith('Warning')))
+  assert.deepEqual(result.warnings, [])
 })
 
 test('reads the archive comment and finds the EOCD behind it', () => {
@@ -126,7 +139,7 @@ test('recovers entries from local headers when the central directory is cut off'
   const result = parseZIP(truncate(full, 300))
   assert.match(tree(result), /one\.txt \(100 Bytes\)/)
   assert.match(tree(result), /two\.txt \(100 Bytes\)/)
-  assert.ok(meta(result).some(item => item.startsWith('Warning: End of central directory not found')))
+  assert.ok(result.warnings.some(warning => warning.startsWith('End of central directory not found')))
 })
 
 test('stops at the first data-descriptor entry when recovering from local headers', () => {
@@ -134,6 +147,7 @@ test('stops at the first data-descriptor entry when recovering from local header
   const result = parseZIP(truncate(full, 60))
   assert.match(tree(result), /a\.txt \(size unknown\)/)
   assert.doesNotMatch(tree(result), /b\.txt/)
+  assert.equal(result.entries[0].size, null)
 })
 
 test('never throws on truncated or garbage input', () => {
@@ -158,7 +172,9 @@ test('reads ZIP64 end of central directory and extra fields', () => {
 
 test('caps the rendered tree and reports the remainder', () => {
   const entries = []
-  for (let i = 0; i < 30; i++) entries.push({ name: `dir/file${String(i).padStart(2, '0')}.txt`, size: 1, method: 0 })
+  for (let i = 0; i < 30; i++) {
+    entries.push({ path: `dir/file${String(i).padStart(2, '0')}.txt`, isDirectory: false, size: 1, method: 'stored' })
+  }
   const lines = renderTree(buildTree(entries), 10).split('\n')
   assert.equal(lines.length, 12)
   assert.equal(lines[1], '└── dir/')
@@ -170,5 +186,6 @@ test('caps large archives while keeping the file count exact', () => {
   for (let i = 0; i < 1500; i++) entries.push({ name: `f${i}.txt`, data: '' })
   const result = parseZIP(buildZip(entries))
   assert.ok(meta(result).includes('Total Files: 1500'))
+  assert.equal(result.entries.length, 1500)
   assert.equal(tree(result).split('\n').at(-1), '… and 500 more')
 })

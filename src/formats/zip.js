@@ -1,4 +1,4 @@
-import { formatBytes } from './formatBytes.js'
+import { dataView, formatBytes, item } from './shared.js'
 
 const EOCD_SIGNATURE = 0x06054b50
 const EOCD_SIZE = 22
@@ -9,8 +9,6 @@ const CENTRAL_HEADER_SIZE = 46
 const LOCAL_HEADER_SIGNATURE = 0x04034b50
 const LOCAL_HEADER_SIZE = 30
 const MAX_COMMENT_LENGTH = 0xFFFF
-
-export const MAX_TREE_ENTRIES = 1000
 
 const FLAG_ENCRYPTED = 0x0001
 const FLAG_DATA_DESCRIPTOR = 0x0008
@@ -152,6 +150,7 @@ function readCentralDirectory(view, bytes, eocd) {
     }
   }
 
+  const start = offset
   const expected = eocd.entryCount
   let complete = true
   while (entries.length < expected || expected === 0xFFFF) {
@@ -182,7 +181,7 @@ function readCentralDirectory(view, bytes, eocd) {
     entries.push(entry)
     offset = extraEnd + commentLength
   }
-  return { entries, complete }
+  return { entries, complete, start, end: Math.min(offset, view.byteLength) }
 }
 
 // Fallback when the central directory is missing: follow local headers from
@@ -231,82 +230,53 @@ function readLocalHeaders(view, bytes) {
   return { entries, complete }
 }
 
-function newDirectory() {
-  return { dirs: new Map(), files: [] }
-}
-
-export function buildTree(entries) {
-  const root = newDirectory()
-  root.directoryCount = 0
-  root.fileCount = 0
+// Distinct directories, explicit or implied by a file's path
+function countDirectories(entries) {
+  const directories = new Set()
   for (const entry of entries) {
-    const isDirectory = entry.name.endsWith('/')
     const parts = entry.name.split('/').filter(part => part !== '' && part !== '.')
-    if (parts.length === 0) continue
-    const fileName = isDirectory ? null : parts.pop()
-    let node = root
-    for (const part of parts) {
-      if (!node.dirs.has(part)) {
-        node.dirs.set(part, newDirectory())
-        root.directoryCount++
-      }
-      node = node.dirs.get(part)
-    }
-    if (fileName !== null) {
-      node.files.push({ ...entry, baseName: fileName })
-      root.fileCount++
-    }
+    if (!entry.name.endsWith('/')) parts.pop()
+    for (let i = 1; i <= parts.length; i++) directories.add(parts.slice(0, i).join('/'))
   }
-  return root
+  return directories.size
 }
 
-// Code-unit order, so the listing does not depend on the browser's locale
-function compareNames(a, b) {
-  return a < b ? -1 : a > b ? 1 : 0
+function toArchiveEntry(entry) {
+  return {
+    path: entry.name,
+    isDirectory: entry.name.endsWith('/'),
+    size: entry.size,
+    compressedSize: entry.compressedSize,
+    method: methodName(entry.method),
+    encrypted: entry.encrypted
+  }
 }
 
-function describeFile(file) {
-  const details = [file.size === null ? 'size unknown' : formatBytes(file.size)]
-  if (file.method !== 0) details.push(COMPRESSION_METHODS[file.method] || `method ${file.method}`)
-  if (file.encrypted) details.push('encrypted')
-  return `${file.baseName} (${details.join(', ')})`
+function methodName(method) {
+  return COMPRESSION_METHODS[method] || `method ${method}`
 }
 
-export function renderTree(root, maxEntries = MAX_TREE_ENTRIES) {
-  const lines = ['.']
-  let rendered = 0
-
-  function walk(node, prefix) {
-    const children = [
-      ...[...node.dirs.keys()].sort(compareNames).map(name => ({ name, dir: node.dirs.get(name) })),
-      ...[...node.files].sort((a, b) => compareNames(a.baseName, b.baseName)).map(file => ({ file }))
-    ]
-    children.forEach((child, index) => {
-      if (rendered >= maxEntries) return
-      const last = index === children.length - 1
-      rendered++
-      if (child.dir) {
-        lines.push(`${prefix}${last ? '└── ' : '├── '}${child.name}/`)
-        walk(child.dir, prefix + (last ? '    ' : '│   '))
-      } else {
-        lines.push(`${prefix}${last ? '└── ' : '├── '}${describeFile(child.file)}`)
-      }
+function parseZIP(bytes) {
+  const view = dataView(bytes)
+  const summary = []
+  const warnings = []
+  const regions = []
+  const fields = []
+  if (bytes.length >= 4) {
+    const local = bytes[2] === 0x03
+    fields.push({
+      name: 'Signature',
+      offset: 0,
+      length: 4,
+      value: local ? 'PK\\x03\\x04' : 'PK\\x05\\x06',
+      kind: 'magic',
+      description: local ? 'Local file header' : 'End of central directory (empty archive)'
     })
   }
 
-  walk(root, '')
-  const total = root.directoryCount + root.fileCount
-  if (total > rendered) lines.push(`… and ${total - rendered} more`)
-  return lines.join('\n')
-}
-
-export function parseZIP(buffer) {
-  const view = new DataView(buffer)
-  const bytes = new Uint8Array(buffer)
-  const metadata = new Set()
-  const warnings = []
-
   let entries = []
+  let zip64 = false
+  let comment = ''
   const eocd = view.byteLength >= EOCD_SIZE ? readEndOfCentralDirectory(view, bytes) : null
   if (eocd && !eocd.zip64Unreadable) {
     const result = readCentralDirectory(view, bytes, eocd)
@@ -314,10 +284,17 @@ export function parseZIP(buffer) {
     if (!result.complete) {
       warnings.push(`Central directory is damaged or truncated; listed ${entries.length} of ${eocd.entryCount} entries`)
     }
-    if (eocd.zip64 || entries.some(entry => entry.zip64)) metadata.add('ZIP64: Yes')
+    zip64 = eocd.zip64 || entries.some(entry => entry.zip64)
     if (eocd.comment) {
-      const comment = sanitizeName(eocd.comment).replace(/�+/g, ' ').trim()
-      if (comment) metadata.add(`Comment: ${comment.length > 200 ? comment.slice(0, 200) + '…' : comment}`)
+      const clean = sanitizeName(eocd.comment).replace(/�+/g, ' ').trim()
+      if (clean) comment = clean.length > 200 ? clean.slice(0, 200) + '…' : clean
+    }
+    if (result.end > result.start) {
+      regions.push({ name: 'Central directory', offset: result.start, length: result.end - result.start, kind: 'table' })
+    }
+    regions.push({ name: 'End of central directory', offset: eocd.offset, length: view.byteLength - eocd.offset, kind: 'metadata' })
+    if (eocd.offset > 0) {
+      fields.push({ name: 'End of central directory', offset: eocd.offset, length: view.byteLength - eocd.offset, kind: 'header' })
     }
   } else {
     const result = readLocalHeaders(view, bytes)
@@ -329,21 +306,30 @@ export function parseZIP(buffer) {
   }
 
   const files = entries.filter(entry => !entry.name.endsWith('/'))
-  const tree = buildTree(entries)
   const knownSizes = files.filter(file => file.size !== null)
   const totalSize = knownSizes.reduce((sum, file) => sum + file.size, 0)
   const totalCompressed = knownSizes.reduce((sum, file) => sum + file.compressedSize, 0)
-  const methods = [...new Set(files.map(file => COMPRESSION_METHODS[file.method] || `method ${file.method}`))].sort()
+  const methods = [...new Set(files.map(file => methodName(file.method)))].sort()
   const encrypted = files.filter(file => file.encrypted).length
 
-  metadata.add(`Total Files: ${files.length}`)
-  metadata.add(`Directories: ${tree.directoryCount}`)
-  metadata.add(`Uncompressed Size: ${formatBytes(totalSize)}`)
-  metadata.add(`Compressed Size: ${formatBytes(totalCompressed)}`)
-  if (methods.length > 0) metadata.add(`Compression: ${methods.join(', ')}`)
-  if (encrypted > 0) metadata.add(`Encrypted Files: ${encrypted}`)
-  if (warnings.length > 0) metadata.add(`Warning: ${warnings.join('. ')}`)
+  summary.push(item('Total Files', files.length))
+  summary.push(item('Directories', countDirectories(entries)))
+  summary.push(item('Uncompressed Size', formatBytes(totalSize)))
+  summary.push(item('Compressed Size', formatBytes(totalCompressed)))
+  if (methods.length > 0) summary.push(item('Compression', methods.join(', ')))
+  if (encrypted > 0) summary.push(item('Encrypted Files', encrypted))
+  if (zip64) summary.push(item('ZIP64', 'Yes'))
+  if (comment) summary.push(item('Comment', comment))
 
-  const contents = new Set([renderTree(tree)])
-  return { metadata, contents }
+  return { summary, fields, regions, entries: entries.map(toArchiveEntry), warnings }
+}
+
+/** @type {import('../analysis/types.js').FormatModule} */
+export default {
+  id: 'zip',
+  name: 'ZIP Archive',
+  category: 'archive',
+  detect: bytes => bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4B &&
+    ((bytes[2] === 0x03 && bytes[3] === 0x04) || (bytes[2] === 0x05 && bytes[3] === 0x06)),
+  parse: parseZIP
 }

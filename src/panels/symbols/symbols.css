@@ -1,0 +1,28 @@
+.symbols-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.symbols-list .function-item li {
+  overflow-wrap: anywhere;
+}
+
+.symbols-panel .symbol-type {
+  color: var(--neon-pink);
+}
+
+.symbols-panel .function-item li.selected .symbol-type {
+  color: inherit;
+}
+
+.symbols-count {
+  font-size: 0.6em;
+  letter-spacing: 1px;
+  vertical-align: middle;
+}
+
+.symbols-more {
+  justify-content: space-between;
+  margin-top: 16px;
+}
