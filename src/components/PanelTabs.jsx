@@ -1,14 +1,15 @@
 /* eslint-disable react/prop-types -- the project does not use prop-types */
-import { useRef, useState } from 'react'
+import { useRef } from 'react'
 import PanelBoundary from './PanelBoundary'
 import { panelBadge } from '../panels/index.js'
+import { useWorkspace } from '../state/hooks.js'
 
 /**
  * Tab strip for the 'tab' panels. The chosen tab is remembered across files
  * and falls back to the first tab while it is not available.
  */
 function PanelTabs({ panels, analysis, resetKey }) {
-  const [chosenId, setChosenId] = useState(null)
+  const { activePanelId: chosenId, openPanel: setChosenId } = useWorkspace()
   const tabRefs = useRef({})
   if (panels.length === 0) return null
 

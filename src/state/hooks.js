@@ -1,5 +1,5 @@
 import { useContext, useEffect } from 'react'
-import { FileContext, SelectionContext } from './contexts.js'
+import { FileContext, SelectionContext, WorkspaceContext } from './contexts.js'
 
 /**
  * @typedef {'idle' | 'reading' | 'analyzing' | 'ready' | 'error'} FileStatus
@@ -41,6 +41,20 @@ export function useFile() {
 export function useSelection() {
   const value = useContext(SelectionContext)
   if (!value) throw new Error('useSelection must be used inside <SelectionProvider>')
+  return value
+}
+
+/**
+ * @typedef {Object} WorkspaceState
+ * @property {string|null} activePanelId   id of the tab panel last chosen by the user or by `openPanel`;
+ *   null, or an id that is not available for the current file, shows the first tab
+ * @property {(id: string) => void} openPanel   switch the tab strip to a panel
+ */
+
+/** @returns {WorkspaceState} */
+export function useWorkspace() {
+  const value = useContext(WorkspaceContext)
+  if (!value) throw new Error('useWorkspace must be used inside <WorkspaceProvider>')
   return value
 }
 

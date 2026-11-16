@@ -2,7 +2,7 @@ import FileUploader from './components/FileUploader'
 import GlitchFavicon from './components/GlitchFavicon'
 import Workspace from './components/Workspace'
 import useWindowFileDrop from './components/useWindowFileDrop'
-import { FileProvider, SelectionProvider, useFile } from './state/index.js'
+import { FileProvider, SelectionProvider, WorkspaceProvider, useFile } from './state/index.js'
 import './App.css'
 import './styles/ui.css'
 import './styles/workspace.css'
@@ -36,7 +36,9 @@ function App() {
   return (
     <FileProvider>
       <SelectionProvider>
-        <Shell />
+        <WorkspaceProvider>
+          <Shell />
+        </WorkspaceProvider>
       </SelectionProvider>
     </FileProvider>
   )

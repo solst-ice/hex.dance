@@ -1,3 +1,4 @@
 export { default as FileProvider } from './FileProvider.jsx'
 export { default as SelectionProvider } from './SelectionProvider.jsx'
-export { useFile, useSelection, useHighlightLayer } from './hooks.js'
+export { default as WorkspaceProvider } from './WorkspaceProvider.jsx'
+export { useFile, useSelection, useWorkspace, useHighlightLayer } from './hooks.js'
