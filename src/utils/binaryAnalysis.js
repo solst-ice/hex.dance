@@ -8,6 +8,9 @@ const MAX_STRING_LENGTH = 4096
 const MAX_SYMBOLS = 2000000
 const MAX_LOAD_COMMANDS = 65536
 const MAX_FAT_ARCHS = 32
+// The Windows loader rejects images with more sections; every export lookup
+// walks the section list, so an unbounded count makes parsing quadratic
+const MAX_PE_SECTIONS = 96
 
 function inBounds(view, offset, length) {
   return Number.isSafeInteger(offset) && offset >= 0 && offset + length <= view.byteLength
@@ -151,7 +154,7 @@ function parsePEExports(view) {
   }
 
   const sections = []
-  for (let i = 0; i < declaredSections; i++) {
+  for (let i = 0; i < Math.min(declaredSections, MAX_PE_SECTIONS); i++) {
     const offset = sectionHeadersOffset + i * 40
     if (!inBounds(view, offset, 40)) break
     const section = {
