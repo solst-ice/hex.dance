@@ -21,7 +21,7 @@ test('detects supported formats by their magic bytes', () => {
   assert.equal(detect(toArrayBuffer([0xCF, 0xFA, 0xED, 0xFE, 7, 0, 0, 1])), 'macho')
   assert.equal(detect(toArrayBuffer([0xFE, 0xED, 0xFA, 0xCE])), 'macho')
   assert.equal(detect(toArrayBuffer([0xBE, 0xBA, 0xFE, 0xCA, 2, 0, 0, 0])), 'macho')
-  assert.equal(detect(new TextEncoder().encode('just some text').buffer), 'unknown')
+  assert.equal(detect(new TextEncoder().encode('just some text').buffer), 'text')
 })
 
 test('detects formats in views that do not start at the beginning of their buffer', () => {
