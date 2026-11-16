@@ -1,5 +1,3 @@
-import { analyzeBytes } from './analyze.js'
-
 // After this many workers fail in a row, analysis stays on the main thread
 const MAX_WORKER_FAILURES = 2
 
@@ -17,8 +15,10 @@ export class StaleAnalysisError extends Error {
   }
 }
 
+// The parsers are only needed on the main thread when no worker is available,
+// so they are loaded on demand and stay out of the main bundle
 async function analyzeOnMainThread(file) {
-  const buffer = await file.arrayBuffer()
+  const [{ analyzeBytes }, buffer] = await Promise.all([import('./analyze.js'), file.arrayBuffer()])
   return analyzeBytes(new Uint8Array(buffer), { fileName: file.name, mimeType: file.type })
 }
 
