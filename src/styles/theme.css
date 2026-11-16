@@ -12,8 +12,25 @@
  *   --hd-link / --hd-link-hover                 links
  *   --rain-color / --rain-drag-color            matrix rain
  *
+ * Semantic tokens, for meanings the accents do not carry. Each theme gives
+ * them a deliberate value; they need not match the theme's hue, but text in
+ * them keeps at least 4.5:1 contrast on --darker-bg.
+ *
+ *   --text-bright                               strongest text and hover outlines
+ *   --hd-surface / --hd-surface-raised          neutral wells under canvases and images,
+ *                                               and the two squares of a transparency checkerboard
+ *   --hd-success / --hd-warning / --hd-danger   valid or solved / stale or caution / errors and failures
+ *   --hd-heat-low                               second stop of heat maps, which run
+ *                                               --darker-bg, --hd-heat-low, --neon-blue, --neon-yellow
+ *   --hd-kind-<kind>                            categorical colours for field kinds (magic, header, size,
+ *                                               count, offset, flags, string, checksum, data, padding,
+ *                                               other); region kinds and charts reuse them, so they
+ *                                               stay distinguishable from each other in every theme
+ *
  * Panels that need a tint of an accent can use
  * color-mix(in srgb, var(--neon-blue) 10%, transparent) so it follows the theme.
+ * Canvases resolve these variables through src/lib/canvasColors.js, which
+ * also tells them when the theme changes.
  */
 
 :root {
@@ -52,6 +69,26 @@
   --hx-highlight: var(--neon-pink);
   --hx-modified: var(--neon-pink);
   --hx-flash: color-mix(in srgb, var(--neon-yellow) 35%, transparent);
+
+  --text-bright: #fff;
+  --hd-surface: #0b0d1c;
+  --hd-surface-raised: #161a30;
+  --hd-success: var(--neon-blue);
+  --hd-warning: var(--neon-yellow);
+  --hd-danger: var(--neon-pink);
+  --hd-heat-low: #2a1f78;
+
+  --hd-kind-magic: #ff36ab;
+  --hd-kind-header: #00d7ff;
+  --hd-kind-size: #f7f71c;
+  --hd-kind-count: #ffb000;
+  --hd-kind-offset: #ff8f40;
+  --hd-kind-flags: #c38dff;
+  --hd-kind-string: #4dff88;
+  --hd-kind-checksum: #ff5c5c;
+  --hd-kind-data: #5f87ff;
+  --hd-kind-padding: #7d8aa8;
+  --hd-kind-other: #2ec4b6;
 }
 
 /* Amber terminal */
@@ -72,6 +109,26 @@
   --hx-byte-ff: #ff4a5a;
   --hx-byte-high: #e8d9c0;
   --hx-hover-bg: rgba(255, 220, 160, 0.16);
+  --hx-detail: #e3cfae;
+
+  --text-bright: #fff6e6;
+  --hd-surface: #17110a;
+  --hd-surface-raised: #261b0f;
+  --hd-success: #b5df6b;
+  --hd-danger: #ff5f4a;
+  --hd-heat-low: #5a2a06;
+
+  --hd-kind-magic: #ff6b9a;
+  --hd-kind-header: #ffb000;
+  --hd-kind-size: #fff0a8;
+  --hd-kind-count: #ffb9b2;
+  --hd-kind-offset: #ff7438;
+  --hd-kind-flags: #b088ff;
+  --hd-kind-string: #b5df6b;
+  --hd-kind-checksum: #ff4d4d;
+  --hd-kind-data: #5cb8ff;
+  --hd-kind-padding: #957e60;
+  --hd-kind-other: #4fe8d2;
 }
 
 /* Green phosphor */
@@ -92,6 +149,25 @@
   --hx-byte-ff: #f2e85a;
   --hx-byte-high: #d9ffe3;
   --hx-hover-bg: rgba(190, 255, 205, 0.15);
+  --hx-detail: #bfe6c8;
+
+  --text-bright: #effff2;
+  --hd-surface: #08140b;
+  --hd-surface-raised: #10241a;
+  --hd-danger: #ff6b5e;
+  --hd-heat-low: #0b4a22;
+
+  --hd-kind-magic: #ff7ad1;
+  --hd-kind-header: #33ff66;
+  --hd-kind-size: #eaffb3;
+  --hd-kind-count: #ccb88f;
+  --hd-kind-offset: #ff8f5e;
+  --hd-kind-flags: #a8b4ff;
+  --hd-kind-string: #c066ff;
+  --hd-kind-checksum: #ff5c5c;
+  --hd-kind-data: #4fb0ff;
+  --hd-kind-padding: #6f8f78;
+  --hd-kind-other: #7af5ff;
 }
 
 /* Optional CRT scanlines: static, and off when reduced motion is requested */
