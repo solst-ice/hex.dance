@@ -1,187 +1,204 @@
-import React, { useEffect, useRef } from 'react'
+/* eslint-disable react/prop-types -- the project does not use prop-types */
+import { useEffect, useRef } from 'react'
+import useReducedMotion from './useReducedMotion'
 
-function MatrixRain({ brightness = 0.3, color = '#0ff' }) {
+const GLYPHS = 'ｦｱｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝabcdefghijklmnopqrstuvwxyz0123456789+=｢｣･ｯｭｬ'.split('')
+const HEX = Array.from({ length: 256 }, (_, value) => value.toString(16).padStart(2, '0').toUpperCase())
+
+const FONT_SIZE = 14
+const FRAME_MS = 1000 / 30
+const TRAIL = 8
+// Rows per second
+const MIN_SPEED = 4
+const MAX_SPEED = 9
+const SPAWN_PER_SECOND = 0.35
+// Frames of fading after the last drop has left, so trails do not freeze
+const FADE_FRAMES = 30
+
+const randomSpeed = () => MIN_SPEED + Math.random() * (MAX_SPEED - MIN_SPEED)
+
+function readColors(element) {
+  const style = getComputedStyle(element)
+  const read = (name, fallback) => style.getPropertyValue(name).trim() || fallback
+  return {
+    rain: read('--rain-color', '#0ff'),
+    drag: read('--rain-drag-color', '#ff36ab'),
+    background: read('--darker-bg', '#060714')
+  }
+}
+
+/**
+ * Falling-glyph backdrop. Drops only spawn while `active`; once inactive the
+ * drops on screen finish falling and the loop stops. The loop also stops
+ * while the canvas is off-screen or the tab is hidden, and the canvas is not
+ * rendered at all when reduced motion is requested.
+ *
+ * With `bytes`, each column shows a run of the file's bytes as hex pairs.
+ */
+function MatrixRain({ active = false, brightness = 0.3, dragging = false, bytes = null }) {
+  const reducedMotion = useReducedMotion()
   const canvasRef = useRef(null)
-  const brightnessRef = useRef(brightness)
-  const colorRef = useRef(color)
-  const animationRef = useRef(null)
-  const dropsRef = useRef([])
-  const charStatesRef = useRef([])
-  const columnsRef = useRef(0)
+  const settingsRef = useRef({ active, brightness, dragging, bytes })
+  const wakeRef = useRef(() => {})
 
-  // Animation settings - move outside effect to be accessible
-  const fontSize = 14
-  const columnSpacing = fontSize * 1.2
-  const maxSpeed = 0.35
-  const minSpeed = 0.15
-  const speedMultiplier = 0.5
-  const charChangeProb = 0.15
-  const trailLength = 8
-  const columnActivationProb = 0.3
-  const chars = 'ｦｱｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝabcdefghijklmnopqrstuvwxyz0123456789+=｢｣･ｯｭｬ'.split('')
+  useEffect(() => {
+    settingsRef.current = { active, brightness, dragging, bytes }
+    wakeRef.current()
+  }, [active, brightness, dragging, bytes])
 
-  const initializeDrops = (canvas) => {
-    if (canvas.width <= 0) return
-
-    columnsRef.current = Math.floor(canvas.width / columnSpacing)
-    if (columnsRef.current <= 0) return
-
-    dropsRef.current = new Array(columnsRef.current).fill(0).map(() => 
-      Math.random() < columnActivationProb ? 
-        Math.floor(Math.random() * -canvas.height / fontSize) : 
-        Infinity
-    )
-
-    charStatesRef.current = new Array(columnsRef.current).fill(0).map(() => ({
-      char: chars[Math.floor(Math.random() * chars.length)],
-      speed: (minSpeed + Math.random() * (maxSpeed - minSpeed)) * speedMultiplier,
-      brightness: Math.random(),
-      isActive: Math.random() < columnActivationProb
-    }))
-  }
-
-  const draw = (ctx, canvas) => {
-    if (!ctx || !canvas || columnsRef.current <= 0) return false
-
-    ctx.fillStyle = 'rgba(6, 7, 20, 0.25)'
-    ctx.fillRect(0, 0, canvas.width, canvas.height)
-
-    ctx.font = `bold ${fontSize}px monospace`
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'middle'
-
-    let hasActiveColumns = false
-
-    for (let i = 0; i < dropsRef.current.length; i++) {
-      if (!charStatesRef.current[i].isActive) {
-        // Randomly activate inactive columns
-        if (Math.random() < 0.01) {
-          charStatesRef.current[i].isActive = true
-          dropsRef.current[i] = -5
-          hasActiveColumns = true
-        }
-        continue
-      }
-
-      hasActiveColumns = true
-      const x = i * columnSpacing
-      const y = dropsRef.current[i] * fontSize
-
-      // More frequent character changes
-      if (Math.random() < charChangeProb) {
-        charStatesRef.current[i].char = chars[Math.floor(Math.random() * chars.length)]
-      }
-
-      // Leading character
-      const leadOpacity = Math.min(1, brightnessRef.current * 2.0)
-      ctx.fillStyle = colorRef.current.replace(')', `, ${leadOpacity})`)
-      ctx.fillText(charStatesRef.current[i].char, x, y)
-
-      // Trail with more variance
-      for (let j = 1; j < trailLength; j++) {
-        const trailY = y - (j * fontSize)
-        if (trailY < 0) break
-
-        const trailOpacity = Math.max(0, brightnessRef.current * Math.pow(0.7, j))
-        ctx.fillStyle = colorRef.current.replace(')', `, ${trailOpacity})`)
-        
-        // Higher chance of different characters in trail
-        const trailChar = (Math.random() < 0.4) 
-          ? chars[Math.floor(Math.random() * chars.length)]
-          : charStatesRef.current[i].char
-          
-        ctx.fillText(trailChar, x, trailY)
-      }
-
-      dropsRef.current[i] += charStatesRef.current[i].speed
-
-      if (y > canvas.height + fontSize * trailLength) {
-        if (Math.random() < 0.3) {
-          charStatesRef.current[i].isActive = false
-          dropsRef.current[i] = Infinity
-        } else {
-          dropsRef.current[i] = -5
-          charStatesRef.current[i].speed = (minSpeed + Math.random() * (maxSpeed - minSpeed)) * speedMultiplier
-          charStatesRef.current[i].brightness = Math.random()
-        }
-      }
-    }
-
-    return hasActiveColumns
-  }
-
-  const startAnimation = () => {
+  useEffect(() => {
+    if (reducedMotion) return
     const canvas = canvasRef.current
-    if (!canvas) return
-
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    const animate = () => {
-      const hasActiveColumns = draw(ctx, canvas)
-      if (hasActiveColumns) {
-        animationRef.current = requestAnimationFrame(animate)
-      }
+    let width = 0
+    let height = 0
+    let columns = []
+    let colors = readColors(canvas)
+    let frame = 0
+    let lastTime = 0
+    let fadeLeft = 0
+    let onScreen = true
+    let wasHex = false
+
+    const isHex = () => Boolean(settingsRef.current.bytes && settingsRef.current.bytes.length)
+    const spacing = () => (isHex() ? FONT_SIZE * 1.9 : FONT_SIZE * 1.2)
+
+    const newDrop = (column) => {
+      column.y = -Math.random() * TRAIL
+      column.speed = randomSpeed()
+      const { bytes: data } = settingsRef.current
+      column.offset = data && data.length ? Math.floor(Math.random() * data.length) : 0
     }
 
-    animate()
-  }
+    const layout = () => {
+      const dpr = window.devicePixelRatio || 1
+      const rect = canvas.getBoundingClientRect()
+      width = rect.width
+      height = rect.height
+      canvas.width = Math.max(1, Math.round(width * dpr))
+      canvas.height = Math.max(1, Math.round(height * dpr))
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      wasHex = isHex()
+      const count = Math.max(0, Math.floor(width / spacing()))
+      columns = Array.from({ length: count }, () => ({ y: Infinity, speed: 0, offset: 0 }))
+    }
 
-  // Handle hover
-  useEffect(() => {
-    const handleMouseEnter = () => {
-      if (!animationRef.current) {
-        // Reinitialize some columns if none are active
-        const canvas = canvasRef.current
-        if (canvas) {
-          charStatesRef.current.forEach((state, i) => {
-            if (Math.random() < columnActivationProb) {
-              state.isActive = true
-              dropsRef.current[i] = -5
-            }
-          })
-          startAnimation()
+    const glyphAt = (column, row) => {
+      const { bytes: data } = settingsRef.current
+      if (data && data.length) return HEX[data[(column.offset + row) % data.length]]
+      return GLYPHS[Math.floor(Math.random() * GLYPHS.length)]
+    }
+
+    // Draws one frame; returns whether any drop is still falling
+    const step = (seconds) => {
+      const { active: spawning, brightness: level, dragging: drag } = settingsRef.current
+      if (isHex() !== wasHex) layout()
+
+      ctx.globalAlpha = 0.3
+      ctx.fillStyle = colors.background
+      ctx.fillRect(0, 0, width, height)
+
+      ctx.font = `bold ${FONT_SIZE}px monospace`
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillStyle = drag ? colors.drag : colors.rain
+
+      const columnWidth = spacing()
+      let falling = false
+      for (let i = 0; i < columns.length; i++) {
+        const column = columns[i]
+        if (column.y === Infinity) {
+          if (spawning && Math.random() < SPAWN_PER_SECOND * seconds) newDrop(column)
+          else continue
+        }
+        falling = true
+        const x = i * columnWidth + columnWidth / 2
+        const head = Math.floor(column.y)
+        for (let j = 0; j < TRAIL; j++) {
+          const row = head - j
+          const y = row * FONT_SIZE
+          if (y < -FONT_SIZE) break
+          if (y > height + FONT_SIZE) continue
+          ctx.globalAlpha = Math.min(1, j === 0 ? level * 2 : level * Math.pow(0.72, j))
+          ctx.fillText(glyphAt(column, row), x, y)
+        }
+        column.y += column.speed * seconds
+        // The background fill fades the trail once the head has left
+        if ((head - 2) * FONT_SIZE > height) {
+          if (spawning && Math.random() < 0.7) newDrop(column)
+          else column.y = Infinity
         }
       }
+      ctx.globalAlpha = 1
+      return falling
     }
 
-    const canvas = canvasRef.current
-    if (canvas) {
-      canvas.addEventListener('mouseenter', handleMouseEnter)
-      return () => canvas.removeEventListener('mouseenter', handleMouseEnter)
-    }
-  }, [])
+    const running = () => onScreen && !document.hidden
 
-  // Initial setup
-  useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-
-    const resizeCanvas = () => {
-      canvas.width = canvas.parentElement.offsetWidth
-      canvas.height = canvas.parentElement.offsetHeight
-      initializeDrops(canvas)
-    }
-
-    resizeCanvas()
-    startAnimation()
-
-    window.addEventListener('resize', resizeCanvas)
-    return () => {
-      window.removeEventListener('resize', resizeCanvas)
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current)
+    const tick = (time) => {
+      frame = 0
+      if (!running()) return
+      if (time - lastTime < FRAME_MS - 1) {
+        frame = requestAnimationFrame(tick)
+        return
       }
+      const seconds = lastTime ? Math.min(0.1, (time - lastTime) / 1000) : FRAME_MS / 1000
+      lastTime = time
+      const falling = step(seconds)
+      if (falling || settingsRef.current.active) {
+        fadeLeft = FADE_FRAMES
+      } else if (fadeLeft > 0) {
+        fadeLeft--
+      } else {
+        ctx.clearRect(0, 0, width, height)
+        lastTime = 0
+        return
+      }
+      frame = requestAnimationFrame(tick)
     }
-  }, [])
 
-  // Update refs when props change
-  useEffect(() => {
-    brightnessRef.current = brightness
-    colorRef.current = color
-  }, [brightness, color])
+    const wake = () => {
+      if (frame || !running()) return
+      const idle = !settingsRef.current.active && fadeLeft === 0 && columns.every(column => column.y === Infinity)
+      if (idle) return
+      lastTime = 0
+      frame = requestAnimationFrame(tick)
+    }
+    wakeRef.current = () => {
+      fadeLeft = FADE_FRAMES
+      wake()
+    }
 
-  return <canvas ref={canvasRef} className="matrix-rain" />
+    layout()
+    const resize = new ResizeObserver(() => {
+      layout()
+      wake()
+    })
+    resize.observe(canvas)
+    const visibility = new IntersectionObserver(([entry]) => {
+      onScreen = entry.isIntersecting
+      wake()
+    })
+    visibility.observe(canvas)
+    document.addEventListener('visibilitychange', wake)
+    const theme = new MutationObserver(() => { colors = readColors(canvas) })
+    theme.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+
+    wakeRef.current()
+    return () => {
+      wakeRef.current = () => {}
+      cancelAnimationFrame(frame)
+      resize.disconnect()
+      visibility.disconnect()
+      theme.disconnect()
+      document.removeEventListener('visibilitychange', wake)
+    }
+  }, [reducedMotion])
+
+  if (reducedMotion) return null
+  return <canvas ref={canvasRef} className="matrix-rain" aria-hidden="true" />
 }
 
-export default MatrixRain 
+export default MatrixRain

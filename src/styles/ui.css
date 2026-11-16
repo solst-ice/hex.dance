@@ -1,8 +1,9 @@
 /*
  * Shared UI primitives for panels. Reuse these instead of styling from
- * scratch so every panel matches the existing cards.
+ * scratch so every panel matches the existing cards. Colours come from the
+ * variables in theme.css, so the primitives follow the chosen theme.
  *
- *   .hd-panel                 card chrome (dark background, neon border, glow)
+ *   .hd-panel                 card chrome (dark background, quiet border; brighter while focused)
  *   .hd-panel-header          title row: title on the left, actions on the right
  *   .hd-panel-title           panel heading (h2/h3)
  *   .hd-section-title         smaller heading inside a panel
@@ -24,11 +25,15 @@
 
 .hd-panel {
   background: var(--darker-bg);
-  border: 1px solid var(--neon-blue);
+  border: 1px solid var(--hd-border);
   border-radius: 8px;
-  box-shadow: 0 0 20px rgba(0, 255, 255, 0.1);
   padding: 20px;
   min-width: 0;
+  transition: border-color 0.2s ease;
+}
+
+.hd-panel:focus-within {
+  border-color: var(--hd-border-strong);
 }
 
 .hd-panel-header {
@@ -36,7 +41,7 @@
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px 12px;
   margin-bottom: 16px;
 }
 
@@ -46,6 +51,7 @@
   font-size: 1.5em;
   font-weight: normal;
   letter-spacing: 2px;
+  line-height: 1.2;
   margin: 0;
   text-transform: uppercase;
 }
@@ -56,7 +62,8 @@
   font-size: 1em;
   font-weight: normal;
   letter-spacing: 1px;
-  margin: 20px 0 10px;
+  line-height: 1.3;
+  margin: 20px 0 8px;
   text-transform: uppercase;
 }
 
@@ -65,7 +72,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  border-bottom: 1px solid var(--neon-blue);
+  border-bottom: 1px solid var(--hd-border);
 }
 
 .hd-tab {
@@ -73,7 +80,7 @@
   border: 1px solid transparent;
   border-bottom: none;
   border-radius: 6px 6px 0 0;
-  color: rgba(0, 255, 255, 0.7);
+  color: var(--text-muted);
   cursor: pointer;
   font-family: 'Unifont', monospace;
   font-size: 0.95em;
@@ -81,29 +88,29 @@
   margin-bottom: -1px;
   padding: 8px 14px;
   text-transform: uppercase;
-  transition: color 0.2s ease, background 0.2s ease;
+  transition: color 0.2s ease, background-color 0.2s ease;
 }
 
 .hd-tab:hover {
   border-color: transparent;
   color: var(--neon-blue);
-  background: rgba(0, 255, 255, 0.05);
+  background: var(--hd-tint);
 }
 
 .hd-tab[aria-selected="true"] {
   background: var(--darker-bg);
-  border-color: var(--neon-blue);
+  border-color: var(--hd-border-strong);
   color: var(--neon-blue);
-  text-shadow: 0 0 8px rgba(0, 255, 255, 0.4);
+  text-shadow: 0 0 8px color-mix(in srgb, var(--neon-blue) 40%, transparent);
 }
 
 .hd-tab:focus-visible {
-  outline: 1px dashed var(--neon-pink);
-  outline-offset: -3px;
+  outline: 2px solid var(--hd-focus);
+  outline-offset: -2px;
 }
 
 .hd-tab-badge {
-  background: rgba(255, 54, 171, 0.15);
+  background: var(--hd-pink-tint);
   border-radius: 8px;
   color: var(--neon-pink);
   font-size: 0.8em;
@@ -114,7 +121,7 @@
 /* Buttons and inputs */
 .hd-button {
   background: var(--darker-bg);
-  border: 1px solid var(--neon-blue);
+  border: 1px solid var(--hd-border-strong);
   border-radius: 4px;
   color: var(--neon-blue);
   cursor: pointer;
@@ -123,13 +130,13 @@
   letter-spacing: 1px;
   padding: 6px 12px;
   text-transform: uppercase;
-  transition: background 0.2s ease, box-shadow 0.2s ease;
+  transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .hd-button:hover {
-  background: rgba(0, 255, 255, 0.1);
+  background: var(--hd-tint-strong);
   border-color: var(--neon-blue);
-  box-shadow: 0 0 10px rgba(0, 255, 255, 0.2);
+  box-shadow: var(--hd-glow);
 }
 
 .hd-button:active {
@@ -141,10 +148,16 @@
   opacity: 0.5;
 }
 
+.hd-button:disabled:hover {
+  background: var(--darker-bg);
+  border-color: var(--hd-border-strong);
+  box-shadow: none;
+}
+
 .hd-button--active {
   border-color: var(--neon-pink);
   color: var(--neon-pink);
-  box-shadow: 0 0 10px rgba(255, 54, 171, 0.3);
+  box-shadow: var(--hd-pink-glow);
 }
 
 .hd-button--small {
@@ -153,8 +166,8 @@
 }
 
 .hd-input {
-  background: rgba(0, 255, 255, 0.05);
-  border: 1px solid rgba(0, 255, 255, 0.5);
+  background: var(--hd-tint);
+  border: 1px solid var(--hd-border-strong);
   border-radius: 4px;
   box-sizing: border-box;
   color: var(--neon-blue);
@@ -166,25 +179,30 @@
 
 .hd-input:focus {
   border-color: var(--neon-blue);
-  box-shadow: 0 0 8px rgba(0, 255, 255, 0.3);
+  box-shadow: var(--hd-glow);
   outline: none;
 }
 
+.hd-input:focus-visible {
+  outline: 2px solid var(--hd-focus);
+  outline-offset: 1px;
+}
+
 .hd-input::placeholder {
-  color: rgba(0, 255, 255, 0.4);
+  color: color-mix(in srgb, var(--neon-blue) 45%, transparent);
 }
 
 /* Data table */
 .hd-table {
   border-collapse: collapse;
-  color: #e4e4e4;
+  color: var(--text);
   font-family: 'Unifont', monospace;
   font-size: 0.9em;
   width: 100%;
 }
 
 .hd-table th {
-  border-bottom: 1px solid rgba(0, 255, 255, 0.4);
+  border-bottom: 1px solid var(--hd-border-strong);
   color: var(--neon-pink);
   font-weight: normal;
   letter-spacing: 1px;
@@ -194,7 +212,7 @@
 }
 
 .hd-table td {
-  border-bottom: 1px solid rgba(0, 255, 255, 0.08);
+  border-bottom: 1px solid color-mix(in srgb, var(--neon-blue) 8%, transparent);
   padding: 3px 8px;
   vertical-align: top;
   word-break: break-word;
@@ -213,7 +231,7 @@
 
 .hd-table--clickable tbody tr:hover,
 .hd-table tbody tr.is-selected {
-  background: rgba(0, 255, 255, 0.08);
+  background: var(--hd-tint-strong);
   color: var(--neon-blue);
 }
 
@@ -243,7 +261,7 @@
 
 /* Small inline things */
 .hd-badge {
-  border: 1px solid rgba(0, 255, 255, 0.5);
+  border: 1px solid var(--hd-border-strong);
   border-radius: 4px;
   color: var(--neon-blue);
   display: inline-block;
@@ -255,17 +273,17 @@
 }
 
 .hd-badge--pink {
-  border-color: rgba(255, 54, 171, 0.6);
+  border-color: color-mix(in srgb, var(--neon-pink) 60%, transparent);
   color: var(--neon-pink);
 }
 
 .hd-badge--yellow {
-  border-color: rgba(247, 247, 28, 0.6);
+  border-color: color-mix(in srgb, var(--neon-yellow) 60%, transparent);
   color: var(--neon-yellow);
 }
 
 .hd-muted {
-  color: rgba(228, 228, 228, 0.6);
+  color: var(--text-muted);
 }
 
 .hd-mono {

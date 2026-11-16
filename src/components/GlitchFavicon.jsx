@@ -1,59 +1,70 @@
 import { useEffect } from 'react'
+import { prefersReducedMotion } from './useReducedMotion'
 
+const frame = (color, x, y, extra = '') => `<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+<rect width="32" height="32" fill="#060714"/>
+<text x="${x}" y="${y}" style="font: bold 20px 'Courier New', monospace; fill: ${color};${extra}">0x</text>
+</svg>`
+
+const FRAMES = [
+  frame('#ff36ab', 6, 21),
+  frame('#0ff', 2, 23),
+  frame('#ff36ab', 4, 22, ' transform: skewX(10deg);')
+].map(svg => `data:image/svg+xml,${encodeURIComponent(svg)}`)
+
+const FRAME_MS = 110
+// Seconds between glitches
+const MIN_GAP = 25
+const MAX_GAP = 60
+
+/**
+ * Glitches the tab icon for a moment, rarely, and only while the tab is
+ * visible. Does nothing when reduced motion is requested.
+ */
 function GlitchFavicon() {
   useEffect(() => {
-    const faviconVariations = [
-      `<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-        <rect width="32" height="32" fill="#060714"/>
-        <text x="4" y="22" style="font: bold 20px 'Courier New'; fill: #0ff; filter: drop-shadow(0 0 2px #0ff)">0x</text>
-      </svg>`,
-      
-      `<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-        <rect width="32" height="32" fill="#060714"/>
-        <text x="6" y="21" style="font: bold 20px 'Courier New'; fill: #ff36ab; filter: drop-shadow(0 0 3px #ff36ab)">0x</text>
-      </svg>`,
-      
-      `<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-        <rect width="32" height="32" fill="#060714"/>
-        <text x="2" y="23" style="font: bold 20px 'Courier New'; fill: #0ff; filter: drop-shadow(0 0 2px #0ff)">0x</text>
-      </svg>`,
-      
-      `<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-        <rect width="32" height="32" fill="#060714"/>
-        <text x="4" y="22" style="font: bold 20px 'Courier New'; fill: #ff36ab; transform: skewX(10deg); filter: drop-shadow(0 0 2px #ff36ab)">0x</text>
-      </svg>`
-    ]
-
-    let currentIndex = 0
-    const favicon = document.querySelector('link[rel="icon"]')
-    
-    function updateFavicon() {
-      // Normal state
-      favicon.href = `data:image/svg+xml;base64,${btoa(faviconVariations[0])}`
-      
-      // Random glitch timing
-      const glitchInterval = setInterval(() => {
-        // Rapid glitch effect
-        for (let i = 0; i < 3; i++) {
-          setTimeout(() => {
-            currentIndex = (currentIndex + 1) % faviconVariations.length
-            favicon.href = `data:image/svg+xml;base64,${btoa(faviconVariations[currentIndex])}`
-          }, i * 100)
-        }
-        
-        // Reset to normal after glitch
-        setTimeout(() => {
-          favicon.href = `data:image/svg+xml;base64,${btoa(faviconVariations[0])}`
-        }, 400)
-      }, 2000 + Math.random() * 3000) // Random interval between 2-5 seconds
-
-      return () => clearInterval(glitchInterval)
+    const link = document.querySelector('link[rel="icon"][type="image/svg+xml"]')
+    if (!link) return
+    const original = link.getAttribute('href')
+    const timers = new Set()
+    const later = (fn, ms) => {
+      const id = setTimeout(() => {
+        timers.delete(id)
+        fn()
+      }, ms)
+      timers.add(id)
+    }
+    const clearAll = () => {
+      timers.forEach(clearTimeout)
+      timers.clear()
+      link.setAttribute('href', original)
     }
 
-    return updateFavicon()
+    const schedule = () => {
+      later(() => {
+        if (document.hidden || prefersReducedMotion()) return schedule()
+        FRAMES.forEach((href, index) => later(() => link.setAttribute('href', href), index * FRAME_MS))
+        later(() => {
+          link.setAttribute('href', original)
+          schedule()
+        }, FRAMES.length * FRAME_MS)
+      }, (MIN_GAP + Math.random() * (MAX_GAP - MIN_GAP)) * 1000)
+    }
+
+    const handleVisibility = () => {
+      clearAll()
+      if (!document.hidden) schedule()
+    }
+
+    if (!document.hidden) schedule()
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility)
+      clearAll()
+    }
   }, [])
 
   return null
 }
 
-export default GlitchFavicon 
+export default GlitchFavicon

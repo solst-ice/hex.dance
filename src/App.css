@@ -19,29 +19,11 @@
   unicode-range: U+0180-1FFF, U+2070-209F, U+20D0-20FF, U+2150-218F, U+2200-229F, U+22A1-24FF, U+2600-26F5, U+26F7-FFFC, U+FFFE-10FFFF;
 }
 
-/* Cyberpunk theme colors */
-:root {
-  --neon-blue: #0ff;
-  --neon-pink: #ff36ab;
-  --neon-yellow: #f7f71c;
-  --dark-bg: #0a0b16;
-  --darker-bg: #060714;
-  --grid-color: rgba(0, 255, 255, 0.1);
-  --glitch-color: rgba(255, 54, 171, 0.2);
-}
-
-/* Base theme */
-body {
-  background: var(--dark-bg);
-  color: #fff;
-  margin: 0;
-  padding: 0;
-  font-family: 'Unifont', monospace;
-}
+/* Theme colours live in styles/theme.css */
 
 .container {
   max-width: 800px;
-  margin: 40px auto;
+  margin: 32px auto;
   padding: 0 20px;
   position: relative;
 }
@@ -49,81 +31,67 @@ body {
 .container::before {
   content: '';
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: 
+  inset: 0;
+  background:
     linear-gradient(90deg, var(--grid-color) 1px, transparent 1px) 0 0 / 20px 20px,
     linear-gradient(0deg, var(--grid-color) 1px, transparent 1px) 0 0 / 20px 20px;
   pointer-events: none;
   z-index: -1;
 }
 
-/* Description section */
+/* Title card (also used by the error screen) */
 .description {
   background: var(--darker-bg);
-  color: #ffffff;
+  color: var(--text);
   padding: 20px;
   border-radius: 8px;
   margin-bottom: 20px;
-  border: 1px solid var(--neon-blue);
-  box-shadow: 0 0 20px rgba(0, 255, 255, 0.1);
+  border: 1px solid var(--hd-border);
 }
 
 .description h1 {
   color: var(--neon-blue);
-  margin: 0 0 15px 0;
+  margin: 0 0 12px;
   font-size: 2.2em;
+  font-weight: normal;
+  line-height: 1.2;
   text-transform: uppercase;
   letter-spacing: 2px;
   font-family: 'Unifont', monospace;
 }
 
-/* File uploader */
+/* Landing drop zone */
 .file-uploader {
-  margin: 30px 0;
-  padding: 20px;
-  border: 2px dashed var(--neon-blue);
+  margin: 0 0 16px;
+  border: 2px dashed var(--hd-border-strong);
   border-radius: 8px;
-  transition: all 1s cubic-bezier(0.19, 1, 0.22, 1);
+  transition: border-color 0.3s ease, box-shadow 0.3s ease, background-color 0.3s ease;
   background: var(--darker-bg);
   position: relative;
   overflow: hidden;
-  box-shadow: 
-    0 0 0 rgba(0, 255, 255, 0),
-    inset 0 0 0 rgba(0, 255, 255, 0);
 }
 
-/* Softer glow effect on hover */
-.file-uploader:hover {
+.file-uploader:hover,
+.file-uploader:has(:focus-visible) {
   border-color: var(--neon-blue);
-  box-shadow: 
-    0 0 25px rgba(0, 255, 255, 0.25),
-    inset 0 0 25px rgba(0, 255, 255, 0.1);
+  box-shadow: var(--hd-glow), inset 0 0 25px var(--hd-tint);
 }
 
-.file-uploader.hovering .upload-area {
-  background: none;
+.file-uploader:has(:focus-visible) {
+  outline: 2px solid var(--hd-focus);
+  outline-offset: 3px;
 }
 
-/* Softer dragging state glow */
 .file-uploader.dragging {
   border-color: var(--neon-pink);
-  background: rgba(255, 54, 171, 0.05);
-  box-shadow: 
-    0 0 30px rgba(255, 54, 171, 0.25),
-    inset 0 0 30px rgba(255, 54, 171, 0.1);
-}
-
-.file-uploader.dragging .upload-area {
-  background: none;
+  background: color-mix(in srgb, var(--neon-pink) 5%, var(--darker-bg));
+  box-shadow: var(--hd-pink-glow), inset 0 0 30px var(--hd-pink-tint);
 }
 
 .upload-area {
   position: relative;
   text-align: center;
-  padding: 40px 20px;
+  padding: 44px 20px 36px;
   z-index: 1;
 }
 
@@ -137,23 +105,30 @@ body {
   cursor: pointer;
 }
 
+/* The input above is invisible and focusable; the ring is drawn on .file-uploader */
+.upload-area input[type="file"]:focus-visible {
+  outline: none;
+}
+
 .upload-area label {
   font-size: 1.2em;
   color: var(--neon-pink);
   display: inline-block;
   margin: 0;
   cursor: pointer;
-  text-shadow: 0 0 10px rgba(255, 54, 171, 0.3);
-  padding: 10px 20px;
+  padding: 8px 16px;
 }
 
-.upload-area label:hover {
-  text-shadow: 0 0 15px rgba(255, 54, 171, 0.5);
-}
-
+.file-uploader:hover .upload-area label,
 .file-uploader.dragging .upload-area label {
-  color: var(--neon-pink);
-  text-shadow: 0 0 15px rgba(255, 54, 171, 0.5);
+  text-shadow: 0 0 12px color-mix(in srgb, var(--neon-pink) 50%, transparent);
+}
+
+.upload-hint {
+  color: var(--text-muted);
+  font-size: 0.9em;
+  margin: 4px 0 0;
+  pointer-events: none;
 }
 
 .matrix-rain {
@@ -164,7 +139,6 @@ body {
   height: 100%;
   pointer-events: none;
   mix-blend-mode: screen;
-  transition: opacity 0.3s ease;
 }
 
 .status {
@@ -179,14 +153,14 @@ body {
   text-align: center;
 }
 
-/* Function list */
+/* Legacy list and card classes, still used by panels */
 .function-list.empty {
   text-align: center;
-  color: #e4e4e4;
+  color: var(--text);
   background: var(--darker-bg);
   padding: 20px;
   border-radius: 8px;
-  border: 1px solid var(--neon-blue);
+  border: 1px solid var(--hd-border);
 }
 
 .no-symbols {
@@ -196,19 +170,18 @@ body {
 }
 
 .symbol-section {
-  margin: 25px 0;
+  margin: 20px 0;
   background: var(--darker-bg);
-  padding: 15px;
+  padding: 16px;
   border-radius: 8px;
-  border: 1px solid var(--neon-blue);
-  box-shadow: 0 0 20px rgba(0, 255, 255, 0.1);
+  border: 1px solid var(--hd-border);
 }
 
 .symbol-section h3 {
   font-size: 1.1em;
   color: var(--neon-blue);
-  margin: 0 0 15px 0;
-  font-family: monospace;
+  margin: 0 0 16px;
+  font-family: 'Unifont', monospace;
   font-weight: normal;
   text-transform: uppercase;
   letter-spacing: 1px;
@@ -216,7 +189,7 @@ body {
 
 .symbol-section ul {
   margin: 0;
-  padding: 0 15px;
+  padding: 0 16px;
   list-style: none;
 }
 
@@ -226,8 +199,8 @@ body {
 
 .function-item li {
   padding: 8px 12px;
-  background: #2f3542;
-  color: #e4e4e4;
+  background: color-mix(in srgb, var(--text) 9%, var(--dark-bg));
+  color: var(--text);
   border-radius: 4px;
   font-family: 'Unifont', monospace;
   font-size: 0.9em;
@@ -235,16 +208,16 @@ body {
   cursor: pointer;
   list-style: none;
   user-select: none;
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 .function-item li:hover {
-  background: #3a4153;
+  background: color-mix(in srgb, var(--neon-blue) 6%, color-mix(in srgb, var(--text) 12%, var(--dark-bg)));
   color: var(--neon-blue);
 }
 
 .function-item li.selected {
-  background: #3a4153;
+  background: color-mix(in srgb, var(--neon-blue) 6%, color-mix(in srgb, var(--text) 12%, var(--dark-bg)));
   border-radius: 4px 4px 0 0;
   border-left: 2px solid var(--neon-blue);
   color: var(--neon-blue);
@@ -253,17 +226,17 @@ body {
 .function-description.inline {
   display: none;
   background: var(--darker-bg);
-  color: #e4e4e4;
+  color: var(--text);
   font-size: 0.9em;
   line-height: 1.4;
   border-radius: 0 0 4px 4px;
-  border: 1px solid var(--neon-blue);
+  border: 1px solid var(--hd-border);
   border-top: none;
 }
 
 .function-description.inline.show {
   display: block;
-  padding: 12px 15px;
+  padding: 12px 16px;
 }
 
 .function-list-header {
@@ -275,83 +248,77 @@ body {
 
 .expand-toggle {
   background: var(--darker-bg);
-  border: 1px solid var(--neon-blue);
+  border: 1px solid var(--hd-border-strong);
   color: var(--neon-blue);
   padding: 6px 12px;
   border-radius: 4px;
   cursor: pointer;
   font-family: 'Unifont', monospace;
   font-size: 0.9em;
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
   text-transform: uppercase;
   letter-spacing: 1px;
 }
 
 .expand-toggle:hover {
-  background: rgba(0, 255, 255, 0.1);
-  box-shadow: 0 0 10px rgba(0, 255, 255, 0.2);
+  background: var(--hd-tint-strong);
+  box-shadow: var(--hd-glow);
 }
 
 .expand-toggle:active {
   transform: translateY(1px);
 }
 
-/* Update existing styles */
 .function-list h2 {
   margin: 0;
 }
 
-/* Softer pulsing animation */
-@keyframes glowPulse {
-  0%, 100% { 
-    box-shadow: 
-      0 0 25px rgba(0, 255, 255, 0.25),
-      inset 0 0 25px rgba(0, 255, 255, 0.1);
-  }
-  50% { 
-    box-shadow: 
-      0 0 35px rgba(0, 255, 255, 0.3),
-      inset 0 0 35px rgba(0, 255, 255, 0.15);
-  }
-}
-
-.file-uploader:hover {
-  animation: glowPulse 4s cubic-bezier(0.19, 1, 0.22, 1) infinite;
-}
-
-/* Glitch title effect */
+/* Title: text plus two clipped copies that only move while glitching */
 .glitch-title {
   position: relative;
   color: var(--neon-blue);
   font-family: 'Unifont', monospace;
   text-transform: uppercase;
   letter-spacing: 4px;
-  text-shadow: 
-    0 0 10px rgba(0, 255, 255, 0.3),
-    0 0 20px rgba(0, 255, 255, 0.2);
+  text-shadow: 0 0 10px color-mix(in srgb, var(--neon-blue) 30%, transparent);
 }
 
 .glitch-title::before,
 .glitch-title::after {
-  content: 'HEX.DANCE';
+  content: attr(data-text);
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
   overflow: hidden;
   background: var(--darker-bg);
+  clip-path: inset(0 0 100% 0);
+  pointer-events: none;
 }
 
 .glitch-title::before {
   left: 2px;
   text-shadow: -2px 0 var(--neon-pink);
-  animation: glitch-1 2s infinite linear alternate-reverse;
 }
 
 .glitch-title::after {
   left: -2px;
   text-shadow: 2px 0 var(--neon-blue);
-  animation: glitch-2 3s infinite linear alternate-reverse;
+}
+
+.glitch-title:hover::before,
+.glitch-title.is-glitching::before {
+  animation: glitch-1 0.35s linear 2 alternate-reverse;
+}
+
+.glitch-title:hover::after,
+.glitch-title.is-glitching::after {
+  animation: glitch-2 0.35s linear 2 alternate-reverse;
+}
+
+.glitch-title.is-decoding::before,
+.glitch-title.is-decoding::after {
+  display: none;
 }
 
 @keyframes glitch-1 {
@@ -368,36 +335,42 @@ body {
   60%, 70% { clip-path: inset(0 0 20% 0); }
 }
 
-/* File Metadata styles */
+/* Overview cards */
 .file-metadata {
   background: var(--darker-bg);
   border-radius: 8px;
   padding: 20px;
   margin: 20px 0;
-  border: 1px solid var(--neon-blue);
-  box-shadow: 0 0 20px rgba(0, 255, 255, 0.1);
+  border: 1px solid var(--hd-border);
 }
 
-.file-metadata h2 {
+.file-metadata h2,
+.zip-contents h2,
+.function-list:not(.metadata-grid) .function-list-header h2 {
   color: var(--neon-blue);
-  margin: 0 0 20px 0;
+  margin: 0 0 20px;
   font-family: 'Unifont', monospace;
+  font-weight: normal;
   text-transform: uppercase;
   letter-spacing: 2px;
   font-size: 1.5em;
 }
 
+.function-list:not(.metadata-grid) .function-list-header h2 {
+  margin: 0;
+}
+
 .metadata-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 15px;
+  gap: 16px;
 }
 
-/* Remove duplicate styles and keep only these metadata styles */
 .metadata-item {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 4px;
+  min-width: 0;
 }
 
 .metadata-label {
@@ -410,20 +383,18 @@ body {
 .metadata-value {
   color: var(--neon-blue);
   font-family: 'Unifont', monospace;
-  background: rgba(0, 255, 255, 0.1);
+  background: var(--hd-tint);
   padding: 8px;
   border-radius: 4px;
   word-break: break-all;
 }
 
-/* Function list metadata styles */
 .function-list.metadata-grid {
   background: var(--darker-bg);
   border-radius: 8px;
   padding: 20px 20px 20px 60px;
   margin: 20px 0;
-  border: 1px solid var(--neon-blue);
-  box-shadow: 0 0 20px rgba(0, 255, 255, 0.1);
+  border: 1px solid var(--hd-border);
   position: relative;
   min-height: 120px;
   display: flex;
@@ -449,50 +420,30 @@ body {
   transform-origin: center center;
   color: var(--neon-blue);
   font-family: 'Unifont', monospace;
+  font-weight: normal;
   text-transform: uppercase;
   letter-spacing: 2px;
   font-size: 1.5em;
   white-space: nowrap;
   background: var(--darker-bg);
   padding: 8px 12px;
-  border: 1px solid var(--neon-blue);
+  border: 1px solid var(--hd-border);
   border-radius: 4px;
-  box-shadow: 0 0 10px rgba(0, 255, 255, 0.1);
   margin: 0;
 }
 
 .function-list.metadata-grid .metadata-grid {
   flex: 1;
-  margin-left: 15px;
-  padding-left: 5px;
+  margin-left: 16px;
+  padding-left: 4px;
 }
 
-.file-metadata h2 {
-  color: var(--neon-blue);
-  margin: 0 0 20px 0;
-  font-family: 'Unifont', monospace;
-  text-transform: uppercase;
-  letter-spacing: 2px;
-  font-size: 1.5em;
-}
-
-/* Function list styles - specifically for Found Symbols */
 .function-list:not(.metadata-grid) {
   background: var(--darker-bg);
   border-radius: 8px;
   padding: 20px;
   margin: 20px 0;
-  border: 1px solid var(--neon-blue);
-  box-shadow: 0 0 20px rgba(0, 255, 255, 0.1);
-}
-
-.function-list:not(.metadata-grid) .function-list-header h2 {
-  color: var(--neon-blue);
-  font-family: 'Unifont', monospace;
-  text-transform: uppercase;
-  letter-spacing: 2px;
-  font-size: 1.5em;
-  margin: 0;
+  border: 1px solid var(--hd-border);
 }
 
 .tree-line {
@@ -504,30 +455,19 @@ body {
   margin-top: 4px;
 }
 
-/* ZIP contents styles */
 .zip-contents {
   background: var(--darker-bg);
   border-radius: 8px;
   padding: 20px;
   margin: 20px 0;
-  border: 1px solid var(--neon-blue);
-  box-shadow: 0 0 20px rgba(0, 255, 255, 0.1);
-}
-
-.zip-contents h2 {
-  color: var(--neon-blue);
-  margin: 0 0 20px 0;
-  font-family: 'Unifont', monospace;
-  text-transform: uppercase;
-  letter-spacing: 2px;
-  font-size: 1.5em;
+  border: 1px solid var(--hd-border);
 }
 
 .tree-view {
   color: var(--neon-blue);
   font-family: 'Unifont', monospace;
-  background: rgba(0, 255, 255, 0.1);
-  padding: 15px;
+  background: var(--hd-tint);
+  padding: 16px;
   border-radius: 4px;
   margin: 0;
   white-space: pre;
@@ -539,20 +479,20 @@ body {
 .edit-button {
   background: var(--darker-bg);
   color: var(--neon-blue);
-  border: 1px solid var(--neon-blue);
+  border: 1px solid var(--hd-border-strong);
   padding: 5px 15px;
   border-radius: 4px;
   font-family: 'Unifont', monospace;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
-.edit-button:hover, .download-button:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 0 15px rgba(0, 255, 255, 0.4);
+.edit-button:hover,
+.download-button:hover {
+  border-color: var(--neon-blue);
+  box-shadow: var(--hd-glow);
 }
 
-/* Adjust button size for mobile */
 @media (max-width: 768px) {
   .edit-button,
   .fullscreen-button,

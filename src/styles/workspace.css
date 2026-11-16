@@ -4,51 +4,50 @@
   max-width: 1500px;
 }
 
-/* Compact file bar that replaces the landing drop zone */
+/* File name and "open another file", shown in the slim header */
 .file-bar {
   align-items: center;
-  background: var(--darker-bg);
-  border: 2px dashed var(--neon-blue);
-  border-radius: 8px;
+  border: 1px dashed transparent;
+  border-radius: 6px;
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px 16px;
-  justify-content: space-between;
-  margin: 20px 0;
-  padding: 10px 16px;
+  flex: 1 1 16em;
+  gap: 8px 12px;
+  min-width: 0;
+  padding: 2px 4px 2px 8px;
   transition: border-color 0.3s ease, box-shadow 0.3s ease;
 }
 
 .file-bar.dragging {
   border-color: var(--neon-pink);
-  box-shadow: 0 0 20px rgba(255, 54, 171, 0.25);
+  box-shadow: var(--hd-pink-glow);
 }
 
 .file-bar-name {
-  color: var(--neon-blue);
+  color: var(--text);
   font-family: 'Unifont', monospace;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  flex: 1 1 12em;
+  flex: 1 1 auto;
 }
 
 .file-bar-choose {
   position: relative;
   color: var(--neon-pink);
-  border-color: var(--neon-pink);
+  border-color: color-mix(in srgb, var(--neon-pink) 65%, transparent);
+  flex: none;
   white-space: nowrap;
 }
 
 .file-bar-choose:hover {
-  background: rgba(255, 54, 171, 0.1);
+  background: var(--hd-pink-tint);
   border-color: var(--neon-pink);
-  box-shadow: 0 0 10px rgba(255, 54, 171, 0.3);
+  box-shadow: var(--hd-pink-glow);
 }
 
-.file-bar-choose:focus-within {
-  outline: 1px dashed var(--neon-blue);
+.file-bar-choose:has(:focus-visible) {
+  outline: 2px solid var(--hd-focus);
   outline-offset: 2px;
 }
 
@@ -63,12 +62,16 @@
   width: 1px;
 }
 
+.file-bar-choose input[type="file"]:focus-visible {
+  outline: none;
+}
+
 /* Workspace: a single column, two columns on wide screens */
 .workspace {
   display: grid;
   gap: 20px;
   grid-template-columns: minmax(0, 1fr);
-  margin-bottom: 40px;
+  margin-bottom: 32px;
 }
 
 .workspace-main,
@@ -80,6 +83,8 @@
   min-width: 0;
 }
 
+/* The grid gap already spaces the hex view */
+.workspace .hexview:not(.is-fullscreen),
 .workspace .hex-dump-container:not(.fullscreen) {
   margin: 0;
 }
@@ -104,9 +109,9 @@
 /* Shown while a file is dragged over the page */
 .drop-overlay {
   align-items: center;
-  background: rgba(6, 7, 20, 0.6);
+  background: color-mix(in srgb, var(--darker-bg) 60%, transparent);
   border: 2px dashed var(--neon-pink);
-  box-shadow: inset 0 0 40px rgba(255, 54, 171, 0.25);
+  box-shadow: inset 0 0 40px var(--hd-pink-tint);
   color: var(--neon-pink);
   display: flex;
   font-family: 'Unifont', monospace;
@@ -116,7 +121,7 @@
   letter-spacing: 2px;
   pointer-events: none;
   position: fixed;
-  text-shadow: 0 0 10px rgba(255, 54, 171, 0.5);
+  text-shadow: 0 0 10px color-mix(in srgb, var(--neon-pink) 50%, transparent);
   text-transform: uppercase;
   z-index: 2000;
 }
