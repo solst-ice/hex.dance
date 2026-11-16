@@ -1,0 +1,107 @@
+:where(:root) {
+  --entropy-line: var(--neon-blue);
+  --entropy-fill: rgba(0, 255, 255, 0.22);
+  --entropy-grid: rgba(0, 255, 255, 0.18);
+  --entropy-text: rgba(228, 228, 228, 0.65);
+  --entropy-view: rgba(255, 54, 171, 0.22);
+  --entropy-view-edge: var(--neon-pink);
+  --entropy-selection: rgba(247, 247, 28, 0.45);
+  --entropy-cursor: var(--neon-pink);
+  --entropy-pending: rgba(255, 255, 255, 0.04);
+  --entropy-region-a: rgba(255, 54, 171, 0.6);
+  --entropy-region-b: rgba(0, 255, 255, 0.45);
+  --entropy-boundary: rgba(228, 228, 228, 0.45);
+}
+
+.entropy-panel .hd-panel-header {
+  margin-bottom: 10px;
+}
+
+.entropy-panel .hd-section-title {
+  margin: 0;
+}
+
+.entropy-block,
+.entropy-note {
+  font-size: 0.85em;
+}
+
+.entropy-note {
+  margin: 4px 0 0;
+}
+
+.entropy-stale {
+  color: var(--neon-yellow);
+  margin-bottom: 10px;
+}
+
+.entropy-progress progress {
+  accent-color: var(--neon-blue);
+  flex: 1 1 140px;
+  height: 10px;
+  max-width: 280px;
+}
+
+.entropy-canvas-wrap {
+  cursor: crosshair;
+  position: relative;
+  touch-action: pan-y;
+  width: 100%;
+}
+
+.entropy-canvas-wrap:focus-visible {
+  outline: 1px dashed var(--neon-pink);
+  outline-offset: 3px;
+}
+
+.entropy-canvas {
+  display: block;
+}
+
+.entropy-readout.hd-mono {
+  color: var(--neon-blue);
+  font-size: 0.85em;
+  margin: 6px 0 0;
+  min-height: 1.3em;
+  white-space: normal;
+}
+
+.entropy-summary {
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.entropy-reading ul {
+  color: #e4e4e4;
+  margin: 6px 0 0;
+  padding-left: 20px;
+}
+
+.entropy-overall {
+  color: rgba(228, 228, 228, 0.8);
+  margin: 0;
+}
+
+.entropy-overall-value {
+  color: var(--neon-yellow);
+  font-size: 1.4em;
+}
+
+.entropy-kv dd {
+  font-size: 0.95em;
+}
+
+.entropy-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.entropy-histogram {
+  margin-top: 16px;
+}
+
+.entropy-histogram-head {
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
