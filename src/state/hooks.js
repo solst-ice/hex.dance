@@ -1,4 +1,4 @@
-import { useContext } from 'react'
+import { useContext, useEffect } from 'react'
 import { FileContext, SelectionContext } from './contexts.js'
 
 /**
@@ -42,4 +42,32 @@ export function useSelection() {
   const value = useContext(SelectionContext)
   if (!value) throw new Error('useSelection must be used inside <SelectionProvider>')
   return value
+}
+
+/**
+ * Owns one named layer of hex-view highlights. Each caller manages only its
+ * own layer, so several panels can tint the hex view without overwriting one
+ * another. The layer is removed when the caller unmounts.
+ *
+ * @param {string} layer   unique name, normally the panel id
+ * @param {Array<{ start: number, end: number, id?: string|number, label?: string, color?: string }>|null} ranges
+ *   memoise this array: a new identity replaces the layer
+ */
+export function useHighlightLayer(layer, ranges) {
+  const { setHighlights } = useSelection()
+
+  useEffect(() => {
+    const prefix = `${layer}:`
+    const isOther = (highlight) => !String(highlight.id).startsWith(prefix)
+    const mine = (ranges || []).map((range, index) => ({ ...range, id: `${prefix}${range.id ?? index}` }))
+
+    setHighlights(previous => {
+      const others = previous.filter(isOther)
+      return mine.length === 0 && others.length === previous.length ? previous : [...others, ...mine]
+    })
+    return () => setHighlights(previous => {
+      const others = previous.filter(isOther)
+      return others.length === previous.length ? previous : others
+    })
+  }, [layer, ranges, setHighlights])
 }
