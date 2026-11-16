@@ -20,14 +20,20 @@ test('PNG: reads IHDR with readable colour type', () => {
     'Height: 150px',
     'Bit Depth: 16',
     'Color Type: Truecolor (RGB)',
-    'Interlace: Adam7'
+    'Interlace: Adam7',
+    // The fixture leaves every CRC as zero
+    'Warning: 2 chunks have a CRC mismatch (IHDR, IEND)'
   ])
   assert.ok(lines(png, buildPNG({ colorType: 3 })).includes('Color Type: Indexed (palette)'))
 })
 
 test('PNG: marks the signature', () => {
   const result = png.parse(new Uint8Array(buildPNG()), {})
-  assert.deepEqual(result.fields.map(f => [f.name, f.offset, f.length, f.kind]), [['Signature', 0, 8, 'magic']])
+  assert.deepEqual(result.fields.map(f => [f.name, f.offset, f.length, f.kind]), [
+    ['Signature', 0, 8, 'magic'],
+    ['IHDR chunk', 8, 25, 'header'],
+    ['IEND chunk', 33, 12, 'header']
+  ])
 })
 
 test('PNG: rejects a first chunk that is not IHDR', () => {
@@ -80,7 +86,8 @@ test('GIF: reads version, dimensions and colour table', () => {
     'Height: 200px',
     'Global Color Table: Yes (256 colors)',
     'Color Resolution: 8 bits',
-    'Background Color Index: 3'
+    'Background Color Index: 3',
+    'Warning: File is truncated inside the global colour table'
   ])
 })
 

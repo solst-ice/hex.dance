@@ -1,4 +1,5 @@
 import { item, startsWith } from './shared.js'
+import { FieldList, field, hexOffset, plural } from './fieldTree.js'
 
 // Only the start and end of large files are scanned: the header, linearization
 // dictionary and first objects live at the start, the trailer and the objects
@@ -198,6 +199,340 @@ export function formatPDFDate(value) {
   return out
 }
 
+
+// ---- structure: objects, cross-reference tables and trailers -------------
+
+const TOKEN = /(\d{1,10})[ \t\r\n\f\0]{1,16}(\d{1,5})[ \t\r\n\f\0]{1,16}obj\b|\bxref\b|\btrailer\b|\bstartxref\b|%%EOF/g
+const MAX_DICT_SCAN = 64 * 1024
+
+function skipSpace(text, at, end) {
+  while (at < end && /[ \t\r\n\f\0]/.test(text[at])) at++
+  return at
+}
+
+function trimEnd(text, start, end) {
+  while (end > start && /[ \t\r\n\f\0]/.test(text[end - 1])) end--
+  return end
+}
+
+// End of a << >> dictionary that starts at `at`, or -1
+function dictionaryEnd(text, at, end) {
+  let depth = 0
+  const stop = Math.min(end, at + MAX_DICT_SCAN)
+  for (let i = at; i < stop - 1; i++) {
+    const ch = text[i]
+    if (ch === '(') {
+      // Skip literal strings, which may contain unbalanced brackets
+      let nest = 1
+      i++
+      while (i < stop && nest > 0) {
+        if (text[i] === '\\') i++
+        else if (text[i] === '(') nest++
+        else if (text[i] === ')') nest--
+        i++
+      }
+      i--
+    } else if (ch === '<' && text[i + 1] === '<') {
+      depth++
+      i++
+    } else if (ch === '>' && text[i + 1] === '>') {
+      depth--
+      i++
+      if (depth === 0) return i + 1
+    }
+  }
+  return -1
+}
+
+function objectField(text, base, match, windowEnd) {
+  const start = match.index
+  const headerEnd = start + match[0].length
+  const number = match[1]
+  const generation = match[2]
+  const bodyStart = skipSpace(text, headerEnd, windowEnd)
+  const children = [field('Object header', base + start, headerEnd - start, {
+    value: `${number} ${generation} obj`,
+    kind: 'header',
+    description: 'Object number and generation; other objects refer to this one as "' + number + ' ' + generation + ' R"'
+  })]
+  let value
+  let cursor = bodyStart
+  let typeName = null
+
+  if (text.startsWith('<<', bodyStart)) {
+    const dictEnd = dictionaryEnd(text, bodyStart, windowEnd)
+    const stop = dictEnd === -1 ? Math.min(windowEnd, bodyStart + 200) : dictEnd
+    const dict = text.slice(bodyStart, stop)
+    const type = /\/Type\s*\/([A-Za-z0-9]{1,40})/.exec(dict)
+    typeName = type ? type[1] : null
+    if (dictEnd !== -1) {
+      children.push(field('Dictionary', base + bodyStart, dictEnd - bodyStart, { value: typeName ? `/${typeName}` : `${plural(dictEnd - bodyStart, 'byte')}`, kind: 'header', description: 'Key/value pairs between << and >>' }))
+      cursor = dictEnd
+    }
+    const afterDict = skipSpace(text, cursor, windowEnd)
+    if (dictEnd !== -1 && text.startsWith('stream', afterDict)) {
+      let dataStart = afterDict + 6
+      if (text[dataStart] === '\r') dataStart++
+      if (text[dataStart] === '\n') dataStart++
+      const lengthMatch = /\/Length\s+(\d{1,10})(?!\s+\d+\s+R)/.exec(dict)
+      const filter = /\/Filter\s*\/([A-Za-z0-9]{1,40})/.exec(dict)
+      let dataEnd = -1
+      if (lengthMatch) {
+        const guess = dataStart + parseInt(lengthMatch[1], 10)
+        const near = skipSpace(text, guess, windowEnd)
+        if (guess <= windowEnd && text.startsWith('endstream', near)) dataEnd = guess
+      }
+      if (dataEnd === -1) {
+        const found = text.indexOf('endstream', dataStart)
+        dataEnd = found === -1 ? windowEnd : trimEnd(text, dataStart, found)
+      }
+      children.push(field('stream keyword', base + afterDict, 6, { value: 'stream', kind: 'header' }))
+      if (dataEnd > dataStart) {
+        children.push(field('Stream data', base + dataStart, dataEnd - dataStart, {
+          value: `${plural(dataEnd - dataStart, 'byte')}${filter ? `, /${filter[1]}` : ''}`,
+          kind: 'data',
+          description: filter ? `Stream contents, encoded with the ${filter[1]} filter` : 'Stream contents'
+        }))
+      }
+      const endstream = text.indexOf('endstream', dataEnd)
+      if (endstream !== -1) {
+        children.push(field('endstream keyword', base + endstream, 9, { value: 'endstream', kind: 'header' }))
+        cursor = endstream + 9
+      } else {
+        cursor = windowEnd
+      }
+      value = typeName ? `/${typeName} stream` : 'stream'
+    }
+  }
+
+  let end
+  const endobj = cursor >= windowEnd ? -1 : text.indexOf('endobj', cursor)
+  if (endobj === -1) {
+    end = windowEnd
+    if (!children.some(child => child.name === 'Dictionary' || child.name === 'Stream data') && bodyStart < windowEnd) {
+      children.push(field('Value', base + bodyStart, windowEnd - bodyStart, { kind: 'data', description: 'Cut off by the end of the scanned area' }))
+    }
+  } else {
+    const valueEnd = trimEnd(text, cursor, endobj)
+    if (!children.some(child => child.name === 'Dictionary') && valueEnd > bodyStart && cursor === bodyStart) {
+      const raw = text.slice(bodyStart, Math.min(valueEnd, bodyStart + 60))
+      children.push(field('Value', base + bodyStart, valueEnd - bodyStart, { value: raw.replace(/\s+/g, ' '), kind: 'data' }))
+    }
+    children.push(field('endobj keyword', base + endobj, 6, { value: 'endobj', kind: 'header' }))
+    end = endobj + 6
+  }
+  if (!value) value = typeName ? `/${typeName}` : undefined
+  return {
+    end,
+    field: field(`Object ${number} ${generation}`, base + start, end - start, {
+      value,
+      kind: 'header',
+      description: 'An indirect object: a numbered value that the cross-reference table locates by byte offset',
+      children
+    })
+  }
+}
+
+const SUBSECTION = /[ \t\r\n\f\0]*(\d{1,10})[ \t]+(\d{1,10})[ \t]*(?:\r\n|\r|\n)/y
+const XREF_ENTRY = /^(\d{10}) (\d{5}) ([nf])/
+
+// Whether an offset, when it falls inside the scanned text, starts the object it should
+function checkTarget(text, base, target, number) {
+  const at = target - base
+  if (at < 0 || at >= text.length) return ''
+  const match = /^(\d{1,10})[ \t\r\n\f\0]{1,16}\d{1,5}[ \t\r\n\f\0]{1,16}obj\b/.exec(text.slice(at, at + 40))
+  if (!match) return ' (no object there)'
+  return parseInt(match[1], 10) === number ? ' (verified)' : ` (finds object ${match[1]})`
+}
+
+function xrefField(text, base, at, windowEnd) {
+  const children = [field('xref keyword', base + at, 4, { value: 'xref', kind: 'header' })]
+  let p = at + 4
+  let total = 0
+  for (let sections = 0; sections < 1000; sections++) {
+    SUBSECTION.lastIndex = p
+    const match = SUBSECTION.exec(text)
+    if (!match) break
+    const first = parseInt(match[1], 10)
+    const count = parseInt(match[2], 10)
+    const headerStart = match.index + match[0].length - match[0].trimStart().length
+    const entries = new FieldList(1000, 'entries')
+    let q = SUBSECTION.lastIndex
+    let n = 0
+    while (n < count && q + 18 <= windowEnd) {
+      const entry = XREF_ENTRY.exec(text.slice(q, q + 18))
+      if (!entry) break
+      const length = Math.min(20, windowEnd - q)
+      if (entries.full) {
+        entries.skip(base + q, length)
+      } else {
+        const inUse = entry[3] === 'n'
+        const target = parseInt(entry[1], 10)
+        entries.push(field(`Object ${first + n}`, base + q, length, {
+          value: inUse ? `at ${hexOffset(target)}, generation ${parseInt(entry[2], 10)}${checkTarget(text, base, target, first + n)}` : `free, generation ${parseInt(entry[2], 10)}`,
+          kind: inUse ? 'offset' : 'padding',
+          description: inUse ? 'In use: 10-digit byte offset of the object, 5-digit generation, "n"' : 'Free entry: links to the next free object number, "f"'
+        }))
+      }
+      q += length
+      n++
+    }
+    total += n
+    const subChildren = [field('Subsection header', base + headerStart, SUBSECTION.lastIndex - headerStart, { value: `${first} ${count}`, kind: 'count', description: 'First object number and number of entries' }), ...entries.toArray()]
+    const subEnd = q
+    children.push(field(`Objects ${first}–${first + Math.max(count, 1) - 1}`, base + headerStart, subEnd - headerStart, { value: plural(count, 'entry', 'entries'), kind: 'header', children: subChildren }))
+    p = subEnd
+    if (n < count) break
+  }
+  const end = p
+  return {
+    end,
+    field: field('Cross-reference table', base + at, end - at, {
+      value: plural(total, 'entry', 'entries'),
+      kind: 'header',
+      description: 'Maps object numbers to byte offsets, so a reader can jump straight to any object. Each entry is exactly 20 bytes',
+      children
+    })
+  }
+}
+
+function trailerField(text, base, at, windowEnd) {
+  const children = [field('trailer keyword', base + at, 7, { value: 'trailer', kind: 'header' })]
+  const dictStart = skipSpace(text, at + 7, windowEnd)
+  let end = at + 7
+  let value
+  if (text.startsWith('<<', dictStart)) {
+    const dictEnd = dictionaryEnd(text, dictStart, windowEnd)
+    if (dictEnd !== -1) {
+      const dict = text.slice(dictStart, dictEnd)
+      const parts = []
+      const root = /\/Root\s+(\d+\s+\d+)\s+R/.exec(dict)
+      const size = /\/Size\s+(\d+)/.exec(dict)
+      const prev = /\/Prev\s+(\d+)/.exec(dict)
+      if (root) parts.push(`root ${root[1]} R`)
+      if (size) parts.push(`size ${size[1]}`)
+      if (prev) parts.push(`previous xref at ${hexOffset(parseInt(prev[1], 10))}`)
+      value = parts.join(', ') || undefined
+      children.push(field('Trailer dictionary', base + dictStart, dictEnd - dictStart, {
+        value,
+        kind: 'header',
+        description: '/Root points to the document catalog, /Size is the number of objects, /Prev links to an earlier cross-reference section'
+      }))
+      end = dictEnd
+    }
+  }
+  return { end, field: field('Trailer', base + at, end - at, { value, kind: 'header', description: 'Tells a reader where the document catalog is and how the file was updated', children }) }
+}
+
+function pointsAt(text, base, target) {
+  const at = target - base
+  if (at < 0 || at >= text.length) return ''
+  if (text.startsWith('xref', at)) return ', points to a cross-reference table'
+  if (/^\d{1,10}[ \t\r\n\f\0]{1,16}\d{1,5}[ \t\r\n\f\0]{1,16}obj\b/.test(text.slice(at, at + 40))) return ', points to a cross-reference stream'
+  return ', points to neither a table nor a stream'
+}
+
+function startxrefField(text, base, at, windowEnd) {
+  const match = /^startxref[ \t\r\n\f\0]{1,16}(\d{1,12})/.exec(text.slice(at, Math.min(windowEnd, at + 40)))
+  if (!match) return { end: at + 9, field: field('startxref', base + at, 9, { value: 'startxref', kind: 'header' }) }
+  const numberAt = at + match[0].length - match[1].length
+  const target = parseInt(match[1], 10)
+  return {
+    end: at + match[0].length,
+    field: field('startxref', base + at, match[0].length, {
+      value: hexOffset(target),
+      kind: 'header',
+      description: 'Byte offset of the last cross-reference section; a reader starts here, near the end of the file',
+      children: [
+        field('startxref keyword', base + at, 9, { value: 'startxref', kind: 'header' }),
+        field('Offset', base + numberAt, match[1].length, { value: `${target} (${hexOffset(target)})${pointsAt(text, base, target)}`, kind: 'offset' })
+      ]
+    })
+  }
+}
+
+function scanWindow(bytes, start, end, list, regions) {
+  const text = bytesToLatin1(bytes, start, end)
+  const addRegion = (name, offset, length, kind) => {
+    const last = regions[regions.length - 1]
+    if (last && last.name === name && offset - (last.offset + last.length) < 256) last.length = offset + length - last.offset
+    else if (regions.length < 200) regions.push({ name, offset, length, kind })
+  }
+  const regex = new RegExp(TOKEN.source, 'g')
+  let match
+  while ((match = regex.exec(text)) !== null) {
+    let result
+    const token = match[0]
+    if (match[1] !== undefined) {
+      if (list.full) {
+        const endobj = text.indexOf('endobj', regex.lastIndex)
+        const stop = endobj === -1 ? text.length : endobj + 6
+        list.skip(start + match.index, stop - match.index)
+        addRegion('Objects', start + match.index, stop - match.index, 'data')
+        regex.lastIndex = stop
+        continue
+      }
+      result = objectField(text, start, match, text.length)
+      addRegion('Objects', start + match.index, result.end - match.index, 'data')
+    } else if (token === 'xref') {
+      result = xrefField(text, start, match.index, text.length)
+      addRegion('Cross-reference table', start + match.index, result.end - match.index, 'table')
+    } else if (token === 'trailer') {
+      result = trailerField(text, start, match.index, text.length)
+      addRegion('Trailer', start + match.index, result.end - match.index, 'metadata')
+    } else if (token === 'startxref') {
+      result = startxrefField(text, start, match.index, text.length)
+      addRegion('Trailer', start + match.index, result.end - match.index, 'metadata')
+    } else {
+      result = { end: match.index + 5, field: field('End-of-file marker', start + match.index, 5, { value: '%%EOF', kind: 'header', description: 'Ends a revision of the file; incremental updates append more objects and another %%EOF' }) }
+      addRegion('Trailer', start + match.index, 5, 'metadata')
+    }
+    list.push(result.field)
+    regex.lastIndex = Math.max(result.end, match.index + 1)
+  }
+}
+
+function pdfStructure(bytes, headerLength) {
+  const fields = []
+  const regions = headerLength ? [{ name: 'Header', offset: 0, length: headerLength, kind: 'header' }] : []
+  let headStart = headerLength
+  // A comment of high bytes right after the header tells transfer tools the file is binary
+  const line = bytesToLatin1(bytes, headerLength, Math.min(bytes.length, headerLength + 64))
+  const binary = /^(\r\n|\r|\n)(%[\x80-\xFF]{4,}[^\r\n]{0,16})/.exec(line)
+  if (binary) {
+    const at = headerLength + binary[1].length
+    fields.push(field('Binary marker', at, binary[2].length, {
+      value: `${binary[2].length - 1} high bytes`,
+      kind: 'magic',
+      description: 'A comment of bytes above 127, so transfer tools treat the file as binary rather than text'
+    }))
+    headStart = at + binary[2].length
+  }
+  const headEnd = Math.min(bytes.length, SCAN_WINDOW)
+  const head = new FieldList(1000, 'items')
+  if (headStart < headEnd) scanWindow(bytes, headStart, headEnd, head, regions)
+  fields.push(...head.toArray())
+  if (bytes.length > SCAN_WINDOW) {
+    const tailStart = Math.max(headEnd, bytes.length - SCAN_WINDOW)
+    if (tailStart > headEnd) {
+      fields.push(field('Not scanned', headEnd, tailStart - headEnd, {
+        kind: 'data',
+        value: formatSize(tailStart - headEnd),
+        description: 'Only the first and last megabyte of large PDFs are scanned, to keep analysis fast'
+      }))
+      regions.push({ name: 'Not scanned', offset: headEnd, length: tailStart - headEnd, kind: 'other' })
+    }
+    const tail = new FieldList(1000, 'items')
+    scanWindow(bytes, tailStart, bytes.length, tail, regions)
+    fields.push(...tail.toArray())
+  }
+  return { fields, regions }
+}
+
+function formatSize(n) {
+  return n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : plural(n, 'byte')
+}
+
 function parsePDF(bytes) {
   const summary = []
   const warnings = []
@@ -205,7 +540,7 @@ function parsePDF(bytes) {
   const version = /^%PDF-(\d+\.\d+)/.exec(head)
   summary.push(item('Version', `PDF ${version ? version[1] : 'unknown'}`))
   const headerLength = version ? version[0].length : Math.min(bytes.length, 5)
-  const fields = [{
+  const fields = headerLength === 0 ? [] : [{
     name: 'Header',
     offset: 0,
     length: headerLength,
@@ -213,7 +548,16 @@ function parsePDF(bytes) {
     kind: 'magic',
     description: 'PDF signature and version'
   }]
-  const result = () => ({ summary, fields, warnings })
+  let regions = []
+  const result = () => ({ summary, fields, regions, warnings })
+
+  try {
+    const structure = pdfStructure(bytes, headerLength)
+    fields.push(...structure.fields)
+    regions = structure.regions
+  } catch (err) {
+    warnings.push(`Could not map the file structure (${err.message})`)
+  }
 
   try {
     const text = scanText(bytes)
