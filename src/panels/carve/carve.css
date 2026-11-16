@@ -222,7 +222,7 @@
 }
 
 .carve-warn {
-  color: var(--neon-pink, #ff36ab);
+  color: var(--hd-danger);
 }
 
 .carve-end {

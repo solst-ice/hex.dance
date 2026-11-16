@@ -26,7 +26,7 @@
 
 .hashes-table th.hashes-name {
   color: var(--neon-pink);
-  border-bottom: 1px solid rgba(0, 255, 255, 0.08);
+  border-bottom: 1px solid color-mix(in srgb, var(--neon-blue) 8%, transparent);
   padding-left: 0;
   text-transform: none;
   white-space: nowrap;
@@ -61,7 +61,7 @@
 }
 
 .hashes-match {
-  color: var(--neon-blue);
+  color: var(--hd-success);
 }
 
 .hashes-compare .hd-input {

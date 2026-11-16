@@ -4,8 +4,8 @@
   --ch-border: var(--hd-border, color-mix(in srgb, var(--neon-blue) 24%, transparent));
   --ch-tint: var(--hd-tint, color-mix(in srgb, var(--neon-blue) 7%, transparent));
   --ch-focus: var(--hd-focus, var(--neon-yellow));
-  --ch-ok: var(--neon-blue);
-  --ch-ok-tint: color-mix(in srgb, var(--neon-blue) 10%, transparent);
+  --ch-ok: var(--hd-success);
+  --ch-ok-tint: color-mix(in srgb, var(--hd-success) 10%, transparent);
 }
 
 .ch-panel {

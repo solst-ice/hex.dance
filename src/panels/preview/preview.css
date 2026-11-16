@@ -1,6 +1,6 @@
 :where(:root) {
-  --pv-checker-a: #0b0d1c;
-  --pv-checker-b: #161a30;
+  --pv-checker-a: var(--hd-surface);
+  --pv-checker-b: var(--hd-surface-raised);
   --pv-glitch: var(--neon-yellow, #f7f71c);
 }
 
@@ -16,7 +16,7 @@
   min-height: 120px;
   max-height: 60vh;
   overflow: auto;
-  border: 1px solid rgba(0, 255, 255, 0.25);
+  border: 1px solid color-mix(in srgb, var(--neon-blue) 25%, transparent);
   border-radius: 4px;
   background: var(--pv-checker-a);
 }
@@ -31,7 +31,7 @@
 }
 
 .pv-frame--error {
-  border-color: var(--neon-pink);
+  border-color: var(--hd-danger);
 }
 
 .pv-image {
@@ -54,7 +54,7 @@
 .pv-error {
   margin: 0;
   padding: 24px 16px;
-  color: var(--neon-pink);
+  color: var(--hd-danger);
   text-align: center;
 }
 
@@ -84,7 +84,7 @@
 .pv-lab {
   margin-top: 20px;
   padding-top: 4px;
-  border-top: 1px solid rgba(0, 255, 255, 0.2);
+  border-top: 1px solid color-mix(in srgb, var(--neon-blue) 20%, transparent);
 }
 
 .pv-lab-head {
@@ -184,7 +184,7 @@
   gap: 6px;
   width: 100%;
   padding: 2px 6px;
-  border: 1px solid rgba(0, 255, 255, 0.2);
+  border: 1px solid color-mix(in srgb, var(--neon-blue) 20%, transparent);
   border-radius: 3px;
   background: transparent;
   color: var(--neon-blue);
@@ -194,7 +194,7 @@
 }
 
 .pv-change:hover {
-  background: rgba(0, 255, 255, 0.08);
+  background: color-mix(in srgb, var(--neon-blue) 8%, transparent);
 }
 
 .pv-change:focus-visible {

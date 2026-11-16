@@ -10,7 +10,7 @@
 
 /* Format card */
 .sx-card {
-  border: 1px solid rgba(0, 255, 255, 0.25);
+  border: 1px solid color-mix(in srgb, var(--neon-blue) 25%, transparent);
   border-radius: 6px;
   padding: 10px 12px;
   color: var(--sx-text);
@@ -114,7 +114,7 @@
 
 /* Detail of the current field */
 .sx-detail {
-  background: rgba(0, 255, 255, 0.04);
+  background: color-mix(in srgb, var(--neon-blue) 4%, transparent);
   border-left: 3px solid var(--neon-blue);
   border-radius: 4px;
   color: var(--sx-text);
@@ -177,7 +177,7 @@
 
 /* Tree */
 .sx-tree {
-  border: 1px solid rgba(0, 255, 255, 0.2);
+  border: 1px solid color-mix(in srgb, var(--neon-blue) 20%, transparent);
   border-radius: 4px;
   max-height: min(56vh, 520px);
   overflow: auto;
@@ -208,11 +208,11 @@
 
 .sx-row:hover,
 .sx-row.is-hovered {
-  background: rgba(247, 247, 28, 0.08);
+  background: color-mix(in srgb, var(--neon-yellow) 8%, transparent);
 }
 
 .sx-row.is-active {
-  background: rgba(0, 255, 255, 0.14);
+  background: color-mix(in srgb, var(--neon-blue) 14%, transparent);
   box-shadow: inset 2px 0 0 var(--neon-blue);
   color: var(--neon-blue);
 }

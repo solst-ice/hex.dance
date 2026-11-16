@@ -6,6 +6,8 @@
   --hx-edit-accent: var(--neon-pink, #ff36ab);
   --hx-offset: var(--neon-pink, #ff36ab);
   --hx-muted: #7d8aa8;
+  --hx-text: var(--text-bright, #fff);
+  --hx-detail: #c9d1e8;
   --hx-rule: color-mix(in srgb, var(--hx-accent) 25%, transparent);
 
   /* byte classes, used in both columns */
@@ -15,14 +17,14 @@
   --hx-byte-ff: #ff8f40;
   --hx-byte-high: #c38dff;
 
-  --hx-hover-bg: rgba(255, 255, 255, 0.16);
+  --hx-hover-bg: color-mix(in srgb, var(--text-bright) 16%, transparent);
   --hx-selection: color-mix(in srgb, var(--hx-accent) 28%, transparent);
   --hx-cursor: var(--neon-blue, #0ff);
   --hx-cursor-bg: color-mix(in srgb, var(--hx-accent) 35%, transparent);
-  --hx-highlight: #ff36ab;
+  --hx-highlight: var(--neon-pink, #ff36ab);
   --hx-highlight-mix: 35%;
   --hx-modified: var(--neon-pink, #ff36ab);
-  --hx-flash: rgba(247, 247, 28, 0.35);
+  --hx-flash: color-mix(in srgb, var(--neon-yellow) 35%, transparent);
   --hx-font-size: 14px;
 }
 
@@ -38,7 +40,7 @@
   border: 1px solid var(--hx-accent);
   border-radius: 8px;
   box-shadow: 0 0 20px color-mix(in srgb, var(--hx-accent) 10%, transparent);
-  color: #fff;
+  color: var(--hx-text);
   font-family: 'Unifont', monospace;
   overflow: hidden;
 }
@@ -214,7 +216,7 @@
   min-width: 0;
   padding: 4px 8px;
   background: var(--hx-bg);
-  color: #fff;
+  color: var(--hx-text);
   border: 1px solid var(--hx-rule);
   border-radius: 4px;
   font-family: 'Unifont', monospace;
@@ -229,7 +231,7 @@
 .hx-goto-error {
   flex-basis: 100%;
   margin: 0;
-  color: var(--hx-edit-accent);
+  color: var(--hd-danger, var(--hx-edit-accent));
 }
 
 /* rows. Widths are in character cells and must match layout.js:
@@ -371,12 +373,12 @@
 
 .hx-cell.is-hover {
   background-color: var(--hx-hover-bg);
-  color: #fff;
+  color: var(--hx-text);
   text-shadow: 0 0 8px var(--hx-accent);
 }
 
 .hx-cell.is-cur {
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--hx-text) 35%, transparent);
 }
 
 .hx-cell.is-cur.is-active {
@@ -385,7 +387,7 @@
 
 .hx-body:focus .hx-cell.is-cur.is-active {
   background-color: var(--hx-cursor-bg);
-  color: #fff;
+  color: var(--hx-text);
 }
 
 /* second nibble pending: mark the half that will be typed next */
@@ -480,7 +482,7 @@
 }
 
 .hx-d {
-  color: #c9d1e8;
+  color: var(--hx-detail);
 }
 
 .hx-sep {
@@ -488,7 +490,7 @@
 }
 
 .hx-label {
-  color: #fff;
+  color: var(--hx-text);
   padding: 0 6px;
   border-radius: 3px;
   background: color-mix(in srgb, var(--hx-edit-accent) 30%, transparent);

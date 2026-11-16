@@ -1,16 +1,16 @@
 :where(:root) {
   --entropy-line: var(--neon-blue);
-  --entropy-fill: rgba(0, 255, 255, 0.22);
-  --entropy-grid: rgba(0, 255, 255, 0.18);
-  --entropy-text: rgba(228, 228, 228, 0.65);
-  --entropy-view: rgba(255, 54, 171, 0.22);
+  --entropy-fill: color-mix(in srgb, var(--neon-blue) 22%, transparent);
+  --entropy-grid: color-mix(in srgb, var(--neon-blue) 18%, transparent);
+  --entropy-text: color-mix(in srgb, var(--text) 65%, transparent);
+  --entropy-view: color-mix(in srgb, var(--neon-pink) 22%, transparent);
   --entropy-view-edge: var(--neon-pink);
-  --entropy-selection: rgba(247, 247, 28, 0.45);
+  --entropy-selection: color-mix(in srgb, var(--neon-yellow) 45%, transparent);
   --entropy-cursor: var(--neon-pink);
-  --entropy-pending: rgba(255, 255, 255, 0.04);
-  --entropy-region-a: rgba(255, 54, 171, 0.6);
-  --entropy-region-b: rgba(0, 255, 255, 0.45);
-  --entropy-boundary: rgba(228, 228, 228, 0.45);
+  --entropy-pending: color-mix(in srgb, var(--text-bright) 4%, transparent);
+  --entropy-region-a: color-mix(in srgb, var(--neon-pink) 60%, transparent);
+  --entropy-region-b: color-mix(in srgb, var(--neon-blue) 45%, transparent);
+  --entropy-boundary: color-mix(in srgb, var(--text) 45%, transparent);
 }
 
 .entropy-panel .hd-panel-header {
@@ -72,13 +72,13 @@
 }
 
 .entropy-reading ul {
-  color: #e4e4e4;
+  color: var(--text);
   margin: 6px 0 0;
   padding-left: 20px;
 }
 
 .entropy-overall {
-  color: rgba(228, 228, 228, 0.8);
+  color: color-mix(in srgb, var(--text) 80%, transparent);
   margin: 0;
 }
 

@@ -1,29 +1,30 @@
-/* Field and region kind palette, shared by the Structure tab and the anatomy dock */
+/* Field and region kind palette, shared by the Structure tab and the anatomy
+   dock; the colours themselves are the --hd-kind-* tokens in theme.css */
 :where(:root) {
-  --sx-field-magic: #ff36ab;
-  --sx-field-header: #00d7ff;
-  --sx-field-size: #f7f71c;
-  --sx-field-count: #ffb000;
-  --sx-field-offset: #ff8f40;
-  --sx-field-flags: #c38dff;
-  --sx-field-string: #4dff88;
-  --sx-field-checksum: #ff5c5c;
-  --sx-field-data: #5f87ff;
-  --sx-field-padding: #7d8aa8;
-  --sx-field-other: #2ec4b6;
+  --sx-field-magic: var(--hd-kind-magic);
+  --sx-field-header: var(--hd-kind-header);
+  --sx-field-size: var(--hd-kind-size);
+  --sx-field-count: var(--hd-kind-count);
+  --sx-field-offset: var(--hd-kind-offset);
+  --sx-field-flags: var(--hd-kind-flags);
+  --sx-field-string: var(--hd-kind-string);
+  --sx-field-checksum: var(--hd-kind-checksum);
+  --sx-field-data: var(--hd-kind-data);
+  --sx-field-padding: var(--hd-kind-padding);
+  --sx-field-other: var(--hd-kind-other);
 
-  --sx-region-header: #00d7ff;
-  --sx-region-code: #ff5c5c;
-  --sx-region-data: #5f87ff;
-  --sx-region-table: #ffb000;
-  --sx-region-metadata: #c38dff;
-  --sx-region-padding: #7d8aa8;
-  --sx-region-other: #2ec4b6;
-  --sx-region-gap: #3d4560;
-  --sx-region-mixed: #9aa4bf;
+  --sx-region-header: var(--hd-kind-header);
+  --sx-region-code: var(--hd-kind-checksum);
+  --sx-region-data: var(--hd-kind-data);
+  --sx-region-table: var(--hd-kind-count);
+  --sx-region-metadata: var(--hd-kind-flags);
+  --sx-region-padding: var(--hd-kind-padding);
+  --sx-region-other: var(--hd-kind-other);
+  --sx-region-gap: var(--hx-byte-zero);
+  --sx-region-mixed: var(--text-muted);
 
-  --sx-hover: #f7f71c;
-  --sx-text: #e4e4e4;
+  --sx-hover: var(--neon-yellow);
+  --sx-text: var(--text);
 }
 
 .sx-kind-swatch {

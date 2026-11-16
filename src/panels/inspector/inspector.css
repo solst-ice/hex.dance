@@ -1,13 +1,13 @@
 :where(:root) {
   --insp-label: var(--neon-pink, #ff36ab);
   --insp-value: var(--neon-blue, #0ff);
-  --insp-muted: rgba(228, 228, 228, 0.55);
-  --insp-cell-bg: rgba(0, 255, 255, 0.04);
-  --insp-cell-hover: rgba(0, 255, 255, 0.12);
-  --insp-rule: rgba(0, 255, 255, 0.18);
+  --insp-muted: color-mix(in srgb, var(--text) 55%, transparent);
+  --insp-cell-bg: color-mix(in srgb, var(--neon-blue) 4%, transparent);
+  --insp-cell-hover: color-mix(in srgb, var(--neon-blue) 12%, transparent);
+  --insp-rule: color-mix(in srgb, var(--neon-blue) 18%, transparent);
   --insp-menu-bg: var(--darker-bg, #060714);
-  --insp-checker-a: #888;
-  --insp-checker-b: #ccc;
+  --insp-checker-a: color-mix(in srgb, var(--text) 55%, var(--darker-bg));
+  --insp-checker-b: color-mix(in srgb, var(--text) 82%, var(--darker-bg));
   --insp-font-size: 12.5px;
 }
 

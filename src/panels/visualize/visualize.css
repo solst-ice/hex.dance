@@ -1,14 +1,14 @@
 :where(:root) {
   /* digraph heat ramp, from never seen to most frequent */
   --viz-ramp-0: var(--darker-bg, #060714);
-  --viz-ramp-1: #2a1f78;
+  --viz-ramp-1: var(--hd-heat-low);
   --viz-ramp-2: var(--neon-blue, #0ff);
   --viz-ramp-3: var(--neon-yellow, #f7f71c);
   --viz-mark: var(--neon-pink, #ff36ab);
-  --viz-hover: #fff;
-  --viz-guide: #fff;
-  --viz-canvas-bg: #0b0d1c;
-  --viz-checker: #14182c;
+  --viz-hover: var(--text-bright);
+  --viz-guide: var(--text-bright);
+  --viz-canvas-bg: var(--hd-surface);
+  --viz-checker: var(--hd-surface-raised);
 }
 
 .viz-switch {
@@ -69,7 +69,7 @@
   position: relative;
   flex: none;
   background: var(--viz-canvas-bg);
-  outline: 1px solid rgba(0, 255, 255, 0.25);
+  outline: 1px solid color-mix(in srgb, var(--neon-blue) 25%, transparent);
 }
 
 .viz-checker {
@@ -118,7 +118,7 @@
   display: block;
   flex: none;
   cursor: pointer;
-  outline: 1px solid rgba(0, 255, 255, 0.25);
+  outline: 1px solid color-mix(in srgb, var(--neon-blue) 25%, transparent);
   touch-action: none;
 }
 
@@ -149,7 +149,7 @@
 
 .viz-progress {
   height: 4px;
-  background: rgba(0, 255, 255, 0.12);
+  background: color-mix(in srgb, var(--neon-blue) 12%, transparent);
   border-radius: 2px;
   overflow: hidden;
 }
@@ -203,7 +203,7 @@
 
 .viz-hit {
   padding: 10px 12px;
-  border: 1px solid rgba(0, 255, 255, 0.2);
+  border: 1px solid color-mix(in srgb, var(--neon-blue) 20%, transparent);
   border-radius: 6px;
 }
 

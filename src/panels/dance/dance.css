@@ -1,6 +1,6 @@
 :where(:root) {
   --dance-playhead: var(--neon-yellow, #f7f71c);
-  --dance-trail: rgba(255, 54, 171, 0.7);
+  --dance-trail: color-mix(in srgb, var(--neon-pink) 70%, transparent);
   --dance-glow: var(--neon-pink, #ff36ab);
   --dance-wave: var(--neon-blue, #0ff);
   --dance-bob: 3px;
@@ -65,7 +65,7 @@
 .dance-meter {
   display: block;
   width: 100%;
-  border: 1px solid rgba(0, 255, 255, 0.2);
+  border: 1px solid color-mix(in srgb, var(--neon-blue) 20%, transparent);
   border-radius: 4px;
   background: var(--darker-bg);
   box-sizing: border-box;

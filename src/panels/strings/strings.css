@@ -1,7 +1,7 @@
 :where(:root) {
-  --strings-row-active: rgba(0, 255, 255, 0.14);
-  --strings-row-hover: rgba(0, 255, 255, 0.06);
-  --strings-text: #e4e4e4;
+  --strings-row-active: color-mix(in srgb, var(--neon-blue) 14%, transparent);
+  --strings-row-hover: color-mix(in srgb, var(--neon-blue) 6%, transparent);
+  --strings-text: var(--text);
   --strings-wide: var(--neon-yellow);
 }
 
@@ -16,7 +16,7 @@
 }
 
 .strings-min {
-  color: rgba(228, 228, 228, 0.7);
+  color: color-mix(in srgb, var(--text) 70%, transparent);
   font-size: 0.9em;
   gap: 6px;
 }
@@ -72,7 +72,7 @@
 }
 
 .strings-list {
-  border: 1px solid rgba(0, 255, 255, 0.25);
+  border: 1px solid color-mix(in srgb, var(--neon-blue) 25%, transparent);
   border-radius: 4px;
   height: clamp(240px, 58vh, 640px);
   overflow-x: hidden;
@@ -124,7 +124,7 @@
 }
 
 .strings-enc {
-  border: 1px solid rgba(0, 255, 255, 0.4);
+  border: 1px solid color-mix(in srgb, var(--neon-blue) 40%, transparent);
   border-radius: 3px;
   color: var(--neon-blue);
   flex: none;
@@ -148,7 +148,7 @@
 }
 
 .strings-more {
-  color: rgba(228, 228, 228, 0.5);
+  color: color-mix(in srgb, var(--text) 50%, transparent);
 }
 
 @media (max-width: 480px) {

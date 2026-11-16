@@ -148,7 +148,7 @@
 }
 
 .error {
-  color: var(--neon-pink);
+  color: var(--hd-danger);
   margin-top: 10px;
   text-align: center;
 }

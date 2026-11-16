@@ -1,10 +1,10 @@
 :where(:root) {
-  --search-chip-border: rgba(0, 255, 255, 0.35);
-  --search-chip-on-bg: rgba(0, 255, 255, 0.14);
-  --search-row-hover: rgba(0, 255, 255, 0.08);
-  --search-row-current: rgba(255, 54, 171, 0.16);
-  --search-muted: rgba(228, 228, 228, 0.6);
-  --search-text: #e4e4e4;
+  --search-chip-border: color-mix(in srgb, var(--neon-blue) 35%, transparent);
+  --search-chip-on-bg: color-mix(in srgb, var(--neon-blue) 14%, transparent);
+  --search-row-hover: color-mix(in srgb, var(--neon-blue) 8%, transparent);
+  --search-row-current: color-mix(in srgb, var(--neon-pink) 16%, transparent);
+  --search-muted: color-mix(in srgb, var(--text) 60%, transparent);
+  --search-text: var(--text);
 }
 
 .search {
@@ -71,7 +71,7 @@
 }
 
 .search-hint.is-error {
-  color: var(--neon-pink);
+  color: var(--hd-danger);
 }
 
 .search-options {

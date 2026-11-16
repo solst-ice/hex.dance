@@ -1,9 +1,9 @@
 :where(:root) {
-  --symbols-row-hover: rgba(0, 255, 255, 0.06);
-  --symbols-row-selected: rgba(0, 255, 255, 0.14);
-  --symbols-rule: rgba(0, 255, 255, 0.12);
-  --symbols-text: #e4e4e4;
-  --symbols-tag-bg: rgba(255, 238, 0, 0.08);
+  --symbols-row-hover: color-mix(in srgb, var(--neon-blue) 6%, transparent);
+  --symbols-row-selected: color-mix(in srgb, var(--neon-blue) 14%, transparent);
+  --symbols-rule: color-mix(in srgb, var(--neon-blue) 12%, transparent);
+  --symbols-text: var(--text);
+  --symbols-tag-bg: color-mix(in srgb, var(--neon-yellow) 8%, transparent);
 }
 
 .symbols-panel {
@@ -47,7 +47,7 @@
 }
 
 .symbols-chip.is-active {
-  box-shadow: 0 0 8px rgba(255, 238, 0, 0.35);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--neon-yellow) 35%, transparent);
 }
 
 .symbols-chip-count {
@@ -107,7 +107,7 @@
 }
 
 .symbols-head {
-  border-bottom: 1px solid rgba(0, 255, 255, 0.4);
+  border-bottom: 1px solid color-mix(in srgb, var(--neon-blue) 40%, transparent);
   color: var(--neon-pink);
   min-height: 30px;
 }
@@ -181,7 +181,7 @@
 }
 
 .symbols-row .symbols-col-addr {
-  color: rgba(0, 255, 255, 0.75);
+  color: color-mix(in srgb, var(--neon-blue) 75%, transparent);
   font-variant-numeric: tabular-nums;
 }
 
@@ -192,7 +192,7 @@
 
 .symbols-tag {
   background: var(--symbols-tag-bg);
-  border: 1px solid rgba(255, 238, 0, 0.5);
+  border: 1px solid color-mix(in srgb, var(--neon-yellow) 50%, transparent);
   border-radius: 4px;
   color: var(--neon-yellow);
   font-size: 0.8em;

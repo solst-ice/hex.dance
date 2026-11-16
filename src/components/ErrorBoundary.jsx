@@ -27,10 +27,10 @@ class ErrorBoundary extends Component {
     if (error) {
       return (
         <div className="container">
-          <div className="description" role="alert" style={{ borderColor: 'var(--neon-pink)' }}>
+          <div className="description" role="alert" style={{ borderColor: 'var(--hd-danger)' }}>
             <h1>SOMETHING BROKE</h1>
             <p>hex.dance hit an error and could not show this page:</p>
-            <pre style={{ color: 'var(--neon-pink)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+            <pre style={{ color: 'var(--hd-danger)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
               {String(error?.message || error)}
             </pre>
             <p style={{ textAlign: 'center' }}>

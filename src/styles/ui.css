@@ -17,7 +17,7 @@
  *   .hd-badge                 small inline label; .hd-badge--pink, .hd-badge--yellow
  *   .hd-muted                 secondary text
  *   .hd-mono                  monospace text that keeps its spacing
- *   .hd-warning               warning text (pink)
+ *   .hd-warning               error and warning text (--hd-danger)
  *   .hd-stack                 vertical flow with even spacing
  *   .hd-row                   horizontal flow, wraps, items centred
  *   .hd-empty                 centred placeholder ("Analyzing…", "Nothing found")
@@ -292,7 +292,7 @@
 }
 
 .hd-warning {
-  color: var(--neon-pink);
+  color: var(--hd-danger);
 }
 
 .hd-stack {
