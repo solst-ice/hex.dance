@@ -1,5 +1,3 @@
-import React from 'react'
-
 function FileMetadata({ file, buffer, fileType }) {
   if (!file || !buffer) return null
 
@@ -11,15 +9,17 @@ function FileMetadata({ file, buffer, fileType }) {
     return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`
   }
 
+  // Up to the first 4 bytes, big-endian; shorter files show only what they have
   const getMagicNumber = () => {
-    const view = new DataView(buffer)
-    const magic = view.getUint32(0, false)
-    return `0x${magic.toString(16).padStart(8, '0').toUpperCase()}`
+    const bytes = new Uint8Array(buffer, 0, Math.min(4, buffer.byteLength))
+    if (bytes.length === 0) return 'None (empty file)'
+    const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('')
+    return `0x${hex.toUpperCase()}`
   }
 
   const getFileTypeInfo = () => {
     switch (fileType) {
-      case 'macho':
+      case 'macho': {
         const magic = getMagicNumber()
         const magicDescriptions = {
           '0xFEEDFACE': '32-bit Mach-O',
@@ -30,6 +30,7 @@ function FileMetadata({ file, buffer, fileType }) {
           '0xBEBAFECA': 'Universal Binary (reversed)'
         }
         return magicDescriptions[magic] || 'Unknown Mach-O format'
+      }
       case 'png':
         return 'PNG Image'
       case 'jpeg':

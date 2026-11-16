@@ -1,11 +1,72 @@
-import React, { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
+
+const BYTES_PER_ROW = 16
+const DEFAULT_ROWS = 16
+const ROW_HEIGHT = 24 // Approximate height of each row in pixels
+
+// Offset of the first row of the last full page; 0 when the file fits on one page
+const lastPageOffset = (byteLength, rowsToDisplay) => {
+  const totalRows = Math.ceil(byteLength / BYTES_PER_ROW)
+  return Math.max(0, totalRows - Math.max(1, rowsToDisplay)) * BYTES_PER_ROW
+}
+
+// Every offset change goes through here so it stays row-aligned and in range
+const clampOffset = (value, byteLength, rowsToDisplay) => {
+  if (!Number.isFinite(value)) return 0
+  const aligned = Math.floor(value / BYTES_PER_ROW) * BYTES_PER_ROW
+  return Math.min(Math.max(0, aligned), lastPageOffset(byteLength, rowsToDisplay))
+}
+
+const isZeroRow = (view, startOffset) => {
+  if (startOffset < 0 || startOffset >= view.byteLength) return false
+  for (let i = 0; i < BYTES_PER_ROW; i++) {
+    if (startOffset + i >= view.byteLength) break
+    if (view.getUint8(startOffset + i) !== 0) return false
+  }
+  return true
+}
+
+const findZeroSequenceEnd = (view, startOffset) => {
+  let currentOffset = startOffset
+  while (currentOffset < view.byteLength && isZeroRow(view, currentOffset)) {
+    currentOffset += BYTES_PER_ROW
+  }
+  return currentOffset - BYTES_PER_ROW
+}
+
+const findNextOffset = (view, startOffset, direction = 1) => {
+  let currentOffset = startOffset
+
+  while (currentOffset >= 0 && currentOffset < view.byteLength) {
+    if (isZeroRow(view, currentOffset)) {
+      // If moving forward, skip to end of zero sequence
+      if (direction > 0) {
+        currentOffset = findZeroSequenceEnd(view, currentOffset) + BYTES_PER_ROW
+      } else {
+        // If moving backward and we're not at start of sequence,
+        // find start of sequence
+        let temp = currentOffset - BYTES_PER_ROW
+        while (temp >= 0 && isZeroRow(view, temp)) {
+          currentOffset = temp
+          temp -= BYTES_PER_ROW
+        }
+        if (!isZeroRow(view, temp)) {
+          return currentOffset
+        }
+        currentOffset += direction * BYTES_PER_ROW
+      }
+    } else {
+      return currentOffset
+    }
+  }
+  return direction > 0 ? view.byteLength : 0
+}
 
 function HexDump({ buffer, fileName }) {
   const [offset, setOffset] = useState(0)
   const [hoveredByte, setHoveredByte] = useState(null)
   const containerRef = useRef(null)
-  const BYTES_PER_ROW = 16
-  const [rowsToDisplay, setRowsToDisplay] = useState(16)
+  const [rowsToDisplay, setRowsToDisplay] = useState(DEFAULT_ROWS)
   const [isDragging, setIsDragging] = useState(false)
   const [dragStartY, setDragStartY] = useState(0)
   const scrollRef = useRef(null)
@@ -15,15 +76,110 @@ function HexDump({ buffer, fileName }) {
   const [showDownload, setShowDownload] = useState(false)
   const hexInputRefs = useRef({})
   const [isFullscreen, setIsFullscreen] = useState(false)
-  
-  if (!buffer) return null
-  const view = new DataView(buffer)
+
+  const view = useMemo(() => (buffer ? new DataView(buffer) : null), [buffer])
+  const byteLength = view ? view.byteLength : 0
 
   useEffect(() => {
+    if (!buffer) return
     setModifiedBuffer(new Uint8Array(buffer))
     setHasModifications(false)
     setShowDownload(false)
+    setOffset(0)
   }, [buffer])
+
+  // Page size changes (fullscreen, resize) can move the last valid row start
+  useEffect(() => {
+    setOffset(prev => clampOffset(prev, byteLength, rowsToDisplay))
+  }, [byteLength, rowsToDisplay])
+
+  useEffect(() => {
+    if (!view) return
+
+    const handleKeyDown = (e) => {
+      let move
+      switch (e.key) {
+        case 'ArrowDown':
+          move = prev => findNextOffset(view, prev + BYTES_PER_ROW)
+          break
+        case 'ArrowUp':
+          move = prev => findNextOffset(view, prev - BYTES_PER_ROW, -1)
+          break
+        case 'PageDown':
+          move = prev => findNextOffset(view, prev + BYTES_PER_ROW * rowsToDisplay)
+          break
+        case 'PageUp':
+          move = prev => findNextOffset(view, prev - BYTES_PER_ROW * rowsToDisplay, -1)
+          break
+        default:
+          return
+      }
+      setOffset(prev => clampOffset(move(prev), view.byteLength, rowsToDisplay))
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [view, rowsToDisplay])
+
+  useEffect(() => {
+    const element = containerRef.current
+    if (!element || !view) return
+
+    const handleWheel = (e) => {
+      e.preventDefault()
+      if (e.deltaY !== 0) {
+        const direction = Math.sign(e.deltaY)
+        setOffset(prev => clampOffset(
+          findNextOffset(view, prev + direction * BYTES_PER_ROW, direction),
+          view.byteLength,
+          rowsToDisplay
+        ))
+      }
+    }
+
+    element.addEventListener('wheel', handleWheel, { passive: false })
+    return () => element.removeEventListener('wheel', handleWheel)
+  }, [view, rowsToDisplay])
+
+  // Add event listeners for drag; the ref always holds the latest move handler
+  const dragMoveRef = useRef(null)
+  useEffect(() => {
+    if (!isDragging) return
+    const handleMouseMove = (e) => dragMoveRef.current?.(e)
+    const handleMouseUp = () => setIsDragging(false)
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [isDragging])
+
+  // Rows per page: fixed in the normal view, derived from the view's height in
+  // fullscreen. Entering fullscreen animates that height, so it is observed
+  // rather than sampled once partway through the transition.
+  const hasBuffer = buffer != null
+  useEffect(() => {
+    const element = containerRef.current
+    if (!isFullscreen || !element) {
+      setRowsToDisplay(DEFAULT_ROWS)
+      return
+    }
+
+    const updateVisibleRows = () => {
+      setRowsToDisplay(Math.max(1, Math.floor(element.clientHeight / ROW_HEIGHT)))
+    }
+
+    updateVisibleRows()
+    const observer = new ResizeObserver(updateVisibleRows)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [isFullscreen, hasBuffer])
+
+  if (!buffer) return null
+
+  const isEmpty = byteLength === 0
+  const displayOffset = clampOffset(offset, byteLength, rowsToDisplay)
 
   const toggleEditMode = () => {
     if (editMode) {
@@ -80,116 +236,13 @@ function HexDump({ buffer, fileName }) {
     URL.revokeObjectURL(url)
   }
 
-  const isZeroRow = (startOffset) => {
-    if (startOffset >= buffer.byteLength) return false
-    for (let i = 0; i < BYTES_PER_ROW; i++) {
-      if (startOffset + i >= buffer.byteLength) break
-      if (view.getUint8(startOffset + i) !== 0) return false
-    }
-    return true
-  }
-
-  const findNextOffset = (startOffset, direction = 1) => {
-    let currentOffset = startOffset
-    
-    while (currentOffset >= 0 && currentOffset < buffer.byteLength) {
-      if (isZeroRow(currentOffset)) {
-        // If moving forward, skip to end of zero sequence
-        if (direction > 0) {
-          currentOffset = findZeroSequenceEnd(currentOffset) + BYTES_PER_ROW
-        } else {
-          // If moving backward and we're not at start of sequence,
-          // find start of sequence
-          let temp = currentOffset - BYTES_PER_ROW
-          while (temp >= 0 && isZeroRow(temp)) {
-            currentOffset = temp
-            temp -= BYTES_PER_ROW
-          }
-          if (!isZeroRow(temp)) {
-            return currentOffset
-          }
-          currentOffset += direction * BYTES_PER_ROW
-        }
-      } else {
-        return currentOffset
-      }
-    }
-    return direction > 0 ? buffer.byteLength : 0
-  }
-
-  const findZeroSequenceEnd = (startOffset) => {
-    let currentOffset = startOffset
-    while (currentOffset < buffer.byteLength && isZeroRow(currentOffset)) {
-      currentOffset += BYTES_PER_ROW
-    }
-    return currentOffset - BYTES_PER_ROW
-  }
-
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      switch(e.key) {
-        case 'ArrowDown':
-          setOffset(prev => {
-            const next = findNextOffset(prev + BYTES_PER_ROW)
-            return Math.min(next, buffer.byteLength - BYTES_PER_ROW * rowsToDisplay)
-          })
-          break
-        case 'ArrowUp':
-          setOffset(prev => {
-            const next = findNextOffset(prev - BYTES_PER_ROW, -1)
-            return Math.max(0, next)
-          })
-          break
-        case 'PageDown':
-          setOffset(prev => {
-            const next = findNextOffset(prev + BYTES_PER_ROW * rowsToDisplay)
-            return Math.min(next, buffer.byteLength - BYTES_PER_ROW * rowsToDisplay)
-          })
-          break
-        case 'PageUp':
-          setOffset(prev => {
-            const next = findNextOffset(prev - BYTES_PER_ROW * rowsToDisplay, -1)
-            return Math.max(0, next)
-          })
-          break
-        default:
-          break
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [buffer])
-
-  useEffect(() => {
-    const element = containerRef.current
-    if (!element) return
-
-    const handleWheel = (e) => {
-      e.preventDefault()
-      if (e.deltaY !== 0) {
-        const direction = Math.sign(e.deltaY)
-        setOffset(prev => {
-          const next = findNextOffset(prev + direction * BYTES_PER_ROW, direction)
-          return Math.max(0, Math.min(
-            next,
-            buffer.byteLength - BYTES_PER_ROW * rowsToDisplay
-          ))
-        })
-      }
-    }
-
-    element.addEventListener('wheel', handleWheel, { passive: false })
-    return () => element.removeEventListener('wheel', handleWheel)
-  }, [buffer])
-
   const rows = []
-  let currentOffset = offset
+  let currentOffset = displayOffset
 
-  while (rows.length < rowsToDisplay && currentOffset < buffer.byteLength) {
-    if (isZeroRow(currentOffset)) {
+  while (rows.length < rowsToDisplay && currentOffset < byteLength) {
+    if (isZeroRow(view, currentOffset)) {
       // Found start of zero sequence
-      const sequenceEnd = findZeroSequenceEnd(currentOffset)
+      const sequenceEnd = findZeroSequenceEnd(view, currentOffset)
       
       // Add first row of sequence
       rows.push(renderRow(currentOffset))
@@ -226,7 +279,7 @@ function HexDump({ buffer, fileName }) {
 
     for (let i = 0; i < BYTES_PER_ROW; i++) {
       const byteOffset = rowOffset + i
-      if (byteOffset >= buffer.byteLength) break
+      if (byteOffset >= byteLength) break
 
       // Always use modifiedBuffer if it exists, with fallback for undefined values
       const byte = modifiedBuffer ? modifiedBuffer[byteOffset] : view.getUint8(byteOffset)
@@ -269,7 +322,7 @@ function HexDump({ buffer, fileName }) {
   }
 
   const handleSkipToBottom = () => {
-    setOffset(Math.max(0, buffer.byteLength - BYTES_PER_ROW * rowsToDisplay))
+    setOffset(lastPageOffset(byteLength, rowsToDisplay))
   }
 
   // Count actual displayed rows (excluding skipped zero rows)
@@ -277,10 +330,10 @@ function HexDump({ buffer, fileName }) {
     let count = 0
     let currentOffset = 0
 
-    while (currentOffset < buffer.byteLength) {
-      if (isZeroRow(currentOffset)) {
+    while (currentOffset < byteLength) {
+      if (isZeroRow(view, currentOffset)) {
         // Found start of zero sequence
-        const sequenceEnd = findZeroSequenceEnd(currentOffset)
+        const sequenceEnd = findZeroSequenceEnd(view, currentOffset)
         
         // Count only first and last row of zero sequence
         if (sequenceEnd > currentOffset) {
@@ -303,9 +356,9 @@ function HexDump({ buffer, fileName }) {
     let count = 0
     let currentOffset = 0
 
-    while (currentOffset < targetOffset && currentOffset < buffer.byteLength) {
-      if (isZeroRow(currentOffset)) {
-        const sequenceEnd = findZeroSequenceEnd(currentOffset)
+    while (currentOffset < targetOffset && currentOffset < byteLength) {
+      if (isZeroRow(view, currentOffset)) {
+        const sequenceEnd = findZeroSequenceEnd(view, currentOffset)
         if (sequenceEnd > currentOffset) {
           if (targetOffset > sequenceEnd) {
             count += 2 // Count first and last row of sequence
@@ -327,13 +380,15 @@ function HexDump({ buffer, fileName }) {
 
   // Calculate scroll progress based on actual displayed rows
   const totalDisplayableRows = countDisplayableRows()
-  const currentDisplayedRow = findDisplayedRowNumber(offset)
+  const currentDisplayedRow = findDisplayedRowNumber(displayOffset)
   const maxScroll = editMode ? 95 : 98  // Higher limit when not in edit mode
   const scrollProgress = Math.min(
     (currentDisplayedRow / Math.max(totalDisplayableRows - rowsToDisplay, 1)) * 100,
     maxScroll  // Use conditional max scroll value
   )
-  const visiblePercentage = Math.min((rowsToDisplay / totalDisplayableRows) * 100, 100)
+  const visiblePercentage = totalDisplayableRows > 0
+    ? Math.min((rowsToDisplay / totalDisplayableRows) * 100, 100)
+    : 100
 
   // Add drag handlers
   const handleScrollMouseDown = (e) => {
@@ -358,9 +413,9 @@ function HexDump({ buffer, fileName }) {
     let currentOffset = 0
     let rowCount = 0
     
-    while (rowCount < newRow && currentOffset < buffer.byteLength) {
-      if (isZeroRow(currentOffset)) {
-        const sequenceEnd = findZeroSequenceEnd(currentOffset)
+    while (rowCount < newRow && currentOffset < byteLength) {
+      if (isZeroRow(view, currentOffset)) {
+        const sequenceEnd = findZeroSequenceEnd(view, currentOffset)
         if (sequenceEnd > currentOffset) {
           rowCount += 2
           currentOffset = sequenceEnd + BYTES_PER_ROW
@@ -374,52 +429,10 @@ function HexDump({ buffer, fileName }) {
       }
     }
 
-    setOffset(currentOffset)
+    setOffset(clampOffset(currentOffset, byteLength, rowsToDisplay))
     setDragStartY(e.clientY)
   }
-
-  const handleScrollMouseUp = () => {
-    setIsDragging(false)
-  }
-
-  // Add event listeners for drag
-  useEffect(() => {
-    if (isDragging) {
-      window.addEventListener('mousemove', handleScrollMouseMove)
-      window.addEventListener('mouseup', handleScrollMouseUp)
-    }
-    return () => {
-      window.removeEventListener('mousemove', handleScrollMouseMove)
-      window.removeEventListener('mouseup', handleScrollMouseUp)
-    }
-  }, [isDragging, dragStartY])
-
-  // Calculate visible rows based on container height
-  useEffect(() => {
-    const updateVisibleRows = () => {
-      if (!containerRef.current) return
-      const containerHeight = containerRef.current.clientHeight
-      const rowHeight = 24 // Approximate height of each row in pixels
-      const newRowCount = Math.floor(containerHeight / rowHeight)
-      setRowsToDisplay(isFullscreen ? newRowCount : 16)
-    }
-
-    updateVisibleRows()
-    window.addEventListener('resize', updateVisibleRows)
-    return () => window.removeEventListener('resize', updateVisibleRows)
-  }, [isFullscreen])
-
-  // Update rows when toggling fullscreen
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      const containerHeight = containerRef.current?.clientHeight || 0
-      const rowHeight = 24 // Approximate height of each row in pixels
-      const newRowCount = Math.floor(containerHeight / rowHeight)
-      setRowsToDisplay(isFullscreen ? newRowCount : 16)
-    }, 100) // Small delay to allow transition to complete
-
-    return () => clearTimeout(timer)
-  }, [isFullscreen])
+  dragMoveRef.current = handleScrollMouseMove
 
   return (
     <div className={`hex-dump-container ${editMode ? 'edit-mode' : ''} ${isFullscreen ? 'fullscreen' : ''}`}>
@@ -434,12 +447,14 @@ function HexDump({ buffer, fileName }) {
           >
             <span>{isFullscreen ? '⊠' : '⛶'}</span>
           </button>
-          <button 
-            className={`edit-button ${editMode ? 'active' : ''}`}
-            onClick={toggleEditMode}
-          >
-            {editMode ? 'SAVE' : 'EDIT'}
-          </button>
+          {(!isEmpty || editMode) && (
+            <button 
+              className={`edit-button ${editMode ? 'active' : ''}`}
+              onClick={toggleEditMode}
+            >
+              {editMode ? 'SAVE' : 'EDIT'}
+            </button>
+          )}
           {showDownload && (
             <button 
               className="download-button" 
@@ -451,37 +466,45 @@ function HexDump({ buffer, fileName }) {
         </div>
       </div>
       <div className="hex-dump-wrapper">
-        <button 
-          onClick={handleSkipToTop} 
-          className="nav-arrow top"
-          title="Jump to top"
-        >
-          ▲
-        </button>
-        <button 
-          onClick={handleSkipToBottom} 
-          className="nav-arrow bottom"
-          title="Jump to bottom"
-        >
-          ▼
-        </button>
-        <div className="scroll-indicator" ref={scrollRef}>
-          <div 
-            className="scroll-thumb" 
-            style={{ 
-              height: `${visiblePercentage}%`,
-              top: `${Math.min(scrollProgress, maxScroll)}%`,
-              transform: `translateY(-${Math.min(scrollProgress, maxScroll)}%)`
-            }}
-            onMouseDown={handleScrollMouseDown}
-          />
-        </div>
+        {!isEmpty && (
+          <>
+            <button 
+              onClick={handleSkipToTop} 
+              className="nav-arrow top"
+              title="Jump to top"
+            >
+              ▲
+            </button>
+            <button 
+              onClick={handleSkipToBottom} 
+              className="nav-arrow bottom"
+              title="Jump to bottom"
+            >
+              ▼
+            </button>
+            <div className="scroll-indicator" ref={scrollRef}>
+              <div 
+                className="scroll-thumb" 
+                style={{ 
+                  height: `${visiblePercentage}%`,
+                  top: `${Math.min(scrollProgress, maxScroll)}%`,
+                  transform: `translateY(-${Math.min(scrollProgress, maxScroll)}%)`
+                }}
+                onMouseDown={handleScrollMouseDown}
+              />
+            </div>
+          </>
+        )}
         <div 
           className="hex-dump" 
           ref={containerRef}
           tabIndex={0}
         >
-          {rows}
+          {isEmpty ? (
+            <p className="hex-dump-empty" style={{ color: 'var(--neon-blue)', opacity: 0.7, margin: '10px 0' }}>
+              This file is empty (0 bytes), so there is nothing to show.
+            </p>
+          ) : rows}
         </div>
       </div>
     </div>
