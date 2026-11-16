@@ -1,10 +1,9 @@
 /* eslint-disable react/prop-types -- the project does not use prop-types */
 import { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
-import { useFile, useSelection, useWorkspace } from '../../state/hooks.js'
+import { useFile, useHexCursor, useSelection, useWorkspace } from '../../state/hooks.js'
 import { requestSearch } from '../search/request.js'
 import { inspect } from './decode.js'
 import { toHex } from './copyAs.js'
-import { useHexCursor } from './useHexCursor.js'
 import { usePersistentState } from './usePersistentState.js'
 import CopyMenu from './CopyMenu.jsx'
 import './inspector.css'
@@ -81,7 +80,7 @@ const Cell = memo(function Cell({ entry, onSelect }) {
 function Inspector() {
   const { file, bytes, revision } = useFile()
   const { selection, jumpTo } = useSelection()
-  const cursor = useHexCursor(bytes)
+  const cursor = useHexCursor()
   const gridId = useId()
   const [littleEndian, setLittleEndian] = usePersistentState('hexdance.inspector.littleEndian', true)
   const [collapsed, setCollapsed] = usePersistentState('hexdance.inspector.collapsed',

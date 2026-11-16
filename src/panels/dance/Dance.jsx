@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useFile, useHighlightLayer, useSelection } from '../../state/hooks.js'
+import { useFile, useHexViewReader, useHighlightLayer, useSelection } from '../../state/hooks.js'
 import { formatOffset } from '../../components/hex/bytes.js'
 import { cssColor, fitCanvas, rgbString } from '../visualize/colors.js'
 import BytePlayer from './player.js'
@@ -11,11 +11,6 @@ const UPDATE_MS = 33
 const ROOT_CLASS = 'hd-dancing'
 const ROOT_PROPERTIES = ['--dance-level', '--dance-phase']
 const METER_HEIGHT = 64
-
-function hexCursor() {
-  const value = Number(document.querySelector('section.hexview')?.dataset.cursor)
-  return Number.isFinite(value) ? value : 0
-}
 
 function seconds(n) {
   if (!Number.isFinite(n)) return '0.0 s'
@@ -69,6 +64,7 @@ function clearRoot() {
 function Dance() {
   const { bytes } = useFile()
   const { selection, hexApiRef } = useSelection()
+  const hexView = useHexViewReader()
   const [status, setStatus] = useState('stopped')
   const [rate, setRate] = useState(DEFAULT_RATE)
   const [volume, setVolume] = useState(DEFAULT_VOLUME)
@@ -126,7 +122,7 @@ function Dance() {
       player.resume().then(() => setStatus('playing'), err => setMessage(`Could not resume audio: ${err.message || err}`))
       return
     }
-    const next = playRange(selection, hexCursor(), bytes.length)
+    const next = playRange(selection, hexView.getCursor() ?? 0, bytes.length)
     if (!next) return
     setRange(next)
     setMessage(null)
@@ -201,13 +197,11 @@ function Dance() {
           const from = lastPosition !== null && lastPosition <= position ? lastPosition : position
           setPlayhead({ from: Math.max(current?.start ?? 0, from), position })
           if (following) {
-            const view = document.querySelector('section.hexview')?.dataset
-            const perRow = Number(view?.bytesPerRow)
-            const top = Number(view?.topRow)
-            const rows = Number(view?.visibleRows)
-            if (perRow > 0 && Number.isFinite(top) && Number.isFinite(rows)) {
-              const row = Math.floor(position / perRow)
-              if (row < top || row > top + rows - 3) hexApiRef.current?.scrollToOffset?.(position)
+            const view = hexView.getViewport()
+            if (view) {
+              const top = view.start / view.bytesPerRow
+              const row = Math.floor(position / view.bytesPerRow)
+              if (row < top || row > top + view.visibleRows - 3) hexApiRef.current?.scrollToOffset?.(position)
             }
           }
         }
@@ -221,7 +215,7 @@ function Dance() {
       cancelAnimationFrame(raf)
       drawMeter(meter, null, 0, colors)
     }
-  }, [status, hexApiRef])
+  }, [status, hexApiRef, hexView])
 
   useEffect(() => {
     if (status === 'stopped') clearRoot()

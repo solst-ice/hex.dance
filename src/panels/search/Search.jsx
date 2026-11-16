@@ -1,6 +1,6 @@
 /* eslint-disable react/prop-types -- the project does not use prop-types */
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
-import { useFile, useHighlightLayer, useSelection } from '../../state/hooks.js'
+import { useFile, useHexViewReader, useHighlightLayer, useSelection } from '../../state/hooks.js'
 import { parseQuery, describePattern } from './pattern.js'
 import { DEFAULT_CAP, startSearch, stepMatch } from './scanner.js'
 import { subscribeSearchRequests, takeSearchRequest } from './request.js'
@@ -27,11 +27,6 @@ function queryKey(mode, query, options) {
     ? [options.utf8, options.utf16, options.ignoreCase]
     : mode === 'number' ? [options.widths.join(','), options.little, options.big] : []
   return JSON.stringify([mode, query, relevant])
-}
-
-function cursorOffset() {
-  const value = Number(document.querySelector('section.hexview')?.getAttribute('data-cursor'))
-  return Number.isFinite(value) ? value : 0
 }
 
 // Renders nothing; keeps the latest selection in a ref so the panel itself
@@ -65,6 +60,7 @@ function Search() {
   const hintId = useId()
   const inputRef = useRef(null)
   const bridge = useRef(null)
+  const hexView = useHexViewReader()
   const searchRef = useRef(null)
 
   const [mode, setMode] = useState(memory.mode)
@@ -137,7 +133,7 @@ function Search() {
   const step = useCallback((direction) => {
     if (!shown || !shown.count) return
     const { selection, jumpTo } = bridge.current
-    const position = selection ? selection.start : cursorOffset()
+    const position = selection ? selection.start : (hexView.getCursor() ?? 0)
     const { offsets } = shown.list
     const index = stepMatch(offsets, shown.count, position, direction)
     const wrapped = direction > 0 ? offsets[index] <= position : offsets[index] >= position
@@ -150,7 +146,7 @@ function Search() {
     jumpTo(offsets[index], length)
     setCurrent(index)
     setScrollKey(k => k + 1)
-  }, [shown])
+  }, [shown, hexView])
 
   const pick = useCallback((index) => {
     if (!shown) return

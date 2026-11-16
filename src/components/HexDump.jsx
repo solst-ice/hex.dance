@@ -70,8 +70,17 @@ async function writeClipboard(text) {
   }
 }
 
-// UI modes live out here so they survive switching files; everything tied to
-// a file lives in HexView, which is remounted for each new buffer.
+/**
+ * Hex view and editor. Only `buffer` is required; the rest is optional:
+ * `fileName`, `selection` + `onSelectionChange` (controlled selection),
+ * `highlights`, `onEdit`, `apiRef` (receives `{ scrollToOffset }`), and
+ * `onCursorChange(offset|null)` and `onViewportChange({ start, end, bytesPerRow, visibleRows }|null)`,
+ * which report the cursor and the bytes on screen (`end` exclusive, at most
+ * the size) whenever they change, and null when the view goes away.
+ *
+ * UI modes live out here so they survive switching files; everything tied to
+ * a file lives in HexView, which is remounted for each new buffer.
+ */
 function HexDump(props) {
   const { buffer } = props
   const [fullscreen, setFullscreen] = useState(false)
@@ -106,7 +115,7 @@ function HexDump(props) {
 }
 
 function HexView({
-  buffer, fileName, selection, onSelectionChange, highlights, onEdit, apiRef,
+  buffer, fileName, selection, onSelectionChange, highlights, onEdit, apiRef, onCursorChange, onViewportChange,
   fullscreen, setFullscreen, editMode, setEditMode
 }) {
   const bytes = useMemo(() => toBytes(buffer), [buffer])
@@ -150,7 +159,7 @@ function HexView({
     editMode, fullscreen, controlled
   }
   const callbacks = useRef(null)
-  callbacks.current = { onSelectionChange, onEdit }
+  callbacks.current = { onSelectionChange, onEdit, onCursorChange, onViewportChange }
 
   const timers = useRef({})
   const momentum = useRef({})
@@ -243,6 +252,21 @@ function HexView({
     clearTimeout(timers.current.flash)
     timers.current.flash = setTimeout(() => setFlash(null), FLASH_MS)
   }, [scrollToRow])
+
+  // ---- reporting the cursor and the visible range to the host --------------
+
+  const viewStart = top * bytesPerRow
+  const viewEnd = Math.min(size, viewStart + visibleRows * bytesPerRow)
+  useLayoutEffect(() => {
+    callbacks.current.onCursorChange?.(cur)
+  }, [cur])
+  useLayoutEffect(() => {
+    callbacks.current.onViewportChange?.({ start: viewStart, end: viewEnd, bytesPerRow, visibleRows })
+  }, [viewStart, viewEnd, bytesPerRow, visibleRows])
+  useLayoutEffect(() => () => {
+    callbacks.current.onCursorChange?.(null)
+    callbacks.current.onViewportChange?.(null)
+  }, [])
 
   useLayoutEffect(() => {
     if (!apiRef) return

@@ -1,6 +1,6 @@
 /* eslint-disable react/prop-types -- the project does not use prop-types */
 import { useState } from 'react'
-import { useFile } from '../../state/hooks.js'
+import { useFile, useHexViewport } from '../../state/hooks.js'
 import { formatBytes } from '../../formats/shared.js'
 import ByteMap from './ByteMap.jsx'
 import Digraph from './Digraph.jsx'
@@ -9,7 +9,6 @@ import MagicFinds from './MagicFinds.jsx'
 import { byteClassColors } from './colors.js'
 import { SAMPLE_BLOCK_BYTES } from './stats.js'
 import useFilePass from './useFilePass.js'
-import useHexViewport from './useHexViewport.js'
 import './visualize.css'
 
 const VIEWS = [

@@ -1,6 +1,7 @@
 /* eslint-disable react/prop-types -- the project does not use prop-types */
 import { useCallback, useMemo, useRef, useState } from 'react'
-import { SelectionContext } from './contexts.js'
+import { HexViewContext, SelectionContext } from './contexts.js'
+import { createHexViewStore } from './hexViewStore.js'
 import { useFile } from './hooks.js'
 
 const NO_HIGHLIGHTS = []
@@ -9,6 +10,7 @@ export default function SelectionProvider({ children }) {
   const { file } = useFile()
   const [state, setState] = useState({ file, selection: null, highlights: NO_HIGHLIGHTS })
   const hexApiRef = useRef(null)
+  const [hexView] = useState(createHexViewStore)
 
   // A new file starts with nothing selected or highlighted
   if (state.file !== file) setState({ file, selection: null, highlights: NO_HIGHLIGHTS })
@@ -43,5 +45,9 @@ export default function SelectionProvider({ children }) {
     hexApiRef
   }), [current.selection, current.highlights, setSelection, setHighlights, jumpTo])
 
-  return <SelectionContext.Provider value={value}>{children}</SelectionContext.Provider>
+  return (
+    <SelectionContext.Provider value={value}>
+      <HexViewContext.Provider value={hexView}>{children}</HexViewContext.Provider>
+    </SelectionContext.Provider>
+  )
 }

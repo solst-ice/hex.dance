@@ -1,9 +1,8 @@
 /* eslint-disable react/prop-types -- the project does not use prop-types */
 import { memo, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { useFile, useHighlightLayer, useSelection } from '../../state/hooks.js'
+import { useFile, useHexViewport, useHighlightLayer, useSelection } from '../../state/hooks.js'
 import { FIELD_KIND_ORDER, fieldKind, fieldKindColor, fieldKindLabel, regionKind, regionKindLabel } from '../structure/kinds.js'
 import { buildTreeIndex, collectLeaves, formatLength, formatOffset, leavesIn } from '../structure/treeModel.js'
-import { useHexWindow } from '../structure/useHexView.js'
 import { buildSegments, layoutSegments, offsetToX, regionsOf } from './layout.js'
 import '../structure/kinds.css'
 import './anatomy.css'
@@ -49,9 +48,9 @@ function SelectionMarker({ laid }) {
 // Tints leaf fields near the visible rows of the hex view, by kind
 function FieldColours({ fields }) {
   const leaves = useMemo(() => collectLeaves(buildTreeIndex(fields)), [fields])
-  const view = useHexWindow()
+  const view = useHexViewport()
   const from = view ? Math.max(0, Math.floor(view.start / BLOCK) * BLOCK - 2 * BLOCK) : 0
-  const to = view ? Math.ceil(view.end / BLOCK) * BLOCK + 2 * BLOCK : 4 * BLOCK
+  const to = view ? Math.ceil((view.start + view.visibleRows * view.bytesPerRow) / BLOCK) * BLOCK + 2 * BLOCK : 4 * BLOCK
   const ranges = useMemo(() => leavesIn(leaves, from, to, MAX_COLOURED).map((leaf, i) => ({
     start: leaf.start,
     end: leaf.end,

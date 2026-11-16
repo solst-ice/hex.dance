@@ -1,12 +1,11 @@
 /* eslint-disable react/prop-types -- the project does not use prop-types */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useFile, useHighlightLayer, useSelection } from '../../state/hooks.js'
+import { useFile, useHexCursor, useHighlightLayer, useSelection } from '../../state/hooks.js'
 import { formatCardFor } from '../../education/index.js'
 import FieldTree from './FieldTree.jsx'
 import FormatCard from './FormatCard.jsx'
 import { fieldKind, fieldKindLabel, fieldKindMeaning } from './kinds.js'
 import { ancestors, buildTreeIndex, formatLength, formatOffset, locate, tourSteps, visibleRows } from './treeModel.js'
-import { useHexCursor } from './useHexView.js'
 import './kinds.css'
 import './structure.css'
 
