@@ -1,0 +1,121 @@
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
+import { EditLog } from './editLog.js'
+
+const bytesOf = (...v) => new Uint8Array(v)
+
+test('writes change the buffer in place and count modified bytes', () => {
+  const bytes = bytesOf(1, 2, 3, 4)
+  const log = new EditLog()
+  assert.ok(log.write(bytes, 1, 0xaa))
+  assert.ok(log.write(bytes, 3, 0xbb))
+  assert.deepEqual([...bytes], [1, 0xaa, 3, 0xbb])
+  assert.equal(log.modifiedCount, 2)
+  assert.ok(log.isModified(1))
+  assert.ok(!log.isModified(0))
+})
+
+test('writing the same value is not a step; writing the original back unmarks it', () => {
+  const bytes = bytesOf(1, 2)
+  const log = new EditLog()
+  assert.ok(!log.write(bytes, 0, 1))
+  assert.ok(!log.canUndo)
+  log.write(bytes, 0, 9)
+  log.write(bytes, 0, 1)
+  assert.equal(log.modifiedCount, 0)
+  assert.equal(log.undoStack.length, 2)
+})
+
+test('undo and redo walk the log', () => {
+  const bytes = bytesOf(0, 0, 0)
+  const log = new EditLog()
+  log.write(bytes, 0, 1)
+  log.write(bytes, 1, 2)
+  assert.deepEqual(log.undo(bytes), { start: 1, end: 2, count: 1 })
+  assert.deepEqual([...bytes], [1, 0, 0])
+  log.undo(bytes)
+  assert.deepEqual([...bytes], [0, 0, 0])
+  assert.equal(log.undo(bytes), null)
+  assert.equal(log.modifiedCount, 0)
+  log.redo(bytes)
+  log.redo(bytes)
+  assert.deepEqual([...bytes], [1, 2, 0])
+  assert.equal(log.redo(bytes), null)
+  assert.equal(log.modifiedCount, 2)
+})
+
+test('a new write clears the redo stack', () => {
+  const bytes = bytesOf(0, 0)
+  const log = new EditLog()
+  log.write(bytes, 0, 1)
+  log.undo(bytes)
+  log.write(bytes, 1, 5)
+  assert.ok(!log.canRedo)
+})
+
+test('writes in the same group fold into one step', () => {
+  const bytes = bytesOf(0x41, 0)
+  const log = new EditLog()
+  log.write(bytes, 0, 0xf1, { group: 'g1' })
+  log.write(bytes, 0, 0xfe, { group: 'g1' })
+  assert.equal(log.undoStack.length, 1)
+  log.write(bytes, 0, 0x12, { group: 'g2' })
+  assert.equal(log.undoStack.length, 2)
+  log.undo(bytes)
+  assert.equal(bytes[0], 0xfe)
+  log.undo(bytes)
+  assert.equal(bytes[0], 0x41)
+  // An undone group does not absorb later writes
+  log.redo(bytes)
+  log.write(bytes, 0, 0x33, { group: 'g1' })
+  assert.equal(log.undoStack.length, 2)
+})
+
+test('revertAll restores originals as one undoable step', () => {
+  const bytes = bytesOf(1, 2, 3, 4, 5)
+  const log = new EditLog()
+  log.write(bytes, 4, 0)
+  log.write(bytes, 0, 0)
+  log.write(bytes, 0, 7)
+  assert.deepEqual(log.revertAll(bytes), { start: 0, end: 5, count: 2 })
+  assert.deepEqual([...bytes], [1, 2, 3, 4, 5])
+  assert.equal(log.modifiedCount, 0)
+  assert.equal(log.revertAll(bytes), null)
+  log.undo(bytes)
+  assert.deepEqual([...bytes], [7, 2, 3, 4, 0])
+  assert.equal(log.modifiedCount, 2)
+  assert.equal(log.originalValue(bytes, 0), 1)
+  assert.equal(log.originalValue(bytes, 2), 3)
+})
+
+test('revision changes only for the edited part of the file', () => {
+  const bytes = new Uint8Array(64)
+  const log = new EditLog()
+  assert.equal(log.revision(0, 64), 0)
+  log.write(bytes, 20, 1)
+  const r = log.revision(16, 32)
+  assert.ok(r > 0)
+  assert.equal(log.revision(0, 16), 0)
+  assert.equal(log.revision(32, 64), 0)
+  log.write(bytes, 21, 1)
+  assert.ok(log.revision(16, 32) > r)
+})
+
+test('out-of-range writes are ignored', () => {
+  const bytes = bytesOf(1)
+  const log = new EditLog()
+  assert.ok(!log.write(bytes, 1, 5))
+  assert.ok(!log.write(bytes, -1, 5))
+  assert.deepEqual([...bytes], [1])
+})
+
+test('edits near the end of a large buffer cost nothing per byte of file', () => {
+  const bytes = new Uint8Array(64 * 1024 * 1024)
+  const log = new EditLog()
+  const t0 = Date.now()
+  for (let i = 0; i < 1000; i++) log.write(bytes, bytes.length - 1 - i, 0xff)
+  log.revertAll(bytes)
+  log.undo(bytes)
+  assert.ok(Date.now() - t0 < 200)
+  assert.equal(log.modifiedCount, 1000)
+})
