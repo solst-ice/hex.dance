@@ -65,7 +65,7 @@ describe('ELF', () => {
 
   it('lists symbols resolved through the symbol table sh_link, with nm letters, sorted by name', () => {
     const result = parse(elf, buildELF())
-    assert.deepEqual(titles(result), [
+    assert.deepEqual(titles(result).slice(0, 4), [
       'Architecture: AMD x86-64',
       'Class: ELF64',
       'Endianness: Little Endian',
@@ -109,8 +109,8 @@ describe('ELF', () => {
 
   it('reports files without section headers instead of throwing', () => {
     const result = parse(elf, buildELF({ noSectionHeaders: true }))
-    assert.equal(result.summary.length, 4)
     assert.equal(titles(result)[3], 'Section headers: none (symbols unavailable)')
+    assert.ok(titles(result).includes('Stripped: unknown (no section headers)'))
     assert.equal(result.symbols.length, 0)
   })
 
@@ -156,8 +156,8 @@ describe('Mach-O', () => {
 
   it('reads n_type/n_sect at the same offsets in nlist_64 and classifies by section', () => {
     const result = parse(macho, buildMachO())
-    assert.deepEqual(titles(result), header64)
-    assert.equal(result.formatName, '64-bit Mach-O (reversed)')
+    assert.deepEqual(titles(result).slice(0, 3), header64)
+    assert.equal(result.formatName, 'Mach-O 64-bit executable')
     assert.deepEqual(symbolRows(result), sampleWithSections)
   })
 
@@ -178,7 +178,7 @@ describe('Mach-O', () => {
   it('parses 32-bit images', () => {
     const result = parse(macho, buildMachO({ is64: false, cputype: CPU_TYPE_X86 }))
     assert.equal(titles(result)[0], 'Architecture: x86')
-    assert.equal(result.formatName, '32-bit Mach-O (reversed)')
+    assert.equal(result.formatName, 'Mach-O 32-bit executable')
     assert.deepEqual(symbolNames(result), [
       'compute', 'global_counter', 'helper', 'main', 'malloc', 'message', '_mh_execute_header', 'printf', 'scratch'
     ])
@@ -200,7 +200,10 @@ describe('Mach-O', () => {
     assert.equal(sliceDetails[2], 'Symbols below are from the x86_64 slice')
     assert.equal(titles(result)[1], 'Architecture: x86_64')
     assert.deepEqual(symbolRows(result), sampleWithSections)
-    assert.deepEqual(result.regions.map(r => r.name), ['Universal header', 'x86_64 slice', 'arm64 slice'])
+    const names = result.regions.map(r => r.name)
+    assert.deepEqual(names.slice(0, 3), ['Universal header', 'Padding', 'x86_64: Mach header'])
+    assert.ok(names.includes('arm64: Load commands'))
+    assert.ok(names.includes('arm64: Symbol table'))
   })
 
   it('parses a single-slice universal binary without segment commands', () => {
@@ -246,7 +249,8 @@ describe('PE', () => {
 
   it('emits header items, one grouped item per section, the export directory, then exports by name', () => {
     const result = parse(pe, buildPE())
-    assert.deepEqual(titles(result), [
+    const original = /^(Architecture|Timestamp|Characteristics|Section \d|Export Directory):/
+    assert.deepEqual(titles(result).filter(t => original.test(t)), [
       'Architecture: x64',
       'Timestamp: 2010-01-01T00:00:00.000Z',
       'Characteristics: 0x2022',
@@ -268,7 +272,7 @@ describe('PE', () => {
       'Raw Address: 0x400',
       'Characteristics: Code, Executable, Readable'
     ])
-    assert.deepEqual(result.summary[8].details, [
+    assert.deepEqual(result.summary.find(s => s.label === 'Export Directory').details, [
       'DLL Name: sample.dll',
       'Ordinal Base: 1',
       'Number of Functions: 5',

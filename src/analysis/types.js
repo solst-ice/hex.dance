@@ -49,7 +49,12 @@
  * @property {string} name
  * @property {string} type          nm-style letter
  * @property {string} [address]     hex string such as '0x1139' (an RVA for PE exports)
- * @property {string} [note]        e.g. 'ordinal 4', '-> KERNEL32.Sleep, ordinal 2', 'size 8'
+ * @property {string} [note]        e.g. 'ordinal 4', '-> KERNEL32.Sleep, ordinal 2', 'size 8'; for imports, the library
+ * @property {number} [offset]      file offset of the symbol's bytes, when they are in the file
+ * @property {number} [size]        size in bytes, when the format records it
+ * @property {string} [kind]        'function' | 'data' | 'other'
+ * @property {string} [library]     imports: the library expected to provide the symbol
+ * @property {string} [reason]      why `offset` is missing, e.g. 'Imported: defined in libc.so.6'
  */
 
 /**
