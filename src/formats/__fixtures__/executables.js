@@ -259,42 +259,94 @@ export const MACHO_SAMPLE_SEGMENTS = [
 
 /**
  * options:
- *   is64, cputype, cpusubtype, filetype
- *   segments: [{ segname, sections: [{ sectname, flags }] }]
+ *   is64, cputype, cpusubtype, filetype, flags
+ *   segments: [{ segname, vmaddr?, fileoff?, filesize?, sections: [{ sectname, flags, addr?, size?, offset? }] }]
  *   symbols: [{ name, type, sect, desc, value }]
  *   extraCommands: raw { cmd, cmdsize } pairs written before LC_SYMTAB
  *   ncmdsOverride: value stored in the header's ncmds
+ *   dylibs: install names of LC_LOAD_DYLIB commands (library ordinals 1, 2, …)
+ *   uuid: 16 bytes for LC_UUID
+ *   buildVersion: { platform, minos, sdk } as packed versions
+ *   entryoff: LC_MAIN entry offset
+ *   rpath: LC_RPATH path
+ *   encryption: { cryptoff, cryptsize, cryptid }
+ *   codeSignature: { identifier, flags } appended after the string table as an
+ *     ad-hoc SuperBlob with one CodeDirectory
+ *   padTo: zero-fill the file to this size, so sections can point past the tables
  */
 export function buildMachO({
   is64 = true,
   cputype = CPU_TYPE_ARM64,
   cpusubtype = 0,
   filetype = 2,
+  flags = 0,
   segments = MACHO_SAMPLE_SEGMENTS,
   symbols = MACHO_SAMPLE_SYMBOLS,
   extraCommands = [],
-  ncmdsOverride
+  ncmdsOverride,
+  dylibs = [],
+  uuid,
+  buildVersion,
+  entryoff,
+  rpath,
+  encryption,
+  codeSignature,
+  padTo = 0
 } = {}) {
   const w = new Writer(true)
   const headerSize = is64 ? 32 : 28
   w.u32(is64 ? 0xfeedfacf : 0xfeedface).u32(cputype).u32(cpusubtype).u32(filetype)
   const ncmdsAt = w.pos
-  w.u32(0).u32(0).u32(0)
+  w.u32(0).u32(0).u32(flags)
   if (is64) w.u32(0)
 
   let ncmds = 0
   for (const segment of segments) {
     const start = w.pos
     w.u32(is64 ? 0x19 : 0x1).u32(0).fixed(segment.segname, 16)
-    w.addr(0, is64).addr(0, is64).addr(0, is64).addr(0, is64)
+    w.addr(segment.vmaddr || 0, is64).addr(segment.vmsize || 0, is64).addr(segment.fileoff || 0, is64).addr(segment.filesize || 0, is64)
     w.u32(7).u32(5).u32(segment.sections.length).u32(0)
     for (const section of segment.sections) {
       w.fixed(section.sectname, 16).fixed(segment.segname, 16)
-      w.addr(0, is64).addr(0, is64)
-      w.u32(0).u32(0).u32(0).u32(0).u32(section.flags).u32(0).u32(0)
+      w.addr(section.addr || 0, is64).addr(section.size || 0, is64)
+      w.u32(section.offset || 0).u32(0).u32(0).u32(0).u32(section.flags).u32(0).u32(0)
       if (is64) w.u32(0)
     }
     w.set32(start + 4, w.pos - start)
+    ncmds++
+  }
+  const pathCommand = (cmd, path, fixedWords) => {
+    const start = w.pos
+    const headerLength = 12 + fixedWords.length * 4
+    w.u32(cmd).u32(0).u32(headerLength)
+    for (const word of fixedWords) w.u32(word)
+    w.cstr(path).align(8)
+    w.set32(start + 4, w.pos - start)
+    ncmds++
+  }
+  for (const path of dylibs) pathCommand(0xc, path, [2, 0x10000, 0x10000])
+  if (rpath) pathCommand(0x8000001c, rpath, [])
+  if (uuid) {
+    w.u32(0x1b).u32(24).bytes(uuid)
+    ncmds++
+  }
+  if (buildVersion) {
+    w.u32(0x32).u32(24).u32(buildVersion.platform).u32(buildVersion.minos).u32(buildVersion.sdk).u32(0)
+    ncmds++
+  }
+  if (entryoff !== undefined) {
+    w.u32(0x80000028).u32(24).u64(entryoff).u64(0)
+    ncmds++
+  }
+  if (encryption) {
+    w.u32(is64 ? 0x2c : 0x21).u32(is64 ? 24 : 20).u32(encryption.cryptoff).u32(encryption.cryptsize).u32(encryption.cryptid)
+    if (is64) w.u32(0)
+    ncmds++
+  }
+  let signatureCmd = null
+  if (codeSignature) {
+    signatureCmd = w.pos
+    w.u32(0x1d).u32(16).u32(0).u32(0)
     ncmds++
   }
   for (const { cmd, cmdsize } of extraCommands) {
@@ -317,6 +369,21 @@ export function buildMachO({
   w.bytes(strings.bytes)
   w.align(8)
 
+  if (signatureCmd !== null) {
+    // SuperBlob and CodeDirectory are big-endian
+    const start = w.pos
+    const be = new Writer(false)
+    const ident = codeSignature.identifier || 'sample'
+    const cdLength = 48 + ident.length + 1
+    be.u32(0xfade0cc0).u32(20 + cdLength).u32(1).u32(0).u32(20)
+    be.u32(0xfade0c02).u32(cdLength).u32(0x20400).u32(codeSignature.flags ?? 0x20002).u32(0).u32(48)
+    be.zeros(24).cstr(ident)
+    w.bytes(new Uint8Array(be.toArrayBuffer()))
+    w.set32(signatureCmd + 8, start)
+    w.set32(signatureCmd + 12, w.pos - start)
+  }
+
+  if (w.pos < padTo) w.zeros(padTo - w.pos)
   w.set32(symtabCmd + 8, symoff)
   w.set32(symtabCmd + 16, stroff)
   w.set32(symtabCmd + 20, strings.bytes.length)
@@ -467,5 +534,323 @@ export function buildPE({
 export function buildDosOnly() {
   const w = new Writer(true)
   w.ascii('MZ').zeros(0x3C - 2).u32(0x4000).zeros(0x20)
+  return w.toArrayBuffer()
+}
+
+// ---------------------------------------------------------------- linked ELF
+
+/**
+ * A dynamically linked ELF with program headers, an interpreter, a build-ID
+ * note, a dynamic section, symbol versions and a .dynsym, laid out like
+ * linker output (each LOAD segment maps file offsets to `base + offset`).
+ *
+ * options:
+ *   is64, littleEndian
+ *   kind: 'pie' | 'exec' | 'shared'
+ *   relro: 'none' | 'partial' | 'full'
+ *   execStack: PT_GNU_STACK with PF_X; noStackHeader: omit PT_GNU_STACK
+ *   noSectionHeaders: e_shoff = 0 (everything must come from program headers)
+ */
+export function buildLinkedELF({
+  is64 = true,
+  littleEndian = true,
+  kind = 'pie',
+  relro = 'full',
+  execStack = false,
+  noStackHeader = false,
+  noSectionHeaders = false
+} = {}) {
+  const w = new Writer(littleEndian)
+  const A = is64 ? 8 : 4
+  const ehsize = is64 ? 64 : 52
+  const phentsize = is64 ? 56 : 32
+  const shentsize = is64 ? 64 : 40
+  const symentsize = is64 ? 24 : 16
+  const base = kind === 'exec' ? 0x400000 : 0
+  const PT = { LOAD: 1, DYNAMIC: 2, INTERP: 3, NOTE: 4, PHDR: 6, GNU_STACK: 0x6474e551, GNU_RELRO: 0x6474e552 }
+
+  const phdrs = [{ type: PT.PHDR }, { type: PT.INTERP }, { type: PT.NOTE }, { type: PT.LOAD, id: 'ro' }, { type: PT.LOAD, id: 'rx' },
+    { type: PT.LOAD, id: 'rw' }, { type: PT.DYNAMIC }]
+  if (!noStackHeader) phdrs.push({ type: PT.GNU_STACK })
+  if (relro !== 'none') phdrs.push({ type: PT.GNU_RELRO })
+  w.zeros(ehsize)
+  const phoff = w.pos
+  w.zeros(phdrs.length * phentsize)
+
+  const interpOff = w.pos
+  const interp = is64 ? '/lib64/ld-linux-x86-64.so.2' : '/lib/ld-linux.so.2'
+  w.cstr(interp).align(4)
+
+  const noteOff = w.pos
+  w.u32(4).u32(20).u32(3).ascii('GNU').u8(0)
+  for (let i = 0; i < 20; i++) w.u8(0xa0 + i)
+  const noteSize = w.pos - noteOff
+
+  const dynstr = stringTable(['libc.so.6', 'libfoo.so.2', 'printf', 'GLIBC_2.2.5', '__stack_chk_fail', '__memcpy_chk',
+    'exported_fn', 'libsample.so.1', '$ORIGIN/lib'])
+  const dynstrOff = w.pos
+  w.bytes(dynstr.bytes).align(8)
+
+  // index: 0 null, 1 printf, 2 __stack_chk_fail, 3 __memcpy_chk, 4 exported_fn
+  const dynsyms = [
+    { name: 'printf', info: 0x12, shndx: 0, value: 0, size: 0, version: 2 },
+    { name: '__stack_chk_fail', info: 0x12, shndx: 0, value: 0, size: 0, version: 2 },
+    { name: '__memcpy_chk', info: 0x12, shndx: 0, value: 0, size: 0, version: 1 },
+    { name: 'exported_fn', info: 0x12, shndx: 7, value: 0, size: 16, version: 1 }
+  ]
+  const dynsymOff = w.pos
+  w.zeros(symentsize)
+  const symEntries = []
+  for (const sym of dynsyms) {
+    symEntries.push(w.pos)
+    const nameIndex = dynstr.offsets.get(sym.name)
+    if (is64) w.u32(nameIndex).u8(sym.info).u8(0).u16(sym.shndx).u64(0).u64(sym.size)
+    else w.u32(nameIndex).u32(0).u32(sym.size).u8(sym.info).u8(0).u16(sym.shndx)
+  }
+  const dynsymSize = w.pos - dynsymOff
+
+  const versymOff = w.pos
+  w.u16(0)
+  for (const sym of dynsyms) w.u16(sym.version)
+  const versymSize = w.pos - versymOff
+  w.align(8)
+
+  const verneedOff = w.pos
+  w.u16(1).u16(1).u32(dynstr.offsets.get('libc.so.6')).u32(16).u32(0)
+  w.u32(0x09691a75).u16(0).u16(2).u32(dynstr.offsets.get('GLIBC_2.2.5')).u32(0)
+  const verneedSize = w.pos - verneedOff
+
+  w.align(16)
+  const roEnd = w.pos
+  const textOff = w.pos
+  w.zeros(32)
+  for (let i = 0; i < 16; i++) w.buf[textOff + 16 + i] = 0xc3 // exported_fn's bytes
+  const textEnd = w.pos
+  w.align(16)
+
+  const dynamicOff = w.pos
+  const dyn = (tag, value) => { w.addr(tag, is64).addr(value, is64) }
+  dyn(1, dynstr.offsets.get('libc.so.6'))
+  dyn(1, dynstr.offsets.get('libfoo.so.2'))
+  if (kind === 'shared') dyn(14, dynstr.offsets.get('libsample.so.1'))
+  dyn(29, dynstr.offsets.get('$ORIGIN/lib'))
+  dyn(5, base + dynstrOff)
+  dyn(10, dynstr.bytes.length)
+  dyn(6, base + dynsymOff)
+  if (relro === 'full') dyn(30, 0x8)
+  if (kind === 'pie') dyn(0x6ffffffb, relro === 'full' ? 0x08000001 : 0x08000000)
+  dyn(0, 0)
+  const dynamicSize = w.pos - dynamicOff
+
+  const shstr = stringTable(['.interp', '.note.gnu.build-id', '.dynstr', '.dynsym', '.gnu.version', '.gnu.version_r', '.text', '.dynamic', '.shstrtab'])
+  const shstrOff = w.pos
+  w.bytes(shstr.bytes).align(8)
+  const shoff = w.pos
+  const sections = [
+    ['', 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    ['.interp', 1, 2, interpOff, interp.length + 1, 0, 0, 1, 0],
+    ['.note.gnu.build-id', 7, 2, noteOff, noteSize, 0, 0, 4, 0],
+    ['.dynstr', 3, 2, dynstrOff, dynstr.bytes.length, 0, 0, 1, 0],
+    ['.dynsym', 11, 2, dynsymOff, dynsymSize, 3, 1, 8, symentsize],
+    ['.gnu.version', 0x6fffffff, 2, versymOff, versymSize, 4, 0, 2, 2],
+    ['.gnu.version_r', 0x6ffffffe, 2, verneedOff, verneedSize, 3, 1, 8, 0],
+    ['.text', 1, 6, textOff, textEnd - textOff, 0, 0, 16, 0],
+    ['.dynamic', 6, 3, dynamicOff, dynamicSize, 3, 0, 8, 2 * A],
+    ['.shstrtab', 3, 0, shstrOff, shstr.bytes.length, 0, 0, 1, 0]
+  ]
+  for (const [name, type, flags, offset, size, link, info, align, entsize] of sections) {
+    const addr = flags & 2 ? base + offset : 0
+    w.u32(name ? shstr.offsets.get(name) : 0).u32(type || 0)
+    w.addr(flags || 0, is64).addr(addr, is64).addr(offset || 0, is64).addr(size || 0, is64)
+    w.u32(link || 0).u32(info || 0).addr(align || 0, is64).addr(entsize || 0, is64)
+  }
+  const fileEnd = w.pos
+
+  // exported_fn lives 16 bytes into .text
+  for (const at of [symEntries[3]]) w.setAddr(at + (is64 ? 8 : 4), base + textOff + 16, is64)
+
+  const segment = (at, type, flags, offset, size) => {
+    if (is64) {
+      w.set32(at, type); w.set32(at + 4, flags)
+      w.setAddr(at + 8, offset, true); w.setAddr(at + 16, base + offset, true); w.setAddr(at + 24, base + offset, true)
+      w.setAddr(at + 32, size, true); w.setAddr(at + 40, size, true); w.setAddr(at + 48, 8, true)
+    } else {
+      w.set32(at, type); w.set32(at + 4, offset); w.set32(at + 8, base + offset); w.set32(at + 12, base + offset)
+      w.set32(at + 16, size); w.set32(at + 20, size); w.set32(at + 24, flags); w.set32(at + 28, 4)
+    }
+  }
+  phdrs.forEach((p, i) => {
+    const at = phoff + i * phentsize
+    if (p.type === PT.PHDR) segment(at, p.type, 4, phoff, phdrs.length * phentsize)
+    else if (p.type === PT.INTERP) segment(at, p.type, 4, interpOff, interp.length + 1)
+    else if (p.type === PT.NOTE) segment(at, p.type, 4, noteOff, noteSize)
+    else if (p.id === 'ro') segment(at, p.type, 4, 0, roEnd)
+    else if (p.id === 'rx') segment(at, p.type, 5, textOff, textEnd - textOff)
+    else if (p.id === 'rw') segment(at, p.type, 6, dynamicOff, fileEnd - dynamicOff)
+    else if (p.type === PT.DYNAMIC) segment(at, p.type, 6, dynamicOff, dynamicSize)
+    else if (p.type === PT.GNU_STACK) { segment(at, p.type, execStack ? 7 : 6, 0, 0) }
+    else if (p.type === PT.GNU_RELRO) segment(at, p.type, 4, dynamicOff, dynamicSize)
+  })
+
+  w.buf.set([0x7F, 0x45, 0x4C, 0x46, is64 ? 2 : 1, littleEndian ? 1 : 2, 1, 0], 0)
+  w.set16(16, kind === 'exec' ? 2 : 3)
+  w.set16(18, is64 ? 0x3E : 0x03)
+  w.set32(20, 1)
+  w.setAddr(24, base + textOff, is64)
+  w.setAddr(is64 ? 32 : 28, phoff, is64)
+  w.setAddr(is64 ? 40 : 32, noSectionHeaders ? 0 : shoff, is64)
+  const h = is64 ? 52 : 40
+  w.set16(h, ehsize)
+  w.set16(h + 2, phentsize)
+  w.set16(h + 4, phdrs.length)
+  w.set16(h + 6, shentsize)
+  w.set16(h + 8, noSectionHeaders ? 0 : sections.length)
+  w.set16(h + 10, noSectionHeaders ? 0 : sections.length - 1)
+  return w.toArrayBuffer()
+}
+
+// ---------------------------------------------------------------- full PE
+
+/**
+ * A PE image with the tables a first look needs: Rich header, imports by
+ * name and ordinal, a delay-load import, a CodeView debug record, a CLR
+ * header, overlay data and a certificate table.
+ *
+ * options:
+ *   pe32Plus, dllCharacteristics, subsystem, characteristics
+ *   rich, clr, delay, certificate: include those parts
+ *   overlay: bytes of overlay data after the last section
+ */
+export function buildFullPE({
+  pe32Plus = true,
+  dllCharacteristics = 0x4160,
+  subsystem = 3,
+  characteristics = 0x22,
+  rich = true,
+  clr = true,
+  delay = true,
+  certificate = true,
+  overlay = 64
+} = {}) {
+  const w = new Writer(true)
+  const peOffset = 0x100
+  w.ascii('MZ').zeros(0x3C - 2).u32(peOffset)
+  w.zeros(0x40) // stub code
+  if (rich) {
+    const key = 0x12345678
+    const masked = v => (v ^ key) >>> 0
+    w.u32(masked(0x536E6144)).u32(key).u32(key).u32(key) // DanS + 3 zero dwords
+    w.u32(masked((0x0105 << 16) | 30729)).u32(masked(7))
+    w.u32(masked((0x0104 << 16) | 30729)).u32(masked(2))
+    w.ascii('Rich').u32(key)
+  }
+  w.zeros(peOffset - w.pos)
+
+  const rdata = { rva: 0x2000, raw: 0x600, size: 0x800 }
+  const text = { rva: 0x1000, raw: 0x400, size: 0x200 }
+  const optionalHeaderSize = pe32Plus ? 240 : 224
+  w.ascii('PE').u16(0)
+  w.u16(pe32Plus ? 0x8664 : 0x14c).u16(2).u32(0x5F5E1000).u32(0).u32(0).u16(optionalHeaderSize).u16(characteristics)
+  const opt = w.pos
+  w.zeros(optionalHeaderSize)
+  for (const [name, s, flags] of [['.text', text, 0x60000020], ['.rdata', rdata, 0x40000040]]) {
+    w.fixed(name, 8).u32(s.size).u32(s.rva).u32(s.size).u32(s.raw).zeros(12).u32(flags)
+  }
+  w.zeros(text.raw - w.pos)
+  w.zeros(text.size)
+  w.zeros(rdata.size)
+  const rva = r => rdata.raw + (r - rdata.rva)
+
+  // Optional header
+  const P = pe32Plus ? 8 : 4
+  w.set16(opt, pe32Plus ? 0x20B : 0x10B)
+  w.buf[opt + 2] = 14
+  w.buf[opt + 3] = 29
+  w.set32(opt + 16, text.rva + 0x10) // AddressOfEntryPoint
+  let at = opt + (pe32Plus ? 24 : 28)
+  w.setAddr(at, 0x140000000 % (pe32Plus ? 2 ** 53 : 2 ** 32), pe32Plus)
+  if (!pe32Plus) w.set32(at, 0x400000)
+  at += P
+  w.set32(at, 0x1000); w.set32(at + 4, 0x200)
+  w.set16(at + 8, 6); w.set16(at + 16, 6)
+  w.set32(at + 24, 0x3000) // SizeOfImage
+  w.set32(at + 28, 0x400) // SizeOfHeaders
+  w.set16(at + 36, subsystem)
+  w.set16(at + 38, dllCharacteristics)
+  const dirs = opt + (pe32Plus ? 112 : 96)
+  w.set32(dirs - 4, 16)
+  const setDir = (index, r, size) => { w.set32(dirs + index * 8, r); w.set32(dirs + index * 8 + 4, size) }
+
+  // .rdata contents
+  let cursor = rdata.rva
+  const take = n => { const r = cursor; cursor += n; return r }
+  const putString = (s) => { const r = take(s.length + 1); w.buf.set(Array.from(s, c => c.charCodeAt(0)), rva(r)); return r }
+  const putHintName = (hint, name) => { const r = take(2 + name.length + 1 + ((name.length + 1) % 2)); w.set16(rva(r), hint); w.buf.set(Array.from(name, c => c.charCodeAt(0)), rva(r) + 2); return r }
+  const thunk = (r, value) => (pe32Plus ? w.view.setBigUint64(rva(r), BigInt(value), true) : w.set32(rva(r), value))
+  const ordinalFlag = pe32Plus ? 1n << 63n : 0x80000000
+
+  const imports = [
+    { dll: 'KERNEL32.dll', functions: ['CreateFileW', 'VirtualProtect', 'IsDebuggerPresent'] },
+    { dll: 'WS2_32.dll', functions: [23, 'connect'] }
+  ]
+  const descriptors = take(20 * (imports.length + 1))
+  imports.forEach((imp, i) => {
+    const ilt = take(P * (imp.functions.length + 1))
+    const iat = take(P * (imp.functions.length + 1))
+    imp.functions.forEach((fn, j) => {
+      const value = typeof fn === 'number' ? (pe32Plus ? ordinalFlag | BigInt(fn) : (ordinalFlag | fn) >>> 0) : putHintName(j, fn)
+      thunk(ilt + j * P, value)
+      thunk(iat + j * P, value)
+    })
+    const d = rva(descriptors + i * 20)
+    w.set32(d, ilt)
+    w.set32(d + 12, putString(imp.dll))
+    w.set32(d + 16, iat)
+  })
+  setDir(1, descriptors, 20 * (imports.length + 1))
+
+  if (delay) {
+    const desc = take(64)
+    const names = take(P * 2)
+    thunk(names, putHintName(0, 'MessageBoxW'))
+    const d = rva(desc)
+    w.set32(d, 1)
+    w.set32(d + 4, putString('USER32.dll'))
+    w.set32(d + 16, names)
+    setDir(13, desc, 64)
+  }
+
+  // Debug directory with an RSDS CodeView record
+  const debugDir = take(28)
+  const pdb = 'C:\\build\\sample.pdb'
+  const cv = take(24 + pdb.length + 1)
+  w.set32(rva(cv), 0x53445352)
+  w.buf.set(Array.from(pdb, c => c.charCodeAt(0)), rva(cv) + 24)
+  w.set32(rva(debugDir) + 12, 2)
+  w.set32(rva(debugDir) + 16, 24 + pdb.length + 1)
+  w.set32(rva(debugDir) + 20, cv)
+  w.set32(rva(debugDir) + 24, rva(cv))
+  setDir(6, debugDir, 28)
+
+  if (clr) {
+    cursor = (cursor + 3) & ~3
+    const header = take(72)
+    const metadata = take(32)
+    w.set32(rva(header), 72)
+    w.set16(rva(header) + 4, 2); w.set16(rva(header) + 6, 5)
+    w.set32(rva(header) + 8, metadata); w.set32(rva(header) + 12, 32)
+    w.set32(rva(header) + 16, 1)
+    w.set32(rva(metadata), 0x424A5342)
+    w.set32(rva(metadata) + 12, 12)
+    w.buf.set(Array.from('v4.0.30319', c => c.charCodeAt(0)), rva(metadata) + 16)
+    setDir(14, header, 72)
+  }
+
+  for (let i = 0; i < overlay; i++) w.u8(0x5A)
+  if (certificate) {
+    const start = w.pos
+    w.u32(16).u16(0x200).u16(2).u32(0xDEADBEEF).u32(0xCAFEF00D)
+    setDir(4, start, 16)
+  }
   return w.toArrayBuffer()
 }
