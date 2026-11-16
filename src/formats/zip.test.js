@@ -51,7 +51,7 @@ test('describes entries as structured records', () => {
     { path: 'dir/a.txt', isDirectory: false, size: 3, compressedSize: 3, method: 'deflated', encrypted: false }
   ])
   assert.equal(result.fields[0].kind, 'magic')
-  assert.deepEqual(result.regions.map(region => region.name), ['Central directory', 'End of central directory'])
+  assert.deepEqual(result.regions.map(region => region.name), ['dir/', 'dir/a.txt', 'Central directory', 'End records'])
 })
 
 test('reads sizes from the central directory when data descriptors are used', () => {

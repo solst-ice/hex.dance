@@ -1,0 +1,35 @@
+/* Field and region kind palette, shared by the Structure tab and the anatomy dock */
+:where(:root) {
+  --sx-field-magic: #ff36ab;
+  --sx-field-header: #00d7ff;
+  --sx-field-size: #f7f71c;
+  --sx-field-count: #ffb000;
+  --sx-field-offset: #ff8f40;
+  --sx-field-flags: #c38dff;
+  --sx-field-string: #4dff88;
+  --sx-field-checksum: #ff5c5c;
+  --sx-field-data: #5f87ff;
+  --sx-field-padding: #7d8aa8;
+  --sx-field-other: #2ec4b6;
+
+  --sx-region-header: #00d7ff;
+  --sx-region-code: #ff5c5c;
+  --sx-region-data: #5f87ff;
+  --sx-region-table: #ffb000;
+  --sx-region-metadata: #c38dff;
+  --sx-region-padding: #7d8aa8;
+  --sx-region-other: #2ec4b6;
+  --sx-region-gap: #3d4560;
+  --sx-region-mixed: #9aa4bf;
+
+  --sx-hover: #f7f71c;
+  --sx-text: #e4e4e4;
+}
+
+.sx-kind-swatch {
+  border-radius: 2px;
+  display: inline-block;
+  flex: none;
+  height: 0.8em;
+  width: 0.8em;
+}
