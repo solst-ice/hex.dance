@@ -1,0 +1,271 @@
+.structure-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.structure-panel .hd-panel-header {
+  margin-bottom: 0;
+}
+
+/* Format card */
+.sx-card {
+  border: 1px solid rgba(0, 255, 255, 0.25);
+  border-radius: 6px;
+  padding: 10px 12px;
+  color: var(--sx-text);
+  font-size: 0.92em;
+  line-height: 1.45;
+}
+
+.sx-card-head {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.sx-card-title {
+  color: var(--neon-pink);
+  font-family: 'Unifont', monospace;
+  font-size: 1.05em;
+  font-weight: normal;
+  letter-spacing: 1px;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.sx-card-tagline,
+.sx-card-note {
+  margin: 6px 0 0;
+}
+
+.sx-card-note {
+  color: var(--neon-yellow);
+}
+
+.sx-card-body p {
+  margin: 8px 0 0;
+}
+
+.sx-card-heading {
+  color: var(--neon-blue);
+  font-family: 'Unifont', monospace;
+  font-size: 0.95em;
+  font-weight: normal;
+  letter-spacing: 1px;
+  margin: 12px 0 4px;
+  text-transform: uppercase;
+}
+
+.sx-card-list {
+  margin: 0;
+  padding-left: 1.4em;
+}
+
+.sx-card-list li + li {
+  margin-top: 3px;
+}
+
+.sx-card-spec a {
+  color: var(--neon-blue);
+  overflow-wrap: anywhere;
+}
+
+.sx-card-spec a:focus-visible,
+.sx-tree:focus-visible {
+  outline: 1px dashed var(--neon-pink);
+  outline-offset: 2px;
+}
+
+/* Toolbar and tour */
+.sx-toolbar,
+.sx-tour {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.sx-tour {
+  border: 1px solid var(--neon-pink);
+  border-radius: 6px;
+  justify-content: flex-start;
+  padding: 8px 10px;
+}
+
+.sx-tour-hint {
+  font-size: 0.8em;
+  margin-left: auto;
+}
+
+.sx-tour-step {
+  color: var(--neon-pink);
+  font-family: 'Unifont', monospace;
+  letter-spacing: 1px;
+  margin: 0 0 4px;
+  text-transform: uppercase;
+}
+
+.sx-count {
+  font-size: 0.9em;
+}
+
+/* Detail of the current field */
+.sx-detail {
+  background: rgba(0, 255, 255, 0.04);
+  border-left: 3px solid var(--neon-blue);
+  border-radius: 4px;
+  color: var(--sx-text);
+  min-height: 92px;
+  padding: 10px 12px;
+}
+
+.sx-detail--idle {
+  align-items: center;
+  display: flex;
+}
+
+.sx-detail p {
+  margin: 0;
+}
+
+.sx-path {
+  font-size: 0.8em;
+  overflow-wrap: anywhere;
+}
+
+.sx-detail-head {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sx-detail-name {
+  color: var(--neon-blue);
+  font-family: 'Unifont', monospace;
+  font-size: 1.15em;
+  font-weight: normal;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.sx-kind-badge {
+  border-color: var(--sx-kind);
+  color: var(--sx-kind);
+}
+
+.sx-detail-value {
+  color: var(--neon-yellow);
+  margin-top: 4px !important;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.sx-detail-range {
+  font-size: 0.85em;
+  margin-top: 4px !important;
+}
+
+.sx-detail-description {
+  font-size: 1em;
+  line-height: 1.45;
+  margin-top: 6px !important;
+}
+
+/* Tree */
+.sx-tree {
+  border: 1px solid rgba(0, 255, 255, 0.2);
+  border-radius: 4px;
+  max-height: min(56vh, 520px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  position: relative;
+}
+
+.sx-tree-inner {
+  position: relative;
+}
+
+.sx-row {
+  align-items: center;
+  box-sizing: border-box;
+  color: var(--sx-text);
+  cursor: pointer;
+  display: flex;
+  font-family: 'Unifont', monospace;
+  font-size: 0.88em;
+  gap: 6px;
+  height: 28px;
+  left: 0;
+  padding: 0 8px 0 calc(4px + min(var(--sx-depth), 8) * 12px);
+  position: absolute;
+  right: 0;
+  white-space: nowrap;
+}
+
+.sx-row:hover,
+.sx-row.is-hovered {
+  background: rgba(247, 247, 28, 0.08);
+}
+
+.sx-row.is-active {
+  background: rgba(0, 255, 255, 0.14);
+  box-shadow: inset 2px 0 0 var(--neon-blue);
+  color: var(--neon-blue);
+}
+
+.sx-tree:focus-visible .sx-row.is-active {
+  box-shadow: inset 2px 0 0 var(--neon-pink), inset 0 0 0 1px var(--neon-pink);
+}
+
+.sx-caret {
+  color: var(--neon-blue);
+  flex: none;
+  text-align: center;
+  width: 1.1em;
+}
+
+.sx-name {
+  flex: 0 1 auto;
+  min-width: 2em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sx-magic {
+  flex: none;
+  font-size: 0.75em;
+}
+
+.sx-value {
+  color: var(--neon-yellow);
+  flex: 1 1 0;
+  min-width: 0;
+  opacity: 0.85;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sx-range {
+  flex: none;
+  font-size: 0.9em;
+  font-variant-numeric: tabular-nums;
+}
+
+.sx-empty {
+  color: var(--sx-text);
+}
+
+@media (max-width: 480px) {
+  .sx-len,
+  .sx-tour-hint {
+    display: none;
+  }
+
+  .sx-tree {
+    max-height: 60vh;
+  }
+}
