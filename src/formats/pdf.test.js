@@ -1,12 +1,14 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parsePDF, formatPDFDate } from './pdf.js'
-import { buildPDF, SIMPLE_PDF, truncate } from './__fixtures__/fileFormats.js'
+import pdf, { formatPDFDate } from './pdf.js'
+import { buildPDF, SIMPLE_PDF } from './__fixtures__/fileFormats.js'
 
-const list = set => [...set]
+const parsePDF = buffer => pdf.parse(new Uint8Array(buffer), {})
+const list = result => result.summary.map(entry => `${entry.label}: ${entry.value}`)
 
 test('reads version, page count from the page tree root and the Info dictionary', () => {
-  assert.deepEqual(list(parsePDF(buildPDF(SIMPLE_PDF))), [
+  const result = parsePDF(buildPDF(SIMPLE_PDF))
+  assert.deepEqual(list(result), [
     'Version: PDF 1.7',
     'Pages: 3',
     'Title: Report (draft) A',
@@ -14,6 +16,9 @@ test('reads version, page count from the page tree root and the Info dictionary'
     'Producer: handmade',
     'Creation Date: 2025-01-01 12:00:00 +02:00'
   ])
+  assert.deepEqual(result.fields[0], {
+    name: 'Header', offset: 0, length: 8, value: '%PDF-1.7', kind: 'magic', description: 'PDF signature and version'
+  })
 })
 
 test('falls back to the largest /Type /Pages count without a trailer', () => {
@@ -51,9 +56,9 @@ test('does not read Info strings of encrypted documents', () => {
 })
 
 test('never throws on truncated or odd input', () => {
-  const pdf = buildPDF(SIMPLE_PDF)
-  for (let length = 0; length <= pdf.byteLength; length++) {
-    assert.doesNotThrow(() => parsePDF(truncate(pdf, length)))
+  const file = buildPDF(SIMPLE_PDF)
+  for (let length = 0; length <= file.byteLength; length++) {
+    assert.doesNotThrow(() => parsePDF(file.slice(0, length)))
   }
   assert.deepEqual(list(parsePDF(buildPDF('%PDF-'))), ['Version: PDF unknown'])
   assert.doesNotThrow(() => parsePDF(buildPDF('%PDF-1.4\n1 0 obj << /Title (unterminated \\')))
