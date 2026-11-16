@@ -13,13 +13,14 @@ const MH_CIGAM_64 = 0xcffaedfe
 const FAT_MAGIC = 0xcafebabe
 const FAT_CIGAM = 0xbebafeca
 
+// Byte order is reported by the Class summary item, not in the name
 const MAGIC_NAMES = {
-  [MH_MAGIC]: '32-bit Mach-O',
-  [MH_MAGIC_64]: '64-bit Mach-O',
-  [MH_CIGAM]: '32-bit Mach-O (reversed)',
-  [MH_CIGAM_64]: '64-bit Mach-O (reversed)',
+  [MH_MAGIC]: 'Mach-O 32-bit',
+  [MH_MAGIC_64]: 'Mach-O 64-bit',
+  [MH_CIGAM]: 'Mach-O 32-bit',
+  [MH_CIGAM_64]: 'Mach-O 64-bit',
   [FAT_MAGIC]: 'Universal Binary',
-  [FAT_CIGAM]: 'Universal Binary (reversed)'
+  [FAT_CIGAM]: 'Universal Binary'
 }
 
 function isThinMachOMagic(magic) {
@@ -728,7 +729,7 @@ function parseMachO(view, bytes) {
     }
     fields.push(...rest)
     return {
-      formatName,
+      formatName: `${formatName} ${image.fileType.toLowerCase()}`,
       summary: imageSummary(image),
       fields,
       regions: sliceRegions(image, 0, view.byteLength, 'Other data', bytes),

@@ -157,7 +157,7 @@ describe('Mach-O', () => {
   it('reads n_type/n_sect at the same offsets in nlist_64 and classifies by section', () => {
     const result = parse(macho, buildMachO())
     assert.deepEqual(titles(result).slice(0, 3), header64)
-    assert.equal(result.formatName, '64-bit Mach-O (reversed)')
+    assert.equal(result.formatName, 'Mach-O 64-bit executable')
     assert.deepEqual(symbolRows(result), sampleWithSections)
   })
 
@@ -178,7 +178,7 @@ describe('Mach-O', () => {
   it('parses 32-bit images', () => {
     const result = parse(macho, buildMachO({ is64: false, cputype: CPU_TYPE_X86 }))
     assert.equal(titles(result)[0], 'Architecture: x86')
-    assert.equal(result.formatName, '32-bit Mach-O (reversed)')
+    assert.equal(result.formatName, 'Mach-O 32-bit executable')
     assert.deepEqual(symbolNames(result), [
       'compute', 'global_counter', 'helper', 'main', 'malloc', 'message', '_mh_execute_header', 'printf', 'scratch'
     ])
