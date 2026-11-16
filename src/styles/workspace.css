@@ -1,0 +1,128 @@
+/* Page layout once a file is open */
+
+.container.has-file {
+  max-width: 1500px;
+}
+
+/* Compact file bar that replaces the landing drop zone */
+.file-bar {
+  align-items: center;
+  background: var(--darker-bg);
+  border: 2px dashed var(--neon-blue);
+  border-radius: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  justify-content: space-between;
+  margin: 20px 0;
+  padding: 10px 16px;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.file-bar.dragging {
+  border-color: var(--neon-pink);
+  box-shadow: 0 0 20px rgba(255, 54, 171, 0.25);
+}
+
+.file-bar-name {
+  color: var(--neon-blue);
+  font-family: 'Unifont', monospace;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1 1 12em;
+}
+
+.file-bar-choose {
+  position: relative;
+  color: var(--neon-pink);
+  border-color: var(--neon-pink);
+  white-space: nowrap;
+}
+
+.file-bar-choose:hover {
+  background: rgba(255, 54, 171, 0.1);
+  border-color: var(--neon-pink);
+  box-shadow: 0 0 10px rgba(255, 54, 171, 0.3);
+}
+
+.file-bar-choose:focus-within {
+  outline: 1px dashed var(--neon-blue);
+  outline-offset: 2px;
+}
+
+/* Kept in the accessibility tree and focusable, but drawn by its label */
+.file-bar-choose input[type="file"] {
+  height: 1px;
+  left: 0;
+  opacity: 0;
+  overflow: hidden;
+  position: absolute;
+  top: 0;
+  width: 1px;
+}
+
+/* Workspace: a single column, two columns on wide screens */
+.workspace {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: minmax(0, 1fr);
+  margin-bottom: 40px;
+}
+
+.workspace-main,
+.workspace-side,
+.workspace-dock {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+}
+
+.workspace .hex-dump-container:not(.fullscreen) {
+  margin: 0;
+}
+
+.workspace-placeholder {
+  height: 360px;
+}
+
+@media (min-width: 1200px) {
+  .workspace {
+    /* The hex view needs about 760px to keep each 16-byte row on one line */
+    grid-template-columns: minmax(760px, 1.2fr) minmax(0, 1fr);
+    align-items: start;
+  }
+}
+
+.panel-tabs-body {
+  padding-top: 16px;
+  min-width: 0;
+}
+
+/* Shown while a file is dragged over the page */
+.drop-overlay {
+  align-items: center;
+  background: rgba(6, 7, 20, 0.6);
+  border: 2px dashed var(--neon-pink);
+  box-shadow: inset 0 0 40px rgba(255, 54, 171, 0.25);
+  color: var(--neon-pink);
+  display: flex;
+  font-family: 'Unifont', monospace;
+  font-size: 1.6em;
+  inset: 0;
+  justify-content: center;
+  letter-spacing: 2px;
+  pointer-events: none;
+  position: fixed;
+  text-shadow: 0 0 10px rgba(255, 54, 171, 0.5);
+  text-transform: uppercase;
+  z-index: 2000;
+}
+
+@media (max-width: 600px) {
+  .container.has-file .hd-panel {
+    padding: 14px;
+  }
+}

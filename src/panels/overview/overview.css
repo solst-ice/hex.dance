@@ -1,0 +1,36 @@
+.overview .metadata-grid + .overview-rows,
+.overview .metadata-grid + div > .hd-section-title {
+  margin-top: 20px;
+}
+
+.overview-title {
+  margin-bottom: 20px;
+}
+
+.overview-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.overview-row-label {
+  color: var(--neon-pink);
+}
+
+.function-item li.selected .overview-row-label {
+  color: inherit;
+}
+
+.overview-note {
+  margin: 0;
+  text-align: center;
+}
+
+.overview-warnings ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.overview-warnings .hd-section-title {
+  margin-top: 0;
+}

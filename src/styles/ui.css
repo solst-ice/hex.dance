@@ -1,0 +1,298 @@
+/*
+ * Shared UI primitives for panels. Reuse these instead of styling from
+ * scratch so every panel matches the existing cards.
+ *
+ *   .hd-panel                 card chrome (dark background, neon border, glow)
+ *   .hd-panel-header          title row: title on the left, actions on the right
+ *   .hd-panel-title           panel heading (h2/h3)
+ *   .hd-section-title         smaller heading inside a panel
+ *   .hd-tabs / .hd-tab        tab strip and its buttons; [aria-selected="true"] marks the active tab
+ *   .hd-tab-badge             count or label shown inside a tab
+ *   .hd-button                bordered button; .hd-button--active, .hd-button--small
+ *   .hd-input                 single-line text input (also for <select>)
+ *   .hd-table                 compact data table; .hd-table--clickable highlights rows on hover,
+ *                             tr.is-selected marks a selected row, td.hd-num aligns numbers
+ *   .hd-kv                    key/value grid: alternating <dt>/<dd> (or any two children per row)
+ *   .hd-badge                 small inline label; .hd-badge--pink, .hd-badge--yellow
+ *   .hd-muted                 secondary text
+ *   .hd-mono                  monospace text that keeps its spacing
+ *   .hd-warning               warning text (pink)
+ *   .hd-stack                 vertical flow with even spacing
+ *   .hd-row                   horizontal flow, wraps, items centred
+ *   .hd-empty                 centred placeholder ("Analyzing…", "Nothing found")
+ */
+
+.hd-panel {
+  background: var(--darker-bg);
+  border: 1px solid var(--neon-blue);
+  border-radius: 8px;
+  box-shadow: 0 0 20px rgba(0, 255, 255, 0.1);
+  padding: 20px;
+  min-width: 0;
+}
+
+.hd-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.hd-panel-title {
+  color: var(--neon-blue);
+  font-family: 'Unifont', monospace;
+  font-size: 1.5em;
+  font-weight: normal;
+  letter-spacing: 2px;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.hd-section-title {
+  color: var(--neon-pink);
+  font-family: 'Unifont', monospace;
+  font-size: 1em;
+  font-weight: normal;
+  letter-spacing: 1px;
+  margin: 20px 0 10px;
+  text-transform: uppercase;
+}
+
+/* Tabs */
+.hd-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  border-bottom: 1px solid var(--neon-blue);
+}
+
+.hd-tab {
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  color: rgba(0, 255, 255, 0.7);
+  cursor: pointer;
+  font-family: 'Unifont', monospace;
+  font-size: 0.95em;
+  letter-spacing: 1px;
+  margin-bottom: -1px;
+  padding: 8px 14px;
+  text-transform: uppercase;
+  transition: color 0.2s ease, background 0.2s ease;
+}
+
+.hd-tab:hover {
+  border-color: transparent;
+  color: var(--neon-blue);
+  background: rgba(0, 255, 255, 0.05);
+}
+
+.hd-tab[aria-selected="true"] {
+  background: var(--darker-bg);
+  border-color: var(--neon-blue);
+  color: var(--neon-blue);
+  text-shadow: 0 0 8px rgba(0, 255, 255, 0.4);
+}
+
+.hd-tab:focus-visible {
+  outline: 1px dashed var(--neon-pink);
+  outline-offset: -3px;
+}
+
+.hd-tab-badge {
+  background: rgba(255, 54, 171, 0.15);
+  border-radius: 8px;
+  color: var(--neon-pink);
+  font-size: 0.8em;
+  margin-left: 6px;
+  padding: 0 6px;
+}
+
+/* Buttons and inputs */
+.hd-button {
+  background: var(--darker-bg);
+  border: 1px solid var(--neon-blue);
+  border-radius: 4px;
+  color: var(--neon-blue);
+  cursor: pointer;
+  font-family: 'Unifont', monospace;
+  font-size: 0.9em;
+  letter-spacing: 1px;
+  padding: 6px 12px;
+  text-transform: uppercase;
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.hd-button:hover {
+  background: rgba(0, 255, 255, 0.1);
+  border-color: var(--neon-blue);
+  box-shadow: 0 0 10px rgba(0, 255, 255, 0.2);
+}
+
+.hd-button:active {
+  transform: translateY(1px);
+}
+
+.hd-button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.hd-button--active {
+  border-color: var(--neon-pink);
+  color: var(--neon-pink);
+  box-shadow: 0 0 10px rgba(255, 54, 171, 0.3);
+}
+
+.hd-button--small {
+  font-size: 0.8em;
+  padding: 3px 8px;
+}
+
+.hd-input {
+  background: rgba(0, 255, 255, 0.05);
+  border: 1px solid rgba(0, 255, 255, 0.5);
+  border-radius: 4px;
+  box-sizing: border-box;
+  color: var(--neon-blue);
+  font-family: 'Unifont', monospace;
+  font-size: 0.95em;
+  max-width: 100%;
+  padding: 6px 10px;
+}
+
+.hd-input:focus {
+  border-color: var(--neon-blue);
+  box-shadow: 0 0 8px rgba(0, 255, 255, 0.3);
+  outline: none;
+}
+
+.hd-input::placeholder {
+  color: rgba(0, 255, 255, 0.4);
+}
+
+/* Data table */
+.hd-table {
+  border-collapse: collapse;
+  color: #e4e4e4;
+  font-family: 'Unifont', monospace;
+  font-size: 0.9em;
+  width: 100%;
+}
+
+.hd-table th {
+  border-bottom: 1px solid rgba(0, 255, 255, 0.4);
+  color: var(--neon-pink);
+  font-weight: normal;
+  letter-spacing: 1px;
+  padding: 4px 8px;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.hd-table td {
+  border-bottom: 1px solid rgba(0, 255, 255, 0.08);
+  padding: 3px 8px;
+  vertical-align: top;
+  word-break: break-word;
+}
+
+.hd-table td.hd-num,
+.hd-table th.hd-num {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.hd-table--clickable tbody tr {
+  cursor: pointer;
+}
+
+.hd-table--clickable tbody tr:hover,
+.hd-table tbody tr.is-selected {
+  background: rgba(0, 255, 255, 0.08);
+  color: var(--neon-blue);
+}
+
+/* Key/value grid */
+.hd-kv {
+  display: grid;
+  grid-template-columns: minmax(90px, max-content) minmax(0, 1fr);
+  gap: 4px 16px;
+  margin: 0;
+}
+
+.hd-kv > :nth-child(odd) {
+  color: var(--neon-pink);
+  font-size: 0.9em;
+  letter-spacing: 1px;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.hd-kv > :nth-child(even) {
+  color: var(--neon-blue);
+  font-family: 'Unifont', monospace;
+  margin: 0;
+  min-width: 0;
+  word-break: break-word;
+}
+
+/* Small inline things */
+.hd-badge {
+  border: 1px solid rgba(0, 255, 255, 0.5);
+  border-radius: 4px;
+  color: var(--neon-blue);
+  display: inline-block;
+  font-family: 'Unifont', monospace;
+  font-size: 0.8em;
+  line-height: 1.3;
+  padding: 0 5px;
+  vertical-align: middle;
+}
+
+.hd-badge--pink {
+  border-color: rgba(255, 54, 171, 0.6);
+  color: var(--neon-pink);
+}
+
+.hd-badge--yellow {
+  border-color: rgba(247, 247, 28, 0.6);
+  color: var(--neon-yellow);
+}
+
+.hd-muted {
+  color: rgba(228, 228, 228, 0.6);
+}
+
+.hd-mono {
+  font-family: 'Unifont', monospace;
+  white-space: pre;
+}
+
+.hd-warning {
+  color: var(--neon-pink);
+}
+
+.hd-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.hd-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.hd-empty {
+  color: var(--neon-yellow);
+  padding: 20px 0;
+  text-align: center;
+}
