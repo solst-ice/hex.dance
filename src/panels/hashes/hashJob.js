@@ -1,4 +1,4 @@
-import { streamToWorker } from './chunkStream.js'
+import { streamToWorker } from '../../lib/chunkStream.js'
 
 // SHA-512 is the slowest by far, so large inputs are split over two workers
 // with roughly equal work.

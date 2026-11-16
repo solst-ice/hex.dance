@@ -1,6 +1,6 @@
 import { StringScanner } from './scan.js'
 import { classify } from './classify.js'
-import { acceptChunks } from '../hashes/chunkStream.js'
+import { acceptChunks } from '../../lib/chunkStream.js'
 
 // Columns of the strings found since the last message
 let batch = null

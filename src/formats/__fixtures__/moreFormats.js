@@ -1,6 +1,8 @@
 // Builders for small in-memory files used by the tests of the formats added
-// alongside the original nine. Each returns a Uint8Array; checksums are
-// computed here independently of the parsers.
+// alongside the original nine. Each returns a Uint8Array. Checksums come
+// from src/lib/crc32.js, whose own test checks it against zlib.
+
+import { crc32, oggCrc32 } from '../../lib/crc32.js'
 
 const encoder = new TextEncoder()
 
@@ -45,17 +47,6 @@ export function uleb(value) {
     out.push(byte)
   } while (value > 0)
   return Uint8Array.from(out)
-}
-
-const CRC_TABLE = Array.from({ length: 256 }, (_, n) => {
-  let c = n
-  for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1
-  return c >>> 0
-})
-export function crc32(bytes) {
-  let crc = 0xFFFFFFFF
-  for (const b of bytes) crc = CRC_TABLE[(crc ^ b) & 0xFF] ^ (crc >>> 8)
-  return (crc ^ 0xFFFFFFFF) >>> 0
 }
 
 // Deterministic pseudo-random bytes
@@ -592,20 +583,6 @@ export function buildFLAC({ rate = 44100, channels = 2, bits = 16, samples = 882
   return bytesOf(ascii('fLaC'), block(0, info, false), block(4, vorbis, false), block(1, zeros(16), true), 0xFF, 0xF8, zeros(30))
 }
 
-let oggTable = null
-function oggCrc(bytes) {
-  if (!oggTable) {
-    oggTable = Array.from({ length: 256 }, (_, i) => {
-      let c = i << 24
-      for (let k = 0; k < 8; k++) c = c & 0x80000000 ? (c << 1) ^ 0x04C11DB7 : c << 1
-      return c >>> 0
-    })
-  }
-  let crc = 0
-  for (const b of bytes) crc = (oggTable[((crc >>> 24) ^ b) & 0xFF] ^ (crc << 8)) >>> 0
-  return crc
-}
-
 export function oggPage({ type = 0, granule = 0, serial = 0x1234, sequence = 0, packets = [] }) {
   const lacing = []
   for (const packet of packets) {
@@ -617,7 +594,7 @@ export function oggPage({ type = 0, granule = 0, serial = 0x1234, sequence = 0, 
     lacing.push(n)
   }
   const page = bytesOf(ascii('OggS'), 0, type, u64le(granule), u32le(serial), u32le(sequence), u32le(0), lacing.length, lacing, packets)
-  page.set(u32le(oggCrc(page)), 22)
+  page.set(u32le(oggCrc32(page)), 22)
   return page
 }
 

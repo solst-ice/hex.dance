@@ -7,7 +7,9 @@ import { hexOffset, formatSize } from './layout.js'
 import { posterBaseName } from './escape.js'
 import { readTheme } from './theme.js'
 import { useThemeVersion } from '../../lib/canvasColors.js'
-import { svgBlob, downloadBlob, svgToPng, pngSize, canCopyImage, copyPng } from './exporter.js'
+import { svgBlob, svgToPng, pngSize } from './exporter.js'
+import { canCopyImage, copyImage } from '../../lib/clipboard.js'
+import { downloadBlob } from '../../lib/download.js'
 import './poster.css'
 
 const STYLES = [['dark', 'Dark'], ['print', 'Print']]
@@ -140,7 +142,7 @@ export default function Poster() {
     const blob = await svgToPng(poster.svg, poster.width, poster.height, background)
     downloadBlob(blob, `${baseName}.png`)
   }, `Saved ${baseName}.png`)
-  const copy = () => run('copy', () => copyPng(svgToPng(poster.svg, poster.width, poster.height, background)), 'Copied the poster as an image')
+  const copy = () => run('copy', () => copyImage(svgToPng(poster.svg, poster.width, poster.height, background)), 'Copied the poster as an image')
 
   const plan = poster?.plan
   const rows = plan ? plan.items.filter(i => i.type === 'row').length : 0

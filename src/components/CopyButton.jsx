@@ -1,11 +1,10 @@
 /* eslint-disable react/prop-types -- the project does not use prop-types */
 import { useEffect, useRef, useState } from 'react'
-import { copyText } from './clipboard.js'
+import { copyText } from '../lib/clipboard.js'
 import './copy.css'
 
 /**
  * Small button that copies `getText()` (or `text`) and briefly confirms.
- * Also used by the strings panel.
  */
 function CopyButton({ text, getText, label = 'Copy', ariaLabel, disabled, className = '' }) {
   const [state, setState] = useState('idle')

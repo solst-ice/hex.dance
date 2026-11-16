@@ -3,7 +3,7 @@
  * runs off the main thread without copying the whole file at once. The hex
  * view edits the bytes in place, so each chunk is copied from the live
  * bytes just before it is sent: at most a few chunks exist as copies at any
- * time. Also used by the strings and entropy panels.
+ * time. Used by the hashes, strings and entropy panels.
  *
  * Protocol:
  *   main → worker  { type: 'begin', params }

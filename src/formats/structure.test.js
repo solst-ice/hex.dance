@@ -6,7 +6,8 @@ import gif from './gif.js'
 import zip, { identifyContainer } from './zip.js'
 import pdf from './pdf.js'
 import javaClass from './javaClass.js'
-import { FieldList, crc32 } from './fieldTree.js'
+import { FieldList } from './fieldTree.js'
+import { crc32 } from '../lib/crc32.js'
 import { analyzeBytes } from '../analysis/analyze.js'
 import {
   buildFullPNG, buildFullJPEG, buildFullGIF, buildFullZip, buildFullPDF, buildFullClass,

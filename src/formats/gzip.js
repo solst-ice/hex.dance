@@ -1,5 +1,6 @@
 import { walkDeflate } from './deflate.js'
-import { ByteReader, capFields, crc32, field, fitted, formatNumber, hex32, latin1, plural, printable, unixDate } from './reader.js'
+import { ByteReader, capFields, field, fitted, formatNumber, hex32, latin1, plural, printable, unixDate } from './reader.js'
+import { crc32 } from '../lib/crc32.js'
 import { formatBytes, item } from './shared.js'
 
 const FTEXT = 1

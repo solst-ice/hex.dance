@@ -1,5 +1,5 @@
-import { useContext, useEffect } from 'react'
-import { FileContext, SelectionContext, WorkspaceContext } from './contexts.js'
+import { useContext, useEffect, useSyncExternalStore } from 'react'
+import { FileContext, HexViewContext, SelectionContext, WorkspaceContext } from './contexts.js'
 
 /**
  * @typedef {'idle' | 'reading' | 'analyzing' | 'ready' | 'error'} FileStatus
@@ -84,4 +84,58 @@ export function useHighlightLayer(layer, ranges) {
       return others.length === previous.length ? previous : others
     })
   }, [layer, ranges, setHighlights])
+}
+
+function useHexViewStore() {
+  const store = useContext(HexViewContext)
+  if (!store) throw new Error('The hex view hooks must be used inside <SelectionProvider>')
+  return store
+}
+
+/**
+ * Byte offset of the hex view's cursor (the byte a plain click or the arrow
+ * keys moved to; the selection is null after a plain click). Null while no
+ * hex view is shown, 0 for an empty file. Re-renders the caller on every
+ * cursor move, in a task after the hex view has updated, so keep the caller
+ * small; event handlers that only need the value when they run should use
+ * `useHexViewReader` instead.
+ * @returns {number|null}
+ */
+export function useHexCursor() {
+  const store = useHexViewStore()
+  return useSyncExternalStore(store.subscribeCursor, store.getCursor)
+}
+
+/**
+ * The bytes the hex view currently shows: `{ start, end, bytesPerRow, visibleRows }`
+ * with `start` = first row × bytesPerRow and `end` exclusive, at most the
+ * file size. Null while no hex view is shown. The object keeps its identity
+ * until one of its fields changes. Re-renders the caller on every scroll
+ * step and layout change, so keep the caller small.
+ * @returns {import('./hexViewStore.js').HexViewport|null}
+ */
+export function useHexViewport() {
+  const store = useHexViewStore()
+  return useSyncExternalStore(store.subscribeViewport, store.getViewport)
+}
+
+/**
+ * Reads the hex view's cursor and viewport without subscribing to them, for
+ * event handlers and animation frames that need the value at the moment
+ * they run. The returned object never changes.
+ * @returns {{ getCursor: () => number|null, getViewport: () => import('./hexViewStore.js').HexViewport|null }}
+ */
+export function useHexViewReader() {
+  const store = useHexViewStore()
+  return store.reader
+}
+
+/**
+ * For the component that hosts the hex view: callbacks that report its
+ * cursor and viewport into shared state. Stable across renders.
+ * @returns {{ setCursor: (offset: number|null) => void, setViewport: (viewport: import('./hexViewStore.js').HexViewport|null) => void }}
+ */
+export function useHexViewReporter() {
+  const store = useHexViewStore()
+  return store.reporter
 }

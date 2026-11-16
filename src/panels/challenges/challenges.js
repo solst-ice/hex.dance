@@ -1,6 +1,7 @@
 import {
-  ascii, bytesEqual, crc32, crc32Masked, formatHexBytes, parseOffset, sha256Hex, u32be, u32le
+  ascii, bytesEqual, crc32Masked, formatHexBytes, parseOffset, sha256Hex, u32be, u32le
 } from './bytes.js'
+import { crc32 } from '../../lib/crc32.js'
 
 /**
  * @typedef {Object} CheckResult

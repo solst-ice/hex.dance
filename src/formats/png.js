@@ -1,5 +1,6 @@
 import { ascii, dataView, item, startsWith } from './shared.js'
-import { FieldList, clip, crc32, field, hexOffset, plural } from './fieldTree.js'
+import { FieldList, clip, field, hexOffset, plural } from './fieldTree.js'
+import { crc32 } from '../lib/crc32.js'
 
 const SIGNATURE = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
 

@@ -1,4 +1,5 @@
-import { ByteReader, crc32, field, fitted, formatNumber, hex32, plural, printable, utf16 } from './reader.js'
+import { ByteReader, field, fitted, formatNumber, hex32, plural, printable, utf16 } from './reader.js'
+import { crc32 } from '../lib/crc32.js'
 import { formatBytes, item } from './shared.js'
 
 const SIGNATURE = [0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C]

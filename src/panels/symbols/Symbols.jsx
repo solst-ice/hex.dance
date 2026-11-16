@@ -1,6 +1,8 @@
 /* eslint-disable react/prop-types -- the project does not use prop-types */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFile, useSelection } from '../../state/hooks.js'
+import { copyText } from '../../lib/clipboard.js'
+import { formatOffset } from '../../lib/format.js'
 import SymbolTable from './SymbolTable.jsx'
 import { buildModel, capabilitySummary, describeType, filterRows, QUICK_FILTERS, TYPE_LETTERS } from './model.js'
 import './symbols.css'
@@ -22,31 +24,6 @@ function SelectionBridge({ apiRef }) {
   return null
 }
 
-async function copyText(text) {
-  try {
-    await navigator.clipboard.writeText(text)
-    return true
-  } catch {
-    const area = document.createElement('textarea')
-    area.value = text
-    area.setAttribute('readonly', '')
-    area.style.position = 'fixed'
-    area.style.opacity = '0'
-    document.body.appendChild(area)
-    area.select()
-    let ok = false
-    try {
-      ok = document.execCommand('copy')
-    } catch {
-      ok = false
-    }
-    area.remove()
-    return ok
-  }
-}
-
-const hexOffset = value => `0x${value.toString(16).toUpperCase()}`
-
 function Details({ symbol, demangled, api, onJump, onCopy, copied, formatId }) {
   if (!symbol) {
     return <p className="hd-muted symbols-hint">Select a symbol to see its details. Rows with bytes in the file jump to them in the hex view.</p>
@@ -59,7 +36,7 @@ function Details({ symbol, demangled, api, onJump, onCopy, copied, formatId }) {
         <dt>Type</dt>
         <dd><span className="symbols-letter">{symbol.type}</span> {describeType(symbol.type)}</dd>
         {symbol.address && <><dt>{formatId === 'pe' ? 'RVA' : 'Address'}</dt><dd className="hd-mono">{symbol.address}</dd></>}
-        {symbol.offset !== undefined && <><dt>File offset</dt><dd className="hd-mono">{hexOffset(symbol.offset)}</dd></>}
+        {symbol.offset !== undefined && <><dt>File offset</dt><dd className="hd-mono">{formatOffset(symbol.offset)}</dd></>}
         {symbol.size !== undefined && <><dt>Size</dt><dd>{symbol.size.toLocaleString()} bytes</dd></>}
         {symbol.library && <><dt>Library</dt><dd className="hd-mono">{symbol.library}</dd></>}
         {symbol.note && symbol.note !== symbol.library && <><dt>Note</dt><dd>{symbol.note}</dd></>}

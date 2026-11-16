@@ -3,13 +3,14 @@ import HexDump from './HexDump'
 import PanelBoundary from './PanelBoundary'
 import PanelTabs from './PanelTabs'
 import { availablePanels } from '../panels/index.js'
-import { useFile, useSelection } from '../state/hooks.js'
+import { useFile, useHexViewReporter, useSelection } from '../state/hooks.js'
 
 // The only part of the layout that follows the selection, so selecting bytes
 // does not re-render the panels
 function HexArea() {
   const { file, buffer, status, notifyEdit } = useFile()
   const { selection, setSelection, highlights, hexApiRef } = useSelection()
+  const { setCursor, setViewport } = useHexViewReporter()
 
   if (!buffer) {
     return (
@@ -27,6 +28,8 @@ function HexArea() {
       highlights={highlights}
       onEdit={notifyEdit}
       apiRef={hexApiRef}
+      onCursorChange={setCursor}
+      onViewportChange={setViewport}
     />
   )
 }

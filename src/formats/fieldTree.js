@@ -99,20 +99,3 @@ export function plural(n, noun, nouns = noun + 's') {
 export function hexOffset(n) {
   return `0x${n.toString(16).toUpperCase()}`
 }
-
-let crcTable = null
-
-/** CRC-32 (ISO-HDLC, as in PNG and ZIP) of bytes[start, end) */
-export function crc32(bytes, start, end) {
-  if (!crcTable) {
-    crcTable = new Int32Array(256)
-    for (let n = 0; n < 256; n++) {
-      let c = n
-      for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1
-      crcTable[n] = c
-    }
-  }
-  let c = -1
-  for (let i = start; i < end; i++) c = crcTable[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8)
-  return (c ^ -1) >>> 0
-}

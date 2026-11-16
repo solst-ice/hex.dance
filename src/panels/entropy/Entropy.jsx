@@ -1,11 +1,10 @@
 /* eslint-disable react/prop-types -- the project does not use prop-types */
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useFile, useSelection } from '../../state/hooks.js'
+import { useFile, useHexViewport, useSelection } from '../../state/hooks.js'
 import { formatBytes } from '../../formats/shared.js'
 import { describeByte } from '../../components/hex/bytes.js'
-import { streamToWorker } from '../hashes/chunkStream.js'
+import { streamToWorker } from '../../lib/chunkStream.js'
 import { chooseBlockSize, describe, summarize } from './stats.js'
-import { useHexViewport } from './viewport.js'
 import EntropyGraph from './EntropyGraph.jsx'
 import Histogram from './Histogram.jsx'
 import './entropy.css'

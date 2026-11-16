@@ -15,6 +15,8 @@ import {
 } from './hex/selection'
 import { buildHighlightIndex, segmentsIn } from './hex/highlights'
 import { createHoverStore } from './hex/hoverStore'
+import { copyText } from '../lib/clipboard.js'
+import { downloadBytes } from '../lib/download.js'
 import './hex/hex.css'
 
 // Rows have a fixed height (hex.css reads it from --hx-row-h)
@@ -51,27 +53,17 @@ function cellInfo(el, body) {
   }
 }
 
-async function writeClipboard(text) {
-  try {
-    await navigator.clipboard.writeText(text)
-    return true
-  } catch {
-    const area = document.createElement('textarea')
-    area.value = text
-    area.setAttribute('readonly', '')
-    area.style.position = 'fixed'
-    area.style.opacity = '0'
-    document.body.appendChild(area)
-    area.select()
-    let ok = false
-    try { ok = document.execCommand('copy') } catch { ok = false }
-    area.remove()
-    return ok
-  }
-}
-
-// UI modes live out here so they survive switching files; everything tied to
-// a file lives in HexView, which is remounted for each new buffer.
+/**
+ * Hex view and editor. Only `buffer` is required; the rest is optional:
+ * `fileName`, `selection` + `onSelectionChange` (controlled selection),
+ * `highlights`, `onEdit`, `apiRef` (receives `{ scrollToOffset }`), and
+ * `onCursorChange(offset|null)` and `onViewportChange({ start, end, bytesPerRow, visibleRows }|null)`,
+ * which report the cursor and the bytes on screen (`end` exclusive, at most
+ * the size) whenever they change, and null when the view goes away.
+ *
+ * UI modes live out here so they survive switching files; everything tied to
+ * a file lives in HexView, which is remounted for each new buffer.
+ */
 function HexDump(props) {
   const { buffer } = props
   const [fullscreen, setFullscreen] = useState(false)
@@ -106,7 +98,7 @@ function HexDump(props) {
 }
 
 function HexView({
-  buffer, fileName, selection, onSelectionChange, highlights, onEdit, apiRef,
+  buffer, fileName, selection, onSelectionChange, highlights, onEdit, apiRef, onCursorChange, onViewportChange,
   fullscreen, setFullscreen, editMode, setEditMode
 }) {
   const bytes = useMemo(() => toBytes(buffer), [buffer])
@@ -150,7 +142,7 @@ function HexView({
     editMode, fullscreen, controlled
   }
   const callbacks = useRef(null)
-  callbacks.current = { onSelectionChange, onEdit }
+  callbacks.current = { onSelectionChange, onEdit, onCursorChange, onViewportChange }
 
   const timers = useRef({})
   const momentum = useRef({})
@@ -243,6 +235,21 @@ function HexView({
     clearTimeout(timers.current.flash)
     timers.current.flash = setTimeout(() => setFlash(null), FLASH_MS)
   }, [scrollToRow])
+
+  // ---- reporting the cursor and the visible range to the host --------------
+
+  const viewStart = top * bytesPerRow
+  const viewEnd = Math.min(size, viewStart + visibleRows * bytesPerRow)
+  useLayoutEffect(() => {
+    callbacks.current.onCursorChange?.(cur)
+  }, [cur])
+  useLayoutEffect(() => {
+    callbacks.current.onViewportChange?.({ start: viewStart, end: viewEnd, bytesPerRow, visibleRows })
+  }, [viewStart, viewEnd, bytesPerRow, visibleRows])
+  useLayoutEffect(() => () => {
+    callbacks.current.onCursorChange?.(null)
+    callbacks.current.onViewportChange?.(null)
+  }, [])
 
   useLayoutEffect(() => {
     if (!apiRef) return
@@ -348,17 +355,7 @@ function HexView({
     }
   }
 
-  const download = () => {
-    const blob = new Blob([bytes], { type: 'application/octet-stream' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = downloadName(fileName)
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-    setTimeout(() => URL.revokeObjectURL(url), 0)
-  }
+  const download = () => downloadBytes(bytes, downloadName(fileName))
 
   // ---- copy, go to --------------------------------------------------------
 
@@ -373,7 +370,7 @@ function HexView({
     }
     const asText = L.column === 'text'
     const text = asText ? asciiText(bytes, range.start, range.end) : hexText(bytes, range.start, range.end)
-    writeClipboard(text).then(ok => {
+    copyText(text).then(ok => {
       showNotice(ok
         ? `Copied ${length} ${length === 1 ? 'byte' : 'bytes'} as ${asText ? 'text' : 'hex'}`
         : 'Copying was blocked by the browser')

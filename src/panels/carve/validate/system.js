@@ -1,4 +1,5 @@
-import { crc32, fromLatin1, isPowerOfTwo, latin1, u16be, u16le, u32be, u32le, u64le } from '../bytes.js'
+import { fromLatin1, isPowerOfTwo, latin1, u16be, u16le, u32be, u32le, u64le } from '../bytes.js'
+import { crc32 } from '../../../lib/crc32.js'
 import { findForward } from '../source.js'
 import { found, plural, sizeText } from './common.js'
 

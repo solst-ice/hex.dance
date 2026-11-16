@@ -1,5 +1,5 @@
 import { ByteStats } from './stats.js'
-import { acceptChunks } from '../hashes/chunkStream.js'
+import { acceptChunks } from '../../lib/chunkStream.js'
 
 let stats = null
 let sent = 0

@@ -1,4 +1,5 @@
-import { ByteReader, capFields, crc32, field, fitted, formatNumber, hex32, plural, readULEB } from './reader.js'
+import { ByteReader, capFields, field, fitted, formatNumber, hex32, plural, readULEB } from './reader.js'
+import { crc32 } from '../lib/crc32.js'
 import { formatBytes, item } from './shared.js'
 
 const MAGIC = [0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00]

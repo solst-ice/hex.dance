@@ -80,42 +80,6 @@ export function hexField(b, i, length) {
 
 export const isPowerOfTwo = (n) => n > 0 && Number.isSafeInteger(n) && (n & (n - 1)) === 0 && n <= 0x40000000
 
-let crcTable = null
-function table() {
-  if (crcTable) return crcTable
-  crcTable = new Int32Array(256)
-  for (let n = 0; n < 256; n++) {
-    let c = n
-    for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1
-    crcTable[n] = c
-  }
-  return crcTable
-}
-
-/** CRC-32 (zlib/PNG/gzip). Pass the previous result as `crc` to continue. */
-export function crc32(b, start = 0, end = b.length, crc = 0) {
-  const t = table()
-  let c = ~crc
-  for (let i = start; i < end; i++) c = t[(c ^ b[i]) & 0xFF] ^ (c >>> 8)
-  return ~c >>> 0
-}
-
-let crcTableBE = null
-/** CRC-32 with the MSB-first polynomial 0x04C11DB7 and no inversion, as Ogg uses. */
-export function crc32ogg(b, start, end) {
-  if (!crcTableBE) {
-    crcTableBE = new Int32Array(256)
-    for (let n = 0; n < 256; n++) {
-      let c = n << 24
-      for (let k = 0; k < 8; k++) c = c & 0x80000000 ? (c << 1) ^ 0x04C11DB7 : c << 1
-      crcTableBE[n] = c
-    }
-  }
-  let c = 0
-  for (let i = start; i < end; i++) c = (c << 8) ^ crcTableBE[((c >>> 24) ^ b[i]) & 0xFF]
-  return c >>> 0
-}
-
 /** Adler-32 (zlib). Pass the previous result as `adler` to continue. */
 export function adler32(b, start = 0, end = b.length, adler = 1) {
   let a = adler & 0xFFFF

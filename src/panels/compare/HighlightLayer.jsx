@@ -1,41 +1,9 @@
 /* eslint-disable react/prop-types -- the project does not use prop-types */
-import { useEffect, useMemo, useState } from 'react'
-import { useHighlightLayer } from '../../state/hooks.js'
+import { useMemo } from 'react'
+import { useHexViewport, useHighlightLayer } from '../../state/hooks.js'
 import { hasTail, highlightWindow } from './items.js'
 
 const COLOR = 'var(--hd-compare-diff)'
-
-// Offset of the hex view's top row, read from its DOM attributes
-function useHexTopOffset() {
-  const [offset, setOffset] = useState(0)
-  useEffect(() => {
-    let element = null
-    let observer = null
-    const read = () => {
-      const top = Number(element.getAttribute('data-top-row')) || 0
-      const perRow = Number(element.getAttribute('data-bytes-per-row')) || 16
-      setOffset(top * perRow)
-    }
-    const bind = () => {
-      const next = document.querySelector('section.hexview')
-      if (next === element) return
-      observer?.disconnect()
-      observer = null
-      element = next
-      if (!element) return
-      observer = new MutationObserver(read)
-      observer.observe(element, { attributes: true, attributeFilter: ['data-top-row', 'data-bytes-per-row'] })
-      read()
-    }
-    bind()
-    const timer = setInterval(bind, 1000)
-    return () => {
-      clearInterval(timer)
-      observer?.disconnect()
-    }
-  }, [])
-  return offset
-}
 
 /**
  * Tints the differing ranges in the hex view: all of them when there are few,
@@ -43,7 +11,8 @@ function useHexTopOffset() {
  * scrolling and selection changes re-render only this.
  */
 export default function HighlightLayer({ comparison }) {
-  const offset = useHexTopOffset()
+  // Offset of the hex view's top row
+  const offset = useHexViewport()?.start ?? 0
   const { stats, ranges, version } = comparison
   const span = highlightWindow(ranges, offset)
 

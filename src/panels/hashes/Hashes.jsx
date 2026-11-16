@@ -4,7 +4,7 @@ import { useFile, useSelection } from '../../state/hooks.js'
 import { formatBytes } from '../../formats/shared.js'
 import { ALGORITHMS } from './digests.js'
 import { startHashing } from './hashJob.js'
-import CopyButton from './CopyButton.jsx'
+import CopyButton from '../../components/CopyButton.jsx'
 import './hashes.css'
 
 // Whole-file results per loaded buffer, so switching tabs does not rehash

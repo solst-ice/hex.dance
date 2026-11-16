@@ -5,7 +5,8 @@ import {
   CHALLENGES, challengeById, checkEndian, checkFlag, checkHidden, checkKind, checkPatch, checkPixel,
   checkResize, checkSignature, normaliseFlag, runCheck
 } from './challenges.js'
-import { ascii, crc32, parseHexBytes, parseOffset, sha256Hex, u32be } from './bytes.js'
+import { ascii, crc32Masked, parseHexBytes, parseOffset, sha256Hex, u32be } from './bytes.js'
+import { crc32 } from '../../lib/crc32.js'
 
 const fileUrl = (name) => new URL(`../../../public/challenges/${name}`, import.meta.url)
 const load = (name) => new Uint8Array(readFileSync(fileUrl(name)))
@@ -24,6 +25,13 @@ const truncated = (name) => load(name).subarray(0, 20)
 
 test('bytes helpers', () => {
   assert.equal(crc32(new Uint8Array(ascii('123456789'))), 0xcbf43926)
+  const data = load('squashed.png')
+  const zeroed = Uint8Array.from(data)
+  zeroed.fill(0, 16, 20)
+  zeroed.fill(0, 29, 33)
+  assert.equal(crc32Masked(data, [[29, 33], [16, 20], [18, 19]]), crc32(zeroed))
+  assert.equal(crc32Masked(data, [[-4, 2], [data.length - 1, data.length + 9]]), crc32(Uint8Array.from(data).fill(0, 0, 2).fill(0, data.length - 1)))
+  assert.equal(crc32Masked(EMPTY, [[0, 4]]), 0)
   assert.equal(sha256Hex('abc'), 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad')
   assert.equal(sha256Hex(''), 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855')
   assert.equal(sha256Hex('a'.repeat(200)).length, 64)

@@ -1,7 +1,7 @@
 // Fixtures for the structure (field tree) tests: small but complete files
 // with valid checksums, built in code.
 
-import { crc32 } from '../fieldTree.js'
+import { crc32 } from '../../lib/crc32.js'
 
 const encoder = new TextEncoder()
 

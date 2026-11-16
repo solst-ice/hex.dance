@@ -1,7 +1,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
-import { ALGORITHMS, Crc32, Md5, Sha1, Sha256, Sha512, hashAll } from './digests.js'
+import { ALGORITHMS, Md5, Sha1, Sha256, Sha512, hashAll } from './digests.js'
+import { Crc32 } from '../../lib/crc32.js'
 
 const text = (s) => new TextEncoder().encode(s)
 
