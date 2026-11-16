@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 
 // Function descriptions for common functions
 const functionDescriptions = {
@@ -35,6 +35,15 @@ const functionDescriptions = {
   'ares_timeout': "Gets c-ares timeout value"
 }
 
+// Rendering thousands of rows at once freezes the page, so long lists are
+// revealed in pages of this size.
+const ROWS_PER_PAGE = 2000
+
+function descriptionFor(name) {
+  // ELF dynamic symbols may carry a symbol version, e.g. printf@GLIBC_2.2.5
+  return functionDescriptions[name] || functionDescriptions[name.split('@')[0]]
+}
+
 function FunctionItem({ func, isSelected, onSelect, isExpanded, isMetadata }) {
   if (isMetadata) {
     const [label, ...valueParts] = func.split(': ')
@@ -43,7 +52,7 @@ function FunctionItem({ func, isSelected, onSelect, isExpanded, isMetadata }) {
       <div className="metadata-item">
         <span className="metadata-label">{label}</span>
         <span className="metadata-value">
-          {value && value.includes('\n') 
+          {value && value.includes('\n')
             ? value.split('\n').map((line, i) => (
                 <div key={i} className="tree-line" style={{fontFamily: 'monospace'}}>
                   {line}
@@ -56,20 +65,17 @@ function FunctionItem({ func, isSelected, onSelect, isExpanded, isMetadata }) {
     )
   }
 
-  // Check if this is an ELF symbol with encoded details
+  const open = isSelected || isExpanded
+
+  // Info row with expandable details: 'title\x00["detail", ...]'
   if (func.includes('\x00')) {
     const [title, detailsJson] = func.split('\x00')
     return (
       <div className="function-item">
-        <li 
-          onClick={onSelect}
-          className={isSelected || isExpanded ? 'selected' : ''}
-        >
+        <li onClick={onSelect} className={open ? 'selected' : ''}>
           {title}
         </li>
-        <div 
-          className={`function-description inline ${isSelected || isExpanded ? 'show' : ''}`}
-        >
+        <div className={`function-description inline ${open ? 'show' : ''}`}>
           {JSON.parse(detailsJson).map((detail, index) => (
             <div key={index}>{detail}</div>
           ))}
@@ -78,41 +84,26 @@ function FunctionItem({ func, isSelected, onSelect, isExpanded, isMetadata }) {
     )
   }
 
-  // Handle Mach-O and PE symbols
-  const match = func.match(/^(.+?)\s*\(([A-Z])\)/)
+  // Symbol row: 'name (X)' with an nm-style type letter and optional suffix
+  const match = func.match(/^(.+?) \(([A-Za-z?])\)(?: (.*))?$/)
   if (match) {
-    const [, name, type] = match
+    const [, name, type, suffix] = match
     return (
       <div className="function-item">
-        <li 
-          onClick={onSelect}
-          className={isSelected || isExpanded ? 'selected' : ''}
-        >
-          {name} <span className="symbol-type">({type})</span>
+        <li onClick={onSelect} className={open ? 'selected' : ''}>
+          {name} <span className="symbol-type">({type})</span>{suffix ? ` ${suffix}` : ''}
         </li>
-        <div 
-          className={`function-description inline ${isSelected || isExpanded ? 'show' : ''}`}
-        >
-          {functionDescriptions[name] || "No description available for this function."}
+        <div className={`function-description inline ${open ? 'show' : ''}`}>
+          {descriptionFor(name) || "No description available for this function."}
         </div>
       </div>
     )
   }
 
-  // Fallback for any other format
+  // Plain info row
   return (
     <div className="function-item">
-      <li 
-        onClick={onSelect}
-        className={isSelected || isExpanded ? 'selected' : ''}
-      >
-        {func}
-      </li>
-      <div 
-        className={`function-description inline ${isSelected || isExpanded ? 'show' : ''}`}
-      >
-        No description available.
-      </div>
+      <li>{func}</li>
     </div>
   )
 }
@@ -120,6 +111,7 @@ function FunctionItem({ func, isSelected, onSelect, isExpanded, isMetadata }) {
 function FunctionList({ functions, title }) {
   const [selectedFunction, setSelectedFunction] = useState(null)
   const [expandAll, setExpandAll] = useState(false)
+  const [visible, setVisible] = useState({ list: null, count: ROWS_PER_PAGE })
   const isMetadata = title === 'File Metadata'
 
   // Check if we have any functions using Set.size
@@ -132,11 +124,11 @@ function FunctionList({ functions, title }) {
     return [...items].sort((a, b) => {
       const aLabel = a.split(':')[0].trim();
       const bLabel = b.split(':')[0].trim();
-      
+
       // Get indices from order array, -1 if not found
       const aIndex = order.indexOf(aLabel);
       const bIndex = order.indexOf(bLabel);
-      
+
       // If both items are in order array, sort by their position
       if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
       // If only a is in order array, it comes first
@@ -148,38 +140,19 @@ function FunctionList({ functions, title }) {
     });
   };
 
-  const renderItem = (item) => {
-    // Check if item has encoded details
-    const [title, detailsJson] = item.split('\x00')
-    const details = detailsJson ? JSON.parse(detailsJson) : null
-    const isExpanded = expandAll || selectedFunction === item
-
-    return (
-      <div key={item} className="function-item">
-        <li 
-          onClick={() => details ? setSelectedFunction(isExpanded ? null : item) : null}
-          className={isExpanded ? 'selected' : ''}
-        >
-          {title}
-        </li>
-        {isExpanded && details && (
-          <div className="function-description inline show">
-            {details.map((detail, index) => (
-              detail && <div key={index}>{detail}</div>
-            ))}
-          </div>
-        )}
-      </div>
-    )
-  }
+  // The parsers emit rows in display order, so keep it. The row limit resets
+  // whenever a new list (a new file) arrives.
+  const items = [...functions]
+  const visibleCount = visible.list === functions ? visible.count : ROWS_PER_PAGE
+  const hiddenCount = Math.max(0, items.length - visibleCount)
 
   return (
     <div className={`function-list ${isMetadata ? 'metadata-grid' : ''}`}>
       <div className="function-list-header">
         <h2>{isMetadata ? 'METADATA' : title}</h2>
         {!isMetadata && (
-          <button 
-            className="expand-toggle" 
+          <button
+            className="expand-toggle"
             onClick={() => setExpandAll(!expandAll)}
           >
             {expandAll ? 'Collapse All' : 'Expand All'}
@@ -188,30 +161,45 @@ function FunctionList({ functions, title }) {
       </div>
       {isMetadata ? (
         <div className="metadata-grid">
-          {sortMetadataFields([...functions]).map((func, index) => (
-            <FunctionItem 
-              key={index} 
-              func={func} 
+          {sortMetadataFields(items).map((func, index) => (
+            <FunctionItem
+              key={index}
+              func={func}
               isMetadata={true}
             />
           ))}
         </div>
       ) : (
-        <ul>
-          {[...functions].sort().map((func, index) => (
-            <FunctionItem 
-              key={index} 
-              func={func} 
-              isSelected={selectedFunction === func}
-              onSelect={() => setSelectedFunction(func === selectedFunction ? null : func)}
-              isExpanded={expandAll}
-              isMetadata={false}
-            />
-          ))}
-        </ul>
+        <>
+          <ul>
+            {items.slice(0, visibleCount).map((func) => (
+              <FunctionItem
+                key={func}
+                func={func}
+                isSelected={selectedFunction === func}
+                onSelect={() => setSelectedFunction(func === selectedFunction ? null : func)}
+                isExpanded={expandAll}
+                isMetadata={false}
+              />
+            ))}
+          </ul>
+          {hiddenCount > 0 && (
+            <div className="function-list-header">
+              <span>
+                Showing {visibleCount.toLocaleString()} of {items.length.toLocaleString()} rows
+              </span>
+              <button
+                className="expand-toggle"
+                onClick={() => setVisible({ list: functions, count: visibleCount + ROWS_PER_PAGE })}
+              >
+                Show {Math.min(hiddenCount, ROWS_PER_PAGE).toLocaleString()} more
+              </button>
+            </div>
+          )}
+        </>
       )}
     </div>
   )
 }
 
-export default FunctionList 
+export default FunctionList
