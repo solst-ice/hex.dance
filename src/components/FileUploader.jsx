@@ -1,6 +1,9 @@
 /* eslint-disable react/prop-types -- the project does not use prop-types */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import MatrixRain from './MatrixRain'
+
+// How long the landing rain falls after the page loads before it waits for the pointer
+const INTRO_MS = 6000
 
 /**
  * File picker. Without a file it is the large landing drop zone; once a file
@@ -9,6 +12,13 @@ import MatrixRain from './MatrixRain'
  */
 function FileUploader({ onFile, isDragging = false, fileName = null }) {
   const [isHovering, setIsHovering] = useState(false)
+  const [isFocused, setIsFocused] = useState(false)
+  const [intro, setIntro] = useState(true)
+
+  useEffect(() => {
+    const timer = setTimeout(() => setIntro(false), INTRO_MS)
+    return () => clearTimeout(timer)
+  }, [])
 
   const handleChange = (event) => {
     const file = event.target.files[0]
@@ -23,7 +33,7 @@ function FileUploader({ onFile, isDragging = false, fileName = null }) {
         <span className="file-bar-name" title={fileName}>{fileName}</span>
         <label className="file-bar-choose hd-button hd-button--small">
           <input type="file" id="file-input" onChange={handleChange} />
-          {isDragging ? 'Drop to open' : 'Drop or choose another file'}
+          {isDragging ? 'Drop to open' : 'Open file'}
         </label>
       </div>
     )
@@ -34,16 +44,20 @@ function FileUploader({ onFile, isDragging = false, fileName = null }) {
       className={`file-uploader ${isDragging ? 'dragging' : ''} ${isHovering ? 'hovering' : ''}`}
       onMouseEnter={() => setIsHovering(true)}
       onMouseLeave={() => setIsHovering(false)}
+      onFocus={() => setIsFocused(true)}
+      onBlur={() => setIsFocused(false)}
     >
       <MatrixRain
+        active={intro || isHovering || isFocused || isDragging}
         brightness={isDragging ? 0.7 : isHovering ? 0.5 : 0.3}
-        color={isDragging ? 'rgba(255, 54, 171' : 'rgba(0, 255, 255'}
+        dragging={isDragging}
       />
       <div className="upload-area">
-        <input type="file" onChange={handleChange} id="file-input" />
+        <input type="file" onChange={handleChange} id="file-input" aria-describedby="file-input-hint" />
         <label htmlFor="file-input">
-          {isDragging ? 'Drop your file here!' : 'Drag & drop a binary or click to browse'}
+          {isDragging ? 'Drop your file here' : 'Drop a file here or click to browse'}
         </label>
+        <p className="upload-hint" id="file-input-hint">Any file, any size. It is read locally and never uploaded.</p>
       </div>
     </div>
   )

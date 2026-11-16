@@ -3,10 +3,33 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>HEX.DANCE</title>
+    <!-- Nothing may connect to other origins. The script hash allows only the
+         React refresh snippet that the dev server inlines (absent from builds). -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-8ZgGo/nOlaDknQkDUYiedLuFRSGJwIz6LAzsOrNxhmU='; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; media-src 'self' blob: data:; font-src 'self'; connect-src 'self' blob: data:; worker-src 'self' blob:; frame-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'" />
+    <title>HEX.DANCE: file viewer and hex editor in your browser</title>
+    <meta name="description" content="Look inside any file in your browser: hex view and editor with structure, symbols and metadata for executables, archives, images and documents. Files never leave your device." />
+    <meta name="theme-color" content="#060714" />
+    <meta name="color-scheme" content="dark" />
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" sizes="32x32" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="alternate icon" type="image/x-icon" href="/favicon.ico" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="preload" href="/unifont-subset.woff2" as="font" type="font/woff2" crossorigin />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="hex.dance" />
+    <meta property="og:title" content="HEX.DANCE: file viewer and hex editor in your browser" />
+    <meta property="og:description" content="Hex view and editor with structure, symbols and metadata for executables, archives, images and documents. Files never leave your device." />
+    <meta property="og:url" content="https://hex.dance/" />
+    <meta property="og:image" content="https://hex.dance/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="HEX.DANCE title above a neon hex dump" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="HEX.DANCE: file viewer and hex editor in your browser" />
+    <meta name="twitter:description" content="Hex view and editor with structure, symbols and metadata for executables, archives, images and documents. Files never leave your device." />
+    <meta name="twitter:image" content="https://hex.dance/og-image.png" />
+
+    <script src="/theme-init.js"></script>
   </head>
   <body>
     <div id="root"></div>

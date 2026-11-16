@@ -1,0 +1,117 @@
+/*
+ * Themes. Everything colour-related in the shell, the shared primitives and
+ * the hex view reads these variables, so a theme is only a set of overrides.
+ *
+ *   --neon-blue / --neon-pink / --neon-yellow   primary, secondary and tertiary accents
+ *   --dark-bg / --darker-bg                     page and card backgrounds
+ *   --text / --text-muted                       body and secondary text
+ *   --hd-border / --hd-border-strong            resting and emphasised card borders
+ *   --hd-tint / --hd-tint-strong                accent-tinted fills (hover rows, inputs)
+ *   --hd-glow                                   glow for focus, hover and active states only
+ *   --hd-focus                                  focus ring colour
+ *   --hd-link / --hd-link-hover                 links
+ *   --rain-color / --rain-drag-color            matrix rain
+ *
+ * Panels that need a tint of an accent can use
+ * color-mix(in srgb, var(--neon-blue) 10%, transparent) so it follows the theme.
+ */
+
+:root {
+  color-scheme: dark;
+
+  --neon-blue: #0ff;
+  --neon-pink: #ff36ab;
+  --neon-yellow: #f7f71c;
+  --dark-bg: #0a0b16;
+  --darker-bg: #060714;
+
+  --text: #e6e9f2;
+  --text-muted: #a1a9be;
+
+  --grid-color: color-mix(in srgb, var(--neon-blue) 5%, transparent);
+  --glitch-color: color-mix(in srgb, var(--neon-pink) 20%, transparent);
+
+  --hd-border: color-mix(in srgb, var(--neon-blue) 24%, transparent);
+  --hd-border-strong: color-mix(in srgb, var(--neon-blue) 65%, transparent);
+  --hd-tint: color-mix(in srgb, var(--neon-blue) 7%, transparent);
+  --hd-tint-strong: color-mix(in srgb, var(--neon-blue) 14%, transparent);
+  --hd-pink-tint: color-mix(in srgb, var(--neon-pink) 12%, transparent);
+  --hd-glow: 0 0 14px color-mix(in srgb, var(--neon-blue) 28%, transparent);
+  --hd-pink-glow: 0 0 14px color-mix(in srgb, var(--neon-pink) 30%, transparent);
+  --hd-focus: var(--neon-yellow);
+  --hd-link: var(--neon-blue);
+  --hd-link-hover: var(--neon-pink);
+
+  --rain-color: var(--neon-blue);
+  --rain-drag-color: var(--neon-pink);
+
+  /* Hex view chrome follows the accent */
+  --hx-rule: color-mix(in srgb, var(--neon-blue) 25%, transparent);
+  --hx-selection: color-mix(in srgb, var(--neon-blue) 28%, transparent);
+  --hx-cursor-bg: color-mix(in srgb, var(--neon-blue) 35%, transparent);
+  --hx-highlight: var(--neon-pink);
+  --hx-modified: var(--neon-pink);
+  --hx-flash: color-mix(in srgb, var(--neon-yellow) 35%, transparent);
+}
+
+/* Amber terminal */
+:root[data-theme="amber"] {
+  --neon-blue: #ffb000;
+  --neon-pink: #ff7438;
+  --neon-yellow: #ffe3a3;
+  --dark-bg: #110c05;
+  --darker-bg: #0c0803;
+
+  --text: #f4e7d0;
+  --text-muted: #bba27c;
+
+  --hx-muted: #a88b62;
+  --hx-byte-zero: #5e4728;
+  --hx-byte-print: #ffc23d;
+  --hx-byte-ctrl: #ff7a2e;
+  --hx-byte-ff: #ff4a5a;
+  --hx-byte-high: #e8d9c0;
+  --hx-hover-bg: rgba(255, 220, 160, 0.16);
+}
+
+/* Green phosphor */
+:root[data-theme="green"] {
+  --neon-blue: #33ff66;
+  --neon-pink: #c4ff4d;
+  --neon-yellow: #eaffb3;
+  --dark-bg: #050d07;
+  --darker-bg: #020904;
+
+  --text: #d8f7de;
+  --text-muted: #86b391;
+
+  --hx-muted: #6fa07c;
+  --hx-byte-zero: #22532f;
+  --hx-byte-print: #5dff86;
+  --hx-byte-ctrl: #2ad9e0;
+  --hx-byte-ff: #f2e85a;
+  --hx-byte-high: #d9ffe3;
+  --hx-hover-bg: rgba(190, 255, 205, 0.15);
+}
+
+/* Optional CRT scanlines: static, and off when reduced motion is requested */
+:root[data-crt="on"] body::after {
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 2px,
+    rgba(0, 0, 0, 0.22) 2px,
+    rgba(0, 0, 0, 0.22) 3px
+  );
+  content: '';
+  inset: 0;
+  pointer-events: none;
+  position: fixed;
+  z-index: 3000;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-crt="on"] body::after {
+    display: none;
+  }
+}
