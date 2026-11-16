@@ -8,4 +8,8 @@ export default defineConfig({
     port: 5173
   },
   base: '/',
+  // The analysis worker is created with { type: 'module' }
+  worker: {
+    format: 'es'
+  },
 })
