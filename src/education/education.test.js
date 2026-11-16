@@ -11,7 +11,7 @@ test('core formats have their own card and any other format gets a usable one', 
   for (const id of CORE_FORMATS) assert.ok(FORMAT_CARDS[id], id)
   // Formats registered later have no dedicated card yet and fall back to the generic one
   for (const format of FORMATS) {
-    const card = formatCardFor({ formatId: format.id, formatName: format.name })
+    const card = formatCardFor({ formatId: format.id, formatName: format.name, summary: [] })
     assert.ok(card && card.title && card.walk.length > 0, format.id)
   }
 })
