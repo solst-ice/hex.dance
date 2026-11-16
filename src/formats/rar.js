@@ -1,4 +1,5 @@
-import { ByteReader, capFields, crc32, field, fitted, formatNumber, latin1, plural, printable, readULEB, unixDate, utf8 } from './reader.js'
+import { ByteReader, capFields, field, fitted, formatNumber, latin1, plural, printable, readULEB, unixDate, utf8 } from './reader.js'
+import { crc32 } from '../lib/crc32.js'
 import { formatBytes, item } from './shared.js'
 
 const RAR4 = [0x52, 0x61, 0x72, 0x21, 0x1A, 0x07, 0x00]

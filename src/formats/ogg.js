@@ -1,28 +1,21 @@
 import { commentSummary, readVorbisComments } from './flac.js'
 import { ByteReader, capFields, field, fitted, formatDuration, formatNumber, latin1, plural, printable } from './reader.js'
 import { formatBytes, item } from './shared.js'
+import { oggCrc32 } from '../lib/crc32.js'
 
 const MAX_PAGES = 200000
 const MAX_PAGE_FIELDS = 64
 const MAX_STREAMS = 32
 
-let crcTable = null
-// Ogg uses the non-reflected CRC-32 (polynomial 0x04C11DB7, no final xor)
+const ZERO_CRC = new Uint8Array(4)
+
+// Ogg's page checksum over [start, end), with the 4 checksum bytes at `crcAt` read as zero
 function oggCrc(bytes, start, end, crcAt) {
-  if (!crcTable) {
-    crcTable = new Uint32Array(256)
-    for (let i = 0; i < 256; i++) {
-      let c = i << 24
-      for (let k = 0; k < 8; k++) c = c & 0x80000000 ? (c << 1) ^ 0x04C11DB7 : c << 1
-      crcTable[i] = c >>> 0
-    }
-  }
-  let crc = 0
-  for (let i = start; i < end; i++) {
-    const byte = i >= crcAt && i < crcAt + 4 ? 0 : bytes[i]
-    crc = (crcTable[((crc >>> 24) ^ byte) & 0xFF] ^ (crc << 8)) >>> 0
-  }
-  return crc
+  const from = Math.min(Math.max(crcAt, start), end)
+  const to = Math.min(Math.max(crcAt + 4, start), end)
+  let crc = oggCrc32(bytes, start, from)
+  crc = oggCrc32(ZERO_CRC, 0, to - from, crc)
+  return oggCrc32(bytes, to, end, crc)
 }
 
 // Identification header of a logical stream, from its first packet

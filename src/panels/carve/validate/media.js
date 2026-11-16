@@ -1,4 +1,5 @@
-import { crc32ogg, isFourCC, latin1, u16be, u16le, u32be, u32le, u64be } from '../bytes.js'
+import { isFourCC, latin1, u16be, u16le, u32be, u32le, u64be } from '../bytes.js'
+import { oggCrc32 } from '../../../lib/crc32.js'
 import { Reader } from '../source.js'
 import { found, plural, hex } from './common.js'
 
@@ -57,7 +58,7 @@ export async function ogg(ctx) {
       const copy = r.buf.slice(j, j + length)
       const stored = u32le(copy, 22)
       copy.fill(0, 22, 26)
-      if (crc32ogg(copy, 0, length) !== stored) break
+      if (oggCrc32(copy, 0, length) !== stored) break
       if (pages === 0) {
         const p = latin1(copy, 27 + segments, 8)
         codec = p.startsWith('\x01vorbis') ? 'Vorbis' : p.startsWith('OpusHead') ? 'Opus' : p.startsWith('\x80theora') ? 'Theora' : p.startsWith('\x7FFLAC') ? 'FLAC' : p.startsWith('Speex') ? 'Speex' : ''

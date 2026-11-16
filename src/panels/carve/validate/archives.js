@@ -1,4 +1,5 @@
-import { allZero, crc32, fromLatin1, hexField, latin1, octal, u16le, u32be, u32le, u64le } from '../bytes.js'
+import { allZero, fromLatin1, hexField, latin1, octal, u16le, u32be, u32le, u64le } from '../bytes.js'
+import { crc32 } from '../../../lib/crc32.js'
 import { inflateCheck } from '../inflate.js'
 import { Reader, findForward } from '../source.js'
 import { found, plural, sizeText, hex } from './common.js'

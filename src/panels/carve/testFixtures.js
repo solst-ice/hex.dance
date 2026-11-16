@@ -1,7 +1,8 @@
 // Small, valid instances of the formats the scan knows, built in code for
 // the tests. Only the structure the validators look at is filled in.
 
-import { adler32, crc32, crc32ogg, fromLatin1 } from './bytes.js'
+import { adler32, fromLatin1 } from './bytes.js'
+import { crc32, oggCrc32 } from '../../lib/crc32.js'
 
 export function concat(...parts) {
   const total = parts.reduce((n, p) => n + p.length, 0)
@@ -375,7 +376,7 @@ export function ogg() {
   const page = (flags, seq, packet) => {
     const header = concat(bytes('OggS', 0, flags, ...le64(0), ...le32(1234), ...le32(seq), ...le32(0), 1, packet.length))
     const all = concat(header, packet)
-    all.set(le32(crc32ogg(all, 0, all.length)), 22)
+    all.set(le32(oggCrc32(all, 0, all.length)), 22)
     return all
   }
   return concat(page(2, 0, fromLatin1('\x01vorbis-header-data')), page(4, 1, fromLatin1('audio')))

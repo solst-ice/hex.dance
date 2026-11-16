@@ -1,4 +1,5 @@
-import { ByteReader, capFields, crc32, field, fitted, formatNumber, guid, hex32, plural, printable, utf16 } from './reader.js'
+import { ByteReader, capFields, field, fitted, formatNumber, guid, hex32, plural, printable, utf16 } from './reader.js'
+import { crc32 } from '../lib/crc32.js'
 import { formatBytes, item } from './shared.js'
 
 const MAX_GPT_ENTRIES = 256

@@ -8,6 +8,8 @@
  * `digest()`.
  */
 
+import { Crc32 } from '../../lib/crc32.js'
+
 function toHex(words, littleEndian) {
   let out = ''
   for (const word of words) {
@@ -299,53 +301,6 @@ export class Sha512 extends BlockHash {
   }
 
   words() { return this.h }
-}
-
-// Slicing-by-8 tables for the reflected IEEE polynomial (zlib, PNG, zip)
-const CRC_TABLE = (() => {
-  const t = new Int32Array(256 * 8)
-  for (let n = 0; n < 256; n++) {
-    let c = n
-    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1
-    t[n] = c
-  }
-  for (let n = 0; n < 256; n++) {
-    let c = t[n]
-    for (let k = 1; k < 8; k++) {
-      c = t[c & 0xff] ^ (c >>> 8)
-      t[k * 256 + n] = c
-    }
-  }
-  return t
-})()
-
-export class Crc32 {
-  constructor() {
-    this.crc = -1
-  }
-
-  update(d, start = 0, end = d.length) {
-    const t = CRC_TABLE
-    let c = this.crc
-    let i = start
-    for (; i + 8 <= end; i += 8) {
-      c ^= d[i] | (d[i + 1] << 8) | (d[i + 2] << 16) | (d[i + 3] << 24)
-      c = t[1792 + (c & 0xff)] ^ t[1536 + ((c >>> 8) & 0xff)] ^ t[1280 + ((c >>> 16) & 0xff)] ^ t[1024 + (c >>> 24)] ^
-        t[768 + d[i + 4]] ^ t[512 + d[i + 5]] ^ t[256 + d[i + 6]] ^ t[d[i + 7]]
-    }
-    for (; i < end; i++) c = t[(c ^ d[i]) & 0xff] ^ (c >>> 8)
-    this.crc = c
-    return this
-  }
-
-  /** Unsigned CRC-32, as `zlib.crc32` returns it. */
-  value() {
-    return (this.crc ^ -1) >>> 0
-  }
-
-  digest() {
-    return this.value().toString(16).padStart(8, '0')
-  }
 }
 
 export const ALGORITHMS = [

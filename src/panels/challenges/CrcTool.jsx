@@ -1,7 +1,8 @@
 /* eslint-disable react/prop-types -- the project does not use prop-types */
 import { useId, useState } from 'react'
 import { useSelection } from '../../state/hooks.js'
-import { crc32, formatHexBytes, hex8, parseHexBytes, u32Bytes } from './bytes.js'
+import { formatHexBytes, hex8, parseHexBytes, u32Bytes } from './bytes.js'
+import { crc32 } from '../../lib/crc32.js'
 
 // Only for small challenge files; a CRC over a huge selection would block the page
 const MAX_SELECTION = 1 << 20

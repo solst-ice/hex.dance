@@ -1,6 +1,6 @@
 // Low-level helpers for the format parsers added alongside `shared.js`:
-// bounds-safe integer reads, field builders that keep trees tidy, CRCs and
-// small formatting helpers. Everything here is pure and works on any length.
+// bounds-safe integer reads, field builders that keep trees tidy and small
+// formatting helpers. Everything here is pure and works on any length.
 
 import { dataView } from './shared.js'
 
@@ -179,24 +179,6 @@ export function utf16(bytes, offset, length, little) {
 /** Trims trailing NULs and spaces from a fixed-width text field. */
 export function trimField(text) {
   return text.replace(/[\0 ]+$/, '')
-}
-
-let crcTable = null
-
-/** CRC-32 (IEEE 802.3, reflected) as used by gzip, PNG, ZIP, xz and 7z. */
-export function crc32(bytes, start = 0, end = bytes.length) {
-  if (!crcTable) {
-    crcTable = new Uint32Array(256)
-    for (let n = 0; n < 256; n++) {
-      let c = n
-      for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1
-      crcTable[n] = c >>> 0
-    }
-  }
-  let crc = 0xFFFFFFFF
-  const stop = Math.min(end, bytes.length)
-  for (let i = Math.max(0, start); i < stop; i++) crc = crcTable[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8)
-  return (crc ^ 0xFFFFFFFF) >>> 0
 }
 
 export function hex32(value) {

@@ -1,4 +1,5 @@
-import { crc32, u16be, u16le, u32be, u32le, latin1 } from '../bytes.js'
+import { u16be, u16le, u32be, u32le, latin1 } from '../bytes.js'
+import { crc32 } from '../../../lib/crc32.js'
 import { Reader } from '../source.js'
 import { found, plural, hex } from './common.js'
 

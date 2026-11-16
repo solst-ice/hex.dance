@@ -2,7 +2,8 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { deflateRawSync, deflateSync } from 'node:zlib'
 import { inflateCheck, buildTable } from './inflate.js'
-import { adler32, crc32 } from './bytes.js'
+import { adler32 } from './bytes.js'
+import { crc32 } from '../../lib/crc32.js'
 import { concat, noise } from './testFixtures.js'
 
 const text = new TextEncoder().encode('The quick brown fox jumps over the lazy dog. '.repeat(400))

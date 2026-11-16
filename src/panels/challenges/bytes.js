@@ -1,28 +1,9 @@
 // Small byte helpers for the challenge checkers. Every reader bounds-checks
 // and returns null instead of throwing, because the bytes can be anything.
 
-const CRC_TABLE = (() => {
-  const table = new Uint32Array(256)
-  for (let n = 0; n < 256; n++) {
-    let c = n
-    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1
-    table[n] = c >>> 0
-  }
-  return table
-})()
+import { Crc32 } from '../../lib/crc32.js'
 
-/**
- * CRC-32 (the one PNG and ZIP use) of `bytes[start, end)`.
- * @param {Uint8Array} bytes
- */
-export function crc32(bytes, start = 0, end = bytes ? bytes.length : 0) {
-  let c = 0xffffffff
-  if (bytes) {
-    const stop = Math.min(end, bytes.length)
-    for (let i = Math.max(0, start); i < stop; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xff] ^ (c >>> 8)
-  }
-  return (c ^ 0xffffffff) >>> 0
-}
+const ZEROS = new Uint8Array(4096)
 
 /**
  * CRC-32 of the whole buffer with the given ranges read as zero, so a checker
@@ -31,14 +12,21 @@ export function crc32(bytes, start = 0, end = bytes ? bytes.length : 0) {
  * @param {Array<[number, number]>} ranges   [start, end) pairs
  */
 export function crc32Masked(bytes, ranges) {
-  let c = 0xffffffff
   const length = bytes ? bytes.length : 0
-  for (let i = 0; i < length; i++) {
-    const masked = ranges.some(([start, end]) => i >= start && i < end)
-    const value = masked ? 0 : bytes[i]
-    c = CRC_TABLE[(c ^ value) & 0xff] ^ (c >>> 8)
+  const masked = ranges
+    .map(([start, end]) => [Math.max(0, start), Math.min(length, end)])
+    .filter(([start, end]) => start < end)
+    .sort((a, b) => a[0] - b[0])
+  const crc = new Crc32()
+  let pos = 0
+  for (const [start, end] of masked) {
+    if (end <= pos) continue
+    if (start > pos) crc.update(bytes, pos, start)
+    for (let at = Math.max(start, pos); at < end; at += ZEROS.length) crc.update(ZEROS, 0, Math.min(ZEROS.length, end - at))
+    pos = end
   }
-  return (c ^ 0xffffffff) >>> 0
+  if (pos < length) crc.update(bytes, pos, length)
+  return crc.value()
 }
 
 export function inRange(bytes, offset, length) {
