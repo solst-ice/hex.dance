@@ -1,0 +1,247 @@
+:where(:root) {
+  --search-chip-border: rgba(0, 255, 255, 0.35);
+  --search-chip-on-bg: rgba(0, 255, 255, 0.14);
+  --search-row-hover: rgba(0, 255, 255, 0.08);
+  --search-row-current: rgba(255, 54, 171, 0.16);
+  --search-muted: rgba(228, 228, 228, 0.6);
+  --search-text: #e4e4e4;
+}
+
+.search {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.search-modes {
+  display: inline-flex;
+  align-self: flex-start;
+  border: 1px solid var(--neon-blue);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.search-mode {
+  background: none;
+  border: none;
+  color: var(--search-muted);
+  cursor: pointer;
+  font-family: 'Unifont', monospace;
+  letter-spacing: 1px;
+  padding: 5px 14px;
+  text-transform: uppercase;
+}
+
+.search-mode + .search-mode {
+  border-left: 1px solid var(--search-chip-border);
+}
+
+.search-mode.is-on {
+  background: var(--search-chip-on-bg);
+  color: var(--neon-blue);
+}
+
+.search-bar {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+
+.search-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+}
+
+.search-input[aria-invalid="true"] {
+  border-color: var(--neon-pink);
+}
+
+.search-go {
+  flex: none;
+}
+
+.search-hint {
+  color: var(--search-muted);
+  font-family: 'Unifont', monospace;
+  font-size: 0.85em;
+  margin: -4px 0 0;
+  min-height: 1.3em;
+  overflow-wrap: anywhere;
+}
+
+.search-hint.is-error {
+  color: var(--neon-pink);
+}
+
+.search-options {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.search-options-gap {
+  width: 8px;
+}
+
+.search-chip {
+  background: none;
+  border: 1px solid var(--search-chip-border);
+  border-radius: 12px;
+  color: var(--search-muted);
+  cursor: pointer;
+  font-family: 'Unifont', monospace;
+  font-size: 0.85em;
+  padding: 2px 10px;
+}
+
+.search-chip.is-on {
+  background: var(--search-chip-on-bg);
+  border-color: var(--neon-blue);
+  color: var(--neon-blue);
+}
+
+.search-check {
+  align-items: center;
+  color: var(--search-text);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 0.9em;
+  gap: 6px;
+  margin-left: 6px;
+}
+
+.search-check input {
+  accent-color: var(--neon-pink);
+}
+
+.search-mode:focus-visible,
+.search-chip:focus-visible,
+.search-row:focus-visible,
+.search-check input:focus-visible {
+  outline: 1px dashed var(--neon-pink);
+  outline-offset: 1px;
+}
+
+.search-results {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.search-summary {
+  align-items: center;
+  color: var(--search-text);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+
+.search-summary strong {
+  color: var(--neon-blue);
+  font-weight: normal;
+}
+
+.search-progress {
+  accent-color: var(--neon-pink);
+  height: 6px;
+  width: 100px;
+}
+
+.search-stale,
+.search-notice,
+.search-help {
+  font-size: 0.9em;
+  margin: 0;
+}
+
+.search-nav {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.search-pos {
+  font-size: 0.9em;
+}
+
+.search-list {
+  border: 1px solid var(--search-chip-border);
+  border-radius: 4px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  position: relative;
+}
+
+.search-list-spacer {
+  position: relative;
+}
+
+.search-row {
+  align-items: center;
+  background: none;
+  border: none;
+  color: var(--search-text);
+  cursor: pointer;
+  display: flex;
+  font-family: 'Unifont', monospace;
+  font-size: 0.85em;
+  gap: 12px;
+  height: 24px;
+  left: 0;
+  padding: 0 8px;
+  position: absolute;
+  right: 0;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.search-row:hover {
+  background: var(--search-row-hover);
+}
+
+.search-row.is-current {
+  background: var(--search-row-current);
+}
+
+.search-row-offset {
+  color: var(--neon-pink);
+  flex: none;
+}
+
+.search-row-kind {
+  color: var(--neon-yellow);
+  flex: none;
+  min-width: 6.5em;
+}
+
+.search-row-hex {
+  color: var(--neon-blue);
+  flex: none;
+}
+
+.search-row-text {
+  color: var(--search-muted);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 600px) {
+  .search-row-text {
+    display: none;
+  }
+}
+
+.search-sr {
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
