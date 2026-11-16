@@ -1,9 +1,22 @@
-/* Import Unifont */
+/* Import Unifont (regenerate with scripts/subset-font.sh) */
+/* Subset with the characters the UI itself uses */
 @font-face {
   font-family: 'Unifont';
-  src: url('/unifont.woff') format('woff');
+  src: url('/unifont-subset.woff2') format('woff2');
   font-weight: normal;
   font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-017F, U+2000-206F, U+20A0-20CF, U+2100-214F, U+2190-21FF, U+22A0, U+2500-25FF, U+26F6, U+FFFD;
+}
+
+/* Full font, only fetched for other characters (e.g. in file names) */
+@font-face {
+  font-family: 'Unifont';
+  src: url('/unifont.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0180-1FFF, U+2070-209F, U+20D0-20FF, U+2150-218F, U+2200-229F, U+22A1-24FF, U+2600-26F5, U+26F7-FFFC, U+FFFE-10FFFF;
 }
 
 /* Cyberpunk theme colors */
