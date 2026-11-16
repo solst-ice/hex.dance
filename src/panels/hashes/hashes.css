@@ -1,0 +1,75 @@
+.hashes-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.hashes-panel .hd-panel-header {
+  margin-bottom: -8px;
+}
+
+.hashes-panel .hd-stack {
+  gap: 10px;
+}
+
+.hashes-panel .hd-section-title {
+  margin: 0;
+}
+
+.hashes-heading {
+  gap: 12px;
+}
+
+.hashes-note {
+  margin: 0;
+}
+
+.hashes-table th.hashes-name {
+  color: var(--neon-pink);
+  border-bottom: 1px solid rgba(0, 255, 255, 0.08);
+  padding-left: 0;
+  text-transform: none;
+  white-space: nowrap;
+  width: 5.5em;
+}
+
+.hashes-table td.hashes-value {
+  color: var(--neon-blue);
+  white-space: normal;
+  word-break: break-all;
+}
+
+.hashes-table td.hashes-copy {
+  padding-right: 0;
+  text-align: right;
+  width: 1%;
+}
+
+.hashes-dim .hashes-value {
+  opacity: 0.55;
+}
+
+.hashes-stale {
+  color: var(--neon-yellow);
+}
+
+.hashes-progress progress {
+  accent-color: var(--neon-blue);
+  flex: 1 1 160px;
+  height: 10px;
+  max-width: 320px;
+}
+
+.hashes-match {
+  color: var(--neon-blue);
+}
+
+.hashes-compare .hd-input {
+  width: 100%;
+}
+
+@media (max-width: 480px) {
+  .hashes-table th.hashes-name {
+    width: 4.5em;
+  }
+}
