@@ -1,38 +1,8 @@
 /* eslint-disable react/prop-types -- the project does not use prop-types */
 import { useEffect, useId, useRef, useState } from 'react'
 import { COPY_FORMATS, CLIPBOARD_LIMIT, formatSize, rangeFileName } from './copyAs.js'
-
-async function writeClipboard(text) {
-  try {
-    await navigator.clipboard.writeText(text)
-    return true
-  } catch {
-    // Fallback for browsers or contexts without the async clipboard API
-    const area = document.createElement('textarea')
-    area.value = text
-    area.setAttribute('readonly', '')
-    area.style.position = 'fixed'
-    area.style.opacity = '0'
-    document.body.appendChild(area)
-    area.select()
-    let ok = false
-    try { ok = document.execCommand('copy') } catch { ok = false }
-    area.remove()
-    return ok
-  }
-}
-
-function saveRange(bytes, range, fileName) {
-  const blob = new Blob([bytes.subarray(range.start, range.end)], { type: 'application/octet-stream' })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = rangeFileName(fileName, range.start, range.end)
-  document.body.appendChild(link)
-  link.click()
-  link.remove()
-  setTimeout(() => URL.revokeObjectURL(url), 10000)
-}
+import { copyText } from '../../lib/clipboard.js'
+import { downloadBytes } from '../../lib/download.js'
 
 /**
  * "Copy as" button and menu for a byte range.
@@ -73,7 +43,7 @@ export default function CopyMenu({ bytes, range, fileName, onStatus }) {
       return
     }
     const text = format.format(bytes.subarray(range.start, range.end))
-    const ok = await writeClipboard(text)
+    const ok = await copyText(text)
     onStatus(ok
       ? `Copied ${formatSize(length)} as ${format.label}`
       : 'The browser did not allow copying to the clipboard')
@@ -82,7 +52,7 @@ export default function CopyMenu({ bytes, range, fileName, onStatus }) {
   const save = () => {
     close()
     if (!range) return
-    saveRange(bytes, range, fileName)
+    downloadBytes(bytes.subarray(range.start, range.end), rangeFileName(fileName, range.start, range.end))
     onStatus(`Saved ${formatSize(length)} as ${rangeFileName(fileName, range.start, range.end)}`)
   }
 

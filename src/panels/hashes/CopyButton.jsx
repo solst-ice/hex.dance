@@ -1,6 +1,6 @@
 /* eslint-disable react/prop-types -- the project does not use prop-types */
 import { useEffect, useRef, useState } from 'react'
-import { copyText } from './clipboard.js'
+import { copyText } from '../../lib/clipboard.js'
 import './copy.css'
 
 /**

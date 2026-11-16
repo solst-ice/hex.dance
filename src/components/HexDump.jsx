@@ -15,6 +15,8 @@ import {
 } from './hex/selection'
 import { buildHighlightIndex, segmentsIn } from './hex/highlights'
 import { createHoverStore } from './hex/hoverStore'
+import { copyText } from '../lib/clipboard.js'
+import { downloadBytes } from '../lib/download.js'
 import './hex/hex.css'
 
 // Rows have a fixed height (hex.css reads it from --hx-row-h)
@@ -48,25 +50,6 @@ function cellInfo(el, body) {
   return {
     offset: Number(cell.dataset.offset),
     column: cell.parentElement.classList.contains('hx-text') ? 'text' : 'hex'
-  }
-}
-
-async function writeClipboard(text) {
-  try {
-    await navigator.clipboard.writeText(text)
-    return true
-  } catch {
-    const area = document.createElement('textarea')
-    area.value = text
-    area.setAttribute('readonly', '')
-    area.style.position = 'fixed'
-    area.style.opacity = '0'
-    document.body.appendChild(area)
-    area.select()
-    let ok = false
-    try { ok = document.execCommand('copy') } catch { ok = false }
-    area.remove()
-    return ok
   }
 }
 
@@ -372,17 +355,7 @@ function HexView({
     }
   }
 
-  const download = () => {
-    const blob = new Blob([bytes], { type: 'application/octet-stream' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = downloadName(fileName)
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-    setTimeout(() => URL.revokeObjectURL(url), 0)
-  }
+  const download = () => downloadBytes(bytes, downloadName(fileName))
 
   // ---- copy, go to --------------------------------------------------------
 
@@ -397,7 +370,7 @@ function HexView({
     }
     const asText = L.column === 'text'
     const text = asText ? asciiText(bytes, range.start, range.end) : hexText(bytes, range.start, range.end)
-    writeClipboard(text).then(ok => {
+    copyText(text).then(ok => {
       showNotice(ok
         ? `Copied ${length} ${length === 1 ? 'byte' : 'bytes'} as ${asText ? 'text' : 'hex'}`
         : 'Copying was blocked by the browser')

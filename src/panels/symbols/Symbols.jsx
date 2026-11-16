@@ -1,6 +1,7 @@
 /* eslint-disable react/prop-types -- the project does not use prop-types */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFile, useSelection } from '../../state/hooks.js'
+import { copyText } from '../../lib/clipboard.js'
 import SymbolTable from './SymbolTable.jsx'
 import { buildModel, capabilitySummary, describeType, filterRows, QUICK_FILTERS, TYPE_LETTERS } from './model.js'
 import './symbols.css'
@@ -20,29 +21,6 @@ function SelectionBridge({ apiRef }) {
   const { jumpTo } = useSelection()
   apiRef.current = jumpTo
   return null
-}
-
-async function copyText(text) {
-  try {
-    await navigator.clipboard.writeText(text)
-    return true
-  } catch {
-    const area = document.createElement('textarea')
-    area.value = text
-    area.setAttribute('readonly', '')
-    area.style.position = 'fixed'
-    area.style.opacity = '0'
-    document.body.appendChild(area)
-    area.select()
-    let ok = false
-    try {
-      ok = document.execCommand('copy')
-    } catch {
-      ok = false
-    }
-    area.remove()
-    return ok
-  }
 }
 
 const hexOffset = value => `0x${value.toString(16).toUpperCase()}`
