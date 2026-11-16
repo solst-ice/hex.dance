@@ -1,7 +1,8 @@
 /* eslint-disable react/prop-types -- the project does not use prop-types */
 import { useEffect, useRef, useState } from 'react'
 import { byteClass, describeByte } from '../../components/hex/bytes.js'
-import { prepareCanvas, themeColors, useBox, useColorSchemeVersion } from './canvas.js'
+import { themeColors, useThemeVersion } from '../../lib/canvasColors.js'
+import { prepareCanvas, useBox } from './canvas.js'
 
 const HEIGHT = 140
 const PAD_TOP = 6
@@ -59,7 +60,7 @@ function Histogram({ histogram, total }) {
   const wrapRef = useRef(null)
   const canvasRef = useRef(null)
   const box = useBox(wrapRef)
-  const scheme = useColorSchemeVersion()
+  const scheme = useThemeVersion()
   const [log, setLog] = useState(false)
   const [cursor, setCursor] = useState(-1)
 

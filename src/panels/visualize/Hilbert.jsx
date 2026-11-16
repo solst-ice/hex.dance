@@ -2,8 +2,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSelection } from '../../state/hooks.js'
 import { formatOffset } from '../../components/hex/bytes.js'
-import { hilbertLayout, hilbertPixels } from './stats.js'
-import { cssColor, fitCanvas, rgbString } from './colors.js'
+import { cellColors, hilbertLayout, hilbertPixels } from './stats.js'
+import { cssColor, fitCanvas, rgbString, useThemeVersion } from '../../lib/canvasColors.js'
 import useWidth from './useWidth.js'
 
 const MAX_SIZE = 480
@@ -17,7 +17,7 @@ const CLASS_LEGEND = [
   ['high', '0x80–0xFE']
 ]
 
-export default function Hilbert({ size, pass, viewport }) {
+export default function Hilbert({ size, pass, colors, viewport }) {
   const { jumpTo } = useSelection()
   const boxRef = useRef(null)
   const pixelsRef = useRef(null)
@@ -25,6 +25,7 @@ export default function Hilbert({ size, pass, viewport }) {
   const width = useWidth(boxRef)
   const view = Math.max(0, Math.min(MAX_SIZE, width))
   const [hover, setHover] = useState(-1)
+  const themeVersion = useThemeVersion()
 
   const layout = useMemo(() => hilbertLayout(size), [size])
   const { side, cellBytes } = layout
@@ -35,9 +36,10 @@ export default function Hilbert({ size, pass, viewport }) {
     return inverse
   }, [pixelOf])
 
+  const cells = useMemo(() => (pass.classCounts ? cellColors(pass.classCounts, colors) : null), [pass.classCounts, colors])
+
   useEffect(() => {
     const canvas = pixelsRef.current
-    const cells = pass.cells
     if (!canvas || !cells || cells.length !== side * side * 4) return
     canvas.width = side
     canvas.height = side
@@ -53,7 +55,7 @@ export default function Hilbert({ size, pass, viewport }) {
       data[p + 3] = cells[c + 3]
     }
     ctx.putImageData(image, 0, 0)
-  }, [pass.cells, side, pixelOf])
+  }, [cells, side, pixelOf])
 
   useEffect(() => {
     const canvas = overlayRef.current
@@ -87,7 +89,7 @@ export default function Hilbert({ size, pass, viewport }) {
       }
     }
     if (hover >= 0) outline(hover, rgbString(cssColor('--viz-hover', [255, 255, 255])))
-  }, [view, side, pixelOf, cellBytes, viewport, hover])
+  }, [view, side, pixelOf, cellBytes, viewport, hover, themeVersion])
 
   const cellFromEvent = (event) => {
     const rect = event.currentTarget.getBoundingClientRect()

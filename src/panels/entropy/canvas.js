@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useState } from 'react'
+import { useLayoutEffect, useState } from 'react'
 
 /**
  * CSS size and device pixel ratio of an element, kept up to date on
@@ -54,27 +54,6 @@ export function prepareCanvas(canvas, box) {
   ctx.setTransform(box.dpr, 0, 0, box.dpr, 0, 0)
   ctx.clearRect(0, 0, box.width, box.height)
   return ctx
-}
-
-/** Reads theme colours from CSS custom properties on the element. */
-export function themeColors(element, names) {
-  const style = getComputedStyle(element)
-  const out = {}
-  for (const [key, name] of Object.entries(names)) out[key] = style.getPropertyValue(name).trim() || '#888'
-  return out
-}
-
-/** Bumps when the colour scheme changes, so canvases redraw with new colours. */
-export function useColorSchemeVersion() {
-  const [version, setVersion] = useState(0)
-  useEffect(() => {
-    const media = window.matchMedia?.('(prefers-color-scheme: dark)')
-    if (!media) return undefined
-    const onChange = () => setVersion(v => v + 1)
-    media.addEventListener('change', onChange)
-    return () => media.removeEventListener('change', onChange)
-  }, [])
-  return version
 }
 
 export const hexOffset = (n) => '0x' + Math.max(0, Math.floor(n)).toString(16).toUpperCase()

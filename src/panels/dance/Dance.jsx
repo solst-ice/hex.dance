@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFile, useHighlightLayer, useSelection } from '../../state/hooks.js'
 import { formatOffset } from '../../components/hex/bytes.js'
-import { cssColor, fitCanvas, rgbString } from '../visualize/colors.js'
+import { cssColor, fitCanvas, onThemeChange, rgbString } from '../../lib/canvasColors.js'
 import BytePlayer from './player.js'
 import { DEFAULT_RATE, DEFAULT_VOLUME, SAMPLE_RATES, playRange, rms, smoothLevel } from './pcm.js'
 import './dance.css'
@@ -60,6 +60,16 @@ function drawMeter(canvas, samples, level, colors) {
   ctx.fillRect(0, h - barH, Math.round(w * Math.min(1, level)), barH)
 }
 
+function meterColors() {
+  const wave = cssColor('--dance-wave', [0, 255, 255])
+  return {
+    wave: rgbString(wave),
+    level: rgbString(cssColor('--dance-glow', [255, 54, 171])),
+    track: rgbString(wave, 0.12),
+    guide: rgbString(wave, 0.2)
+  }
+}
+
 function clearRoot() {
   const root = document.documentElement
   root.classList.remove(ROOT_CLASS)
@@ -78,6 +88,7 @@ function Dance() {
   const [message, setMessage] = useState(null)
   const playerRef = useRef(null)
   const meterRef = useRef(null)
+  const meterIdleRef = useRef(false)
   const live = useRef(null)
   live.current = { follow, range, bytes }
 
@@ -162,12 +173,8 @@ function Dance() {
     const root = document.documentElement
     root.classList.add(ROOT_CLASS)
     const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)')
-    const colors = {
-      wave: rgbString(cssColor('--dance-wave', [0, 255, 255])),
-      level: rgbString(cssColor('--dance-glow', [255, 54, 171])),
-      track: rgbString(cssColor('--dance-wave', [0, 255, 255]), 0.12),
-      guide: rgbString(cssColor('--dance-wave', [0, 255, 255]), 0.2)
-    }
+    let colors = meterColors()
+    const stopThemeWatch = onThemeChange(() => { colors = meterColors() })
     let samples = null
     let raf = 0
     let last = performance.now()
@@ -219,13 +226,20 @@ function Dance() {
     const meter = meterRef.current
     return () => {
       cancelAnimationFrame(raf)
+      stopThemeWatch()
       drawMeter(meter, null, 0, colors)
+      meterIdleRef.current = true
     }
   }, [status, hexApiRef])
 
   useEffect(() => {
     if (status === 'stopped') clearRoot()
   }, [status])
+
+  // The resting meter left after playback follows the theme too
+  useEffect(() => onThemeChange(() => {
+    if (meterIdleRef.current && status === 'stopped') drawMeter(meterRef.current, null, 0, meterColors())
+  }), [status])
 
   const highlights = useMemo(() => {
     if (!playhead || status === 'stopped') return null

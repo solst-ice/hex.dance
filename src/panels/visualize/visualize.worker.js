@@ -1,26 +1,27 @@
-import { cellColors, createAccumulator } from './stats.js'
+import { createAccumulator } from './stats.js'
 import { createMagicScanner } from './magic.js'
 
 // Messages in:
-//   { type: 'start', size, colors }        colors: one RGB triple per byte class
+//   { type: 'start', size }
 //   { type: 'chunk', offset, contiguous, buffer }
 //   { type: 'end' }
 // Messages out:
 //   { type: 'ack' }                        after each chunk, so the sender can send the next
-//   { type: 'progress', bytesSeen, digraph, cells }
-//   { type: 'done', bytesSeen, digraph, cells, magic }
+//   { type: 'progress', bytesSeen, digraph, classCounts }
+//   { type: 'done', bytesSeen, digraph, classCounts, magic }
+// classCounts holds the byte-class counts per Hilbert cell; the page colours
+// them, so a theme change does not need another pass over the file.
 
 const PROGRESS_MS = 250
 
 let acc = null
 let scanner = null
-let colors = null
 let lastProgress = 0
 
 function snapshot(type, extra) {
   const digraph = acc.digraph.slice()
-  const cells = cellColors(acc.classCounts, colors)
-  self.postMessage({ type, bytesSeen: acc.bytesSeen, digraph, cells, ...extra }, [digraph.buffer, cells.buffer])
+  const classCounts = acc.classCounts.slice()
+  self.postMessage({ type, bytesSeen: acc.bytesSeen, digraph, classCounts, ...extra }, [digraph.buffer, classCounts.buffer])
 }
 
 self.onmessage = (event) => {
@@ -28,7 +29,6 @@ self.onmessage = (event) => {
   if (message.type === 'start') {
     acc = createAccumulator(message.size)
     scanner = createMagicScanner()
-    colors = message.colors
     // the first chunk reports at once, so something is drawn straight away
     lastProgress = performance.now() - PROGRESS_MS
   } else if (message.type === 'chunk' && acc) {

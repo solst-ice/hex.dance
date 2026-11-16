@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { HEX } from '../../components/hex/bytes.js'
 import { digraphMax } from './stats.js'
-import { cssColor, fitCanvas, rampTable, rgbString } from './colors.js'
+import { cssColor, fitCanvas, rampTable, rgbString, useThemeVersion } from '../../lib/canvasColors.js'
 import useWidth from './useWidth.js'
 
 const MAX_SIZE = 480
@@ -18,6 +18,7 @@ export default function Digraph({ pass }) {
   const width = useWidth(boxRef)
   const side = Math.max(0, Math.min(MAX_SIZE, width))
   const [hover, setHover] = useState(null)
+  const themeVersion = useThemeVersion()
   const { digraph } = pass
 
   useEffect(() => {
@@ -49,7 +50,7 @@ export default function Digraph({ pass }) {
       }
     }
     ctx.putImageData(image, 0, 0)
-  }, [digraph])
+  }, [digraph, themeVersion])
 
   useEffect(() => {
     const canvas = overlayRef.current
@@ -68,7 +69,7 @@ export default function Digraph({ pass }) {
       ctx.strokeStyle = rgbString(cssColor('--viz-hover', [255, 255, 255]))
       ctx.strokeRect(Math.floor(hover.x * k) - 1, Math.floor(hover.y * k) - 1, Math.ceil(k) + 2, Math.ceil(k) + 2)
     }
-  }, [side, hover])
+  }, [side, hover, themeVersion])
 
   const onPointerMove = (event) => {
     const rect = event.currentTarget.getBoundingClientRect()

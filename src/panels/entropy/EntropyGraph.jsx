@@ -1,6 +1,7 @@
 /* eslint-disable react/prop-types -- the project does not use prop-types */
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { hexOffset, prepareCanvas, themeColors, useBox, useColorSchemeVersion } from './canvas.js'
+import { themeColors, useThemeVersion } from '../../lib/canvasColors.js'
+import { hexOffset, prepareCanvas, useBox } from './canvas.js'
 
 const PAD_LEFT = 30
 const PAD_RIGHT = 8
@@ -169,7 +170,7 @@ function EntropyGraph({ data, regions: allRegions, viewport, selection, onJump, 
   const wrapRef = useRef(null)
   const canvasRef = useRef(null)
   const box = useBox(wrapRef)
-  const scheme = useColorSchemeVersion()
+  const scheme = useThemeVersion()
   const [cursorBlock, setCursorBlock] = useState(-1)
   const { size, blockSize, points, entropy, filled } = data
 

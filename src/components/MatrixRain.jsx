@@ -1,6 +1,7 @@
 /* eslint-disable react/prop-types -- the project does not use prop-types */
 import { useEffect, useRef } from 'react'
 import useReducedMotion from './useReducedMotion'
+import { onThemeChange, themeColors } from '../lib/canvasColors.js'
 
 const GLYPHS = 'ｦｱｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝabcdefghijklmnopqrstuvwxyz0123456789+=｢｣･ｯｭｬ'.split('')
 const HEX = Array.from({ length: 256 }, (_, value) => value.toString(16).padStart(2, '0').toUpperCase())
@@ -18,13 +19,7 @@ const FADE_FRAMES = 30
 const randomSpeed = () => MIN_SPEED + Math.random() * (MAX_SPEED - MIN_SPEED)
 
 function readColors(element) {
-  const style = getComputedStyle(element)
-  const read = (name, fallback) => style.getPropertyValue(name).trim() || fallback
-  return {
-    rain: read('--rain-color', '#0ff'),
-    drag: read('--rain-drag-color', '#ff36ab'),
-    background: read('--darker-bg', '#060714')
-  }
+  return themeColors(element, { rain: '--rain-color', drag: '--rain-drag-color', background: '--darker-bg' })
 }
 
 /**
@@ -183,8 +178,7 @@ function MatrixRain({ active = false, brightness = 0.3, dragging = false, bytes 
     })
     visibility.observe(canvas)
     document.addEventListener('visibilitychange', wake)
-    const theme = new MutationObserver(() => { colors = readColors(canvas) })
-    theme.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+    const stopThemeWatch = onThemeChange(() => { colors = readColors(canvas) })
 
     wakeRef.current()
     return () => {
@@ -192,7 +186,7 @@ function MatrixRain({ active = false, brightness = 0.3, dragging = false, bytes 
       cancelAnimationFrame(frame)
       resize.disconnect()
       visibility.disconnect()
-      theme.disconnect()
+      stopThemeWatch()
       document.removeEventListener('visibilitychange', wake)
     }
   }, [reducedMotion])

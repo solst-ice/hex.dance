@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSelection } from '../../state/hooks.js'
 import { HEX, formatOffset } from '../../components/hex/bytes.js'
 import { detectStride, offsetAt, overviewStrip, paintByteMap, pixelsPerRow } from './bytemap.js'
-import { cssColor, fitCanvas, rgbString } from './colors.js'
+import { cssColor, fitCanvas, rgbString, useThemeVersion } from '../../lib/canvasColors.js'
 import useWidth from './useWidth.js'
 
 const STRIDES = [16, 32, 64, 128, 256, 512, 1024]
@@ -49,6 +49,7 @@ export default function ByteMap({ bytes, revision, colors, viewport }) {
   const overlayRef = useRef(null)
   const stripRef = useRef(null)
   const width = useWidth(boxRef)
+  const themeVersion = useThemeVersion()
 
   const [choice, setChoice] = useState('auto')
   const [mode, setMode] = useState('class')
@@ -123,7 +124,7 @@ export default function ByteMap({ bytes, revision, colors, viewport }) {
         ctx.strokeRect(x - lw / 2, y - lw / 2, Math.max(w, lw * 3) + lw, Math.max(h, lw * 3) + lw)
       }
     }
-  }, [viewport, hover, geometry, scale, mapWidth, mapHeight, mode, revision])
+  }, [viewport, hover, geometry, scale, mapWidth, mapHeight, mode, revision, themeVersion])
 
   // Whole-file strip beside the map
   const [stripRevision, setStripRevision] = useState(revision)
@@ -157,7 +158,7 @@ export default function ByteMap({ bytes, revision, colors, viewport }) {
       const v0 = yOf(viewport.start)
       ctx.fillRect(0, Math.min(lines - 2 * lw, v0), canvas.width, Math.max(2 * lw, yOf(viewport.end) - v0))
     }
-  }, [bytes, stripRevision, colors, mapHeight, shownTop, windowBytes, viewport, size])
+  }, [bytes, stripRevision, colors, mapHeight, shownTop, windowBytes, viewport, size, themeVersion])
 
   // Wheel scrolls the map by the distance moved, not by a fixed step
   const live = useRef(null)

@@ -14,15 +14,15 @@ const IDLE = { status: 'idle' }
  * only while `enabled`; restarts after edits, debounced.
  *
  * @returns {{ status: 'idle'|'running'|'done'|'error', bytesSeen?: number, digraph?: Uint32Array,
- *   cells?: Uint8ClampedArray, magic?: object[], plan?: object, firstMs?: number, totalMs?: number, error?: string }}
+ *   classCounts?: Uint32Array, magic?: object[], plan?: object, firstMs?: number, totalMs?: number, error?: string }}
  */
-export default function useFilePass(bytes, revision, enabled, colors) {
+export default function useFilePass(bytes, revision, enabled) {
   const [state, setState] = useState({ key: null, value: IDLE })
 
   useEffect(() => {
-    if (!enabled || !bytes || !bytes.length || !colors) return
+    if (!enabled || !bytes || !bytes.length) return
     const cached = cache.get(bytes)
-    if (cached && cached.revision === revision && cached.colors === colors) {
+    if (cached && cached.revision === revision) {
       setState({ key: bytes, value: cached.value })
       return
     }
@@ -69,20 +69,20 @@ export default function useFilePass(bytes, revision, enabled, colors) {
           status: message.type === 'done' ? 'done' : 'running',
           bytesSeen: message.bytesSeen,
           digraph: message.digraph,
-          cells: message.cells,
+          classCounts: message.classCounts,
           magic: message.magic || null,
           plan,
           firstMs,
           totalMs: message.type === 'done' ? performance.now() - t0 : null
         }
         if (message.type === 'done') {
-          cache.set(bytes, { revision, colors, value })
+          cache.set(bytes, { revision, value })
           worker.terminate()
           worker = null
         }
         setState({ key: bytes, value })
       }
-      worker.postMessage({ type: 'start', size: bytes.length, colors })
+      worker.postMessage({ type: 'start', size: bytes.length })
       setState(previous => ({
         key: bytes,
         value: { ...(previous.key === bytes ? previous.value : {}), status: 'running', plan, bytesSeen: 0 }
@@ -96,7 +96,7 @@ export default function useFilePass(bytes, revision, enabled, colors) {
       clearTimeout(timer)
       worker?.terminate()
     }
-  }, [bytes, revision, enabled, colors])
+  }, [bytes, revision, enabled])
 
   return state.key === bytes ? state.value : IDLE
 }

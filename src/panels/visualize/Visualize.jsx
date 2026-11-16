@@ -6,7 +6,7 @@ import ByteMap from './ByteMap.jsx'
 import Digraph from './Digraph.jsx'
 import Hilbert from './Hilbert.jsx'
 import MagicFinds from './MagicFinds.jsx'
-import { byteClassColors } from './colors.js'
+import { useByteClassColors } from '../../lib/canvasColors.js'
 import { SAMPLE_BLOCK_BYTES } from './stats.js'
 import useFilePass from './useFilePass.js'
 import useHexViewport from './useHexViewport.js'
@@ -45,10 +45,10 @@ function PassStatus({ pass, size }) {
 function Visualize() {
   const { bytes, revision } = useFile()
   const [view, setView] = useState('bytemap')
-  const [colors] = useState(byteClassColors)
+  const colors = useByteClassColors()
   const [passWanted, setPassWanted] = useState(false)
   const viewport = useHexViewport()
-  const pass = useFilePass(bytes, revision, passWanted, colors)
+  const pass = useFilePass(bytes, revision, passWanted)
 
   if (!bytes) return <section className="hd-panel"><p className="hd-empty">Reading file…</p></section>
   if (!bytes.length) return <section className="hd-panel"><p className="hd-empty">This file is empty, so there is nothing to draw.</p></section>
@@ -79,7 +79,7 @@ function Visualize() {
       {view === 'bytemap' && <ByteMap bytes={bytes} revision={revision} colors={colors} viewport={viewport} />}
       {view !== 'bytemap' && <PassStatus pass={pass} size={bytes.length} />}
       {view === 'digraph' && <Digraph pass={pass} />}
-      {view === 'hilbert' && <Hilbert size={bytes.length} pass={pass} viewport={viewport} />}
+      {view === 'hilbert' && <Hilbert size={bytes.length} pass={pass} colors={colors} viewport={viewport} />}
       {view === 'magic' && <MagicFinds pass={pass} size={bytes.length} />}
     </section>
   )

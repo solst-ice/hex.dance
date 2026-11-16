@@ -6,6 +6,7 @@ import { BYTES_PER_ROW, DEPTHS, LABEL_LIMITS, MAX_ROWS, DEFAULT_OPTIONS, topLeve
 import { hexOffset, formatSize } from './layout.js'
 import { posterBaseName } from './escape.js'
 import { readTheme } from './theme.js'
+import { useThemeVersion } from '../../lib/canvasColors.js'
 import { svgBlob, downloadBlob, svgToPng, pngSize, canCopyImage, copyPng } from './exporter.js'
 import './poster.css'
 
@@ -58,16 +59,6 @@ const SelectionSource = memo(function SelectionSource({ active, range, onUse }) 
   )
 })
 
-function useThemeToken() {
-  const [token, setToken] = useState(0)
-  useEffect(() => {
-    const observer = new MutationObserver(() => setToken(t => t + 1))
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'class', 'style'] })
-    return () => observer.disconnect()
-  }, [])
-  return token
-}
-
 function usePreviewUrl(svg) {
   const [url, setUrl] = useState(null)
   useEffect(() => {
@@ -90,7 +81,7 @@ export default function Poster() {
   const [zoom, setZoom] = useState('fit')
   const [busy, setBusy] = useState(null)
   const [message, setMessage] = useState('')
-  const themeToken = useThemeToken()
+  const themeToken = useThemeVersion()
 
   const choices = useMemo(() => (analysis && bytes ? topLevelChoices(analysis, bytes.length) : []), [analysis, bytes])
   const current = source.file === file ? source : { file, mode: 'auto', range: null, fieldIndex: 0 }
