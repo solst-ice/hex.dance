@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 
 const BYTES_PER_ROW = 16
+const DEFAULT_ROWS = 16
+const ROW_HEIGHT = 24 // Approximate height of each row in pixels
 
 // Offset of the first row of the last full page; 0 when the file fits on one page
 const lastPageOffset = (byteLength, rowsToDisplay) => {
@@ -64,7 +66,7 @@ function HexDump({ buffer, fileName }) {
   const [offset, setOffset] = useState(0)
   const [hoveredByte, setHoveredByte] = useState(null)
   const containerRef = useRef(null)
-  const [rowsToDisplay, setRowsToDisplay] = useState(16)
+  const [rowsToDisplay, setRowsToDisplay] = useState(DEFAULT_ROWS)
   const [isDragging, setIsDragging] = useState(false)
   const [dragStartY, setDragStartY] = useState(0)
   const scrollRef = useRef(null)
@@ -153,32 +155,26 @@ function HexDump({ buffer, fileName }) {
     }
   }, [isDragging])
 
-  // Calculate visible rows based on container height
+  // Rows per page: fixed in the normal view, derived from the view's height in
+  // fullscreen. Entering fullscreen animates that height, so it is observed
+  // rather than sampled once partway through the transition.
+  const hasBuffer = buffer != null
   useEffect(() => {
+    const element = containerRef.current
+    if (!isFullscreen || !element) {
+      setRowsToDisplay(DEFAULT_ROWS)
+      return
+    }
+
     const updateVisibleRows = () => {
-      if (!containerRef.current) return
-      const containerHeight = containerRef.current.clientHeight
-      const rowHeight = 24 // Approximate height of each row in pixels
-      const newRowCount = Math.floor(containerHeight / rowHeight)
-      setRowsToDisplay(isFullscreen ? newRowCount : 16)
+      setRowsToDisplay(Math.max(1, Math.floor(element.clientHeight / ROW_HEIGHT)))
     }
 
     updateVisibleRows()
-    window.addEventListener('resize', updateVisibleRows)
-    return () => window.removeEventListener('resize', updateVisibleRows)
-  }, [isFullscreen])
-
-  // Update rows when toggling fullscreen
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      const containerHeight = containerRef.current?.clientHeight || 0
-      const rowHeight = 24 // Approximate height of each row in pixels
-      const newRowCount = Math.floor(containerHeight / rowHeight)
-      setRowsToDisplay(isFullscreen ? newRowCount : 16)
-    }, 100) // Small delay to allow transition to complete
-
-    return () => clearTimeout(timer)
-  }, [isFullscreen])
+    const observer = new ResizeObserver(updateVisibleRows)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [isFullscreen, hasBuffer])
 
   if (!buffer) return null
 
