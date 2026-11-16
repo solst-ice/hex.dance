@@ -1,0 +1,232 @@
+:where(:root) {
+  /* digraph heat ramp, from never seen to most frequent */
+  --viz-ramp-0: var(--darker-bg, #060714);
+  --viz-ramp-1: #2a1f78;
+  --viz-ramp-2: var(--neon-blue, #0ff);
+  --viz-ramp-3: var(--neon-yellow, #f7f71c);
+  --viz-mark: var(--neon-pink, #ff36ab);
+  --viz-hover: #fff;
+  --viz-guide: #fff;
+  --viz-canvas-bg: #0b0d1c;
+  --viz-checker: #14182c;
+}
+
+.viz-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.viz-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  align-items: flex-end;
+}
+
+.viz-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--neon-pink);
+  font-size: 0.8em;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.viz-field .hd-input {
+  font-size: 0.85em;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.viz-number {
+  width: 6.5em;
+}
+
+.viz-bytemap.hd-stack,
+.viz-digraph.hd-stack,
+.viz-hilbert.hd-stack,
+.viz-magic.hd-stack {
+  gap: 10px;
+}
+
+.viz-bytemap-box {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.viz-square-box {
+  display: flex;
+  justify-content: center;
+  min-width: 0;
+}
+
+.viz-canvas-wrap {
+  position: relative;
+  flex: none;
+  background: var(--viz-canvas-bg);
+  outline: 1px solid rgba(0, 255, 255, 0.25);
+}
+
+.viz-checker {
+  background-color: var(--viz-canvas-bg);
+  background-image:
+    linear-gradient(45deg, var(--viz-checker) 25%, transparent 25%, transparent 75%, var(--viz-checker) 75%),
+    linear-gradient(45deg, var(--viz-checker) 25%, transparent 25%, transparent 75%, var(--viz-checker) 75%);
+  background-position: 0 0, 6px 6px;
+  background-size: 12px 12px;
+}
+
+.viz-pixels,
+.viz-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+}
+
+/* crisp-edges for older Firefox; pixelated wins wherever it is supported */
+.viz-pixels {
+  image-rendering: crisp-edges;
+  image-rendering: pixelated;
+}
+
+/* scaled down, let the browser average neighbouring bytes rather than drop them */
+.viz-pixels.is-reduced {
+  image-rendering: auto;
+}
+
+.viz-overlay {
+  cursor: crosshair;
+  touch-action: pan-y;
+}
+
+.viz-overlay:focus {
+  outline: none;
+}
+
+.viz-overlay:focus-visible {
+  outline: 2px solid var(--neon-yellow);
+  outline-offset: 2px;
+}
+
+.viz-strip {
+  display: block;
+  flex: none;
+  cursor: pointer;
+  outline: 1px solid rgba(0, 255, 255, 0.25);
+  touch-action: none;
+}
+
+.viz-readout {
+  font-family: 'Unifont', monospace;
+  margin: 0;
+  min-height: 1.3em;
+  color: var(--neon-blue);
+  font-size: 0.85em;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.viz-note {
+  margin: 0;
+  font-size: 0.85em;
+  line-height: 1.45;
+}
+
+.viz-status {
+  margin-bottom: 10px;
+  font-size: 0.85em;
+}
+
+.viz-status p {
+  margin: 4px 0 0;
+}
+
+.viz-progress {
+  height: 4px;
+  background: rgba(0, 255, 255, 0.12);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.viz-progress span {
+  display: block;
+  height: 100%;
+  background: var(--neon-blue);
+}
+
+.viz-key {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 0.85em;
+  line-height: 1.45;
+}
+
+.viz-key strong {
+  color: var(--neon-yellow);
+  font-weight: normal;
+}
+
+.viz-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.85em;
+}
+
+.viz-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.viz-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+}
+
+.viz-swatch-zero { background: var(--hx-byte-zero); }
+.viz-swatch-print { background: var(--hx-byte-print); }
+.viz-swatch-ctrl { background: var(--hx-byte-ctrl); }
+.viz-swatch-ff { background: var(--hx-byte-ff); }
+.viz-swatch-high { background: var(--hx-byte-high); }
+
+.viz-hit {
+  padding: 10px 12px;
+  border: 1px solid rgba(0, 255, 255, 0.2);
+  border-radius: 6px;
+}
+
+.viz-hit-name {
+  color: var(--neon-yellow);
+  font-size: 1.05em;
+}
+
+.viz-hit-note {
+  margin: 6px 0;
+  font-size: 0.9em;
+  line-height: 1.4;
+}
+
+.viz-offsets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  font-size: 0.85em;
+}
+
+.viz-offsets .viz-offset {
+  text-transform: none;
+  letter-spacing: 0;
+}
