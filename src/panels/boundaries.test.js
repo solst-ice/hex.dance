@@ -8,11 +8,6 @@ import { fileURLToPath } from 'node:url'
 
 const PANELS = dirname(fileURLToPath(import.meta.url))
 
-// Imports still to be moved out, as "from-panel -> path under src/panels"
-const KNOWN = new Set([
-  'dance -> visualize/colors.js'
-])
-
 const SOURCE = /\.(jsx?|mjs|css)$/
 const SPECIFIERS = [
   /\bimport\s[^'"]*?from\s*['"]([^'"]+)['"]/g, // import x from '...'
@@ -69,8 +64,7 @@ test('no panel imports from another panel\'s folder', () => {
       const target = resolve(dirname(file), specifier)
       const to = panelOf(target)
       if (!to || to === from) continue
-      const key = `${from} -> ${relative(PANELS, target).split(sep).join('/')}`
-      if (!KNOWN.has(key)) crossings.push(`${relative(PANELS, file)} imports ${specifier}`)
+      crossings.push(`${relative(PANELS, file)} imports ${specifier}`)
     }
   }
   assert.deepEqual(crossings, [], 'move shared code to src/lib, src/state or src/components')
