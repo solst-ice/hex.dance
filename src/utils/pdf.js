@@ -33,15 +33,18 @@ function scanText(bytes) {
 // Maps object number to the text of its latest definition (without stream data)
 function collectObjects(text) {
   const objects = new Map()
-  const header = /(\d+)\s+\d+\s+obj\b/g
+  // Bounded repetition keeps the scan linear on long runs of digits, which an
+  // unbounded \d+ would re-scan from every starting position
+  const header = /(\d{1,10})\s+\d{1,5}\s+obj\b/g
   let match
   while ((match = header.exec(text)) !== null) {
     const start = header.lastIndex
     let end = text.indexOf('endobj', start)
     if (end === -1) end = text.length
-    const streamAt = text.indexOf('stream', start)
-    const bodyEnd = streamAt !== -1 && streamAt < end ? streamAt : end
-    objects.set(match[1], text.slice(start, Math.min(bodyEnd, start + MAX_OBJECT_TEXT)))
+    let body = text.slice(start, Math.min(end, start + MAX_OBJECT_TEXT))
+    const streamAt = body.indexOf('stream')
+    if (streamAt !== -1) body = body.slice(0, streamAt)
+    objects.set(match[1], body)
     // Continue after endobj so binary stream data is never mistaken for objects
     header.lastIndex = end
   }
@@ -80,7 +83,7 @@ function findPageCount(text, objects) {
   }
   if (best !== null) return best
 
-  const linearized = /\/Linearized\b[^>]*?\/N\s+(\d{1,9})\b/.exec(text)
+  const linearized = /\/Linearized\b[^>]{0,512}?\/N\s+(\d{1,9})\b/.exec(text)
   return linearized ? parseInt(linearized[1], 10) : null
 }
 

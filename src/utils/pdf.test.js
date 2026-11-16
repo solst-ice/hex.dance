@@ -66,6 +66,21 @@ test('scans only the start and end of large files', () => {
   assert.ok(result.includes('Pages: 3'))
 })
 
+test('scan time stays linear on repetitive input', () => {
+  const enc = new TextEncoder()
+  const cases = [
+    '1'.repeat(400000),
+    '/Linearized'.repeat(40000),
+    '1 0 obj << /A 1 >> endobj\n'.repeat(40000)
+  ]
+  for (const body of cases) {
+    const start = performance.now()
+    parsePDF(enc.encode('%PDF-1.4\n' + body).buffer)
+    // Quadratic behaviour takes tens of seconds on these inputs
+    assert.ok(performance.now() - start < 3000)
+  }
+})
+
 test('formats PDF dates, including partial ones', () => {
   assert.equal(formatPDFDate('D:20250101120000Z'), '2025-01-01 12:00:00 UTC')
   assert.equal(formatPDFDate("D:19991231235959-05'00'"), '1999-12-31 23:59:59 -05:00')
