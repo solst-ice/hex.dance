@@ -1,10 +1,11 @@
 /* eslint-disable react/prop-types -- the project does not use prop-types */
 import { memo, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useFile, useHexViewport, useHighlightLayer, useSelection } from '../../state/hooks.js'
-import { FIELD_KIND_ORDER, fieldKind, fieldKindColor, fieldKindLabel, regionKind, regionKindLabel } from '../structure/kinds.js'
-import { buildTreeIndex, collectLeaves, formatLength, formatOffset, leavesIn } from '../structure/treeModel.js'
+import { FIELD_KIND_ORDER, fieldKind, fieldKindColor, fieldKindLabel, regionKind, regionKindLabel } from '../../lib/kinds.js'
+import { buildTreeIndex, collectLeaves, leavesIn } from '../../lib/fieldIndex.js'
+import { formatLength, formatOffset } from '../../lib/format.js'
 import { buildSegments, layoutSegments, offsetToX, regionsOf } from './layout.js'
-import '../structure/kinds.css'
+import '../../lib/kinds.css'
 import './anatomy.css'
 
 const MIN_SEGMENT_PX = 10

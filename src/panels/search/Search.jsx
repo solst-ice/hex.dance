@@ -3,7 +3,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useFile, useHexViewReader, useHighlightLayer, useSelection } from '../../state/hooks.js'
 import { parseQuery, describePattern } from './pattern.js'
 import { DEFAULT_CAP, startSearch, stepMatch } from './scanner.js'
-import { subscribeSearchRequests, takeSearchRequest } from './request.js'
+import { subscribeSearchRequests, takeSearchRequest } from '../../state/searchRequest.js'
 import ResultList from './ResultList.jsx'
 import './search.css'
 

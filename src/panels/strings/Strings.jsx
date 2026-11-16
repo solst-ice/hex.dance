@@ -1,8 +1,8 @@
 /* eslint-disable react/prop-types -- the project does not use prop-types */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useFile, useSelection } from '../../state/hooks.js'
-import { streamToWorker } from '../hashes/chunkStream.js'
-import CopyButton from '../hashes/CopyButton.jsx'
+import { streamToWorker } from '../../lib/chunkStream.js'
+import CopyButton from '../../components/CopyButton.jsx'
 import { CLASSES } from './classify.js'
 import { ASCII, UTF16LE, readString } from './scan.js'
 import { StringStore, collectMatches, compileFilter } from './store.js'

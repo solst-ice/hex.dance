@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { ancestors, buildTreeIndex, collectLeaves, leavesIn, locate, tourSteps, visibleRows } from './treeModel.js'
+import { ancestors, locate, tourSteps, visibleRows } from './treeModel.js'
+import { buildTreeIndex } from '../../lib/fieldIndex.js'
 
 const f = (name, offset, length, children) => ({ name, offset, length, ...(children ? { children } : {}) })
 
@@ -45,15 +46,6 @@ test('tour visits top-level fields and their children when there are few', () =>
   const many = Array.from({ length: 30 }, (_, i) => f(`e${i}`, 100 + i, 1))
   const index = buildTreeIndex([...FIELDS, f('table', 100, 30, many)])
   assert.deepEqual(names(index, tourSteps(index)), ['header', 'magic', 'version', 'body', 'a', 'b', 'tail', 'table'])
-})
-
-test('collects leaves in offset order and finds those near a window', () => {
-  const index = buildTreeIndex(FIELDS)
-  const leaves = collectLeaves(index)
-  assert.deepEqual(leaves.map(leaf => leaf.name), ['magic', 'version', 'a1', 'a2', 'b', 'tail'])
-  assert.deepEqual(leavesIn(leaves, 10, 30, 10).map(leaf => leaf.name), ['a1', 'a2', 'b'])
-  assert.deepEqual(leavesIn(leaves, 0, 100, 2).map(leaf => leaf.name), ['magic', 'version'])
-  assert.deepEqual(leavesIn(leaves, 50, 60, 10), [])
 })
 
 test('builds an index of 100,000 fields quickly', () => {

@@ -1,7 +1,7 @@
 /* eslint-disable react/prop-types -- the project does not use prop-types */
 import { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useFile, useHexCursor, useSelection, useWorkspace } from '../../state/hooks.js'
-import { requestSearch } from '../search/request.js'
+import { requestSearch } from '../../state/searchRequest.js'
 import { inspect } from './decode.js'
 import { toHex } from './copyAs.js'
 import { usePersistentState } from './usePersistentState.js'

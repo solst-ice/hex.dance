@@ -4,9 +4,11 @@ import { useFile, useHexCursor, useHighlightLayer, useSelection } from '../../st
 import { formatCardFor } from '../../education/index.js'
 import FieldTree from './FieldTree.jsx'
 import FormatCard from './FormatCard.jsx'
-import { fieldKind, fieldKindLabel, fieldKindMeaning } from './kinds.js'
-import { ancestors, buildTreeIndex, formatLength, formatOffset, locate, tourSteps, visibleRows } from './treeModel.js'
-import './kinds.css'
+import { fieldKind, fieldKindLabel, fieldKindMeaning } from '../../lib/kinds.js'
+import { buildTreeIndex } from '../../lib/fieldIndex.js'
+import { formatLength, formatOffset } from '../../lib/format.js'
+import { ancestors, locate, tourSteps, visibleRows } from './treeModel.js'
+import '../../lib/kinds.css'
 import './structure.css'
 
 const EMPTY_SET = new Set()

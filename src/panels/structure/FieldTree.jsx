@@ -1,7 +1,7 @@
 /* eslint-disable react/prop-types -- the project does not use prop-types */
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { fieldKind, fieldKindLabel } from './kinds.js'
-import { formatLength, formatOffset } from './treeModel.js'
+import { fieldKind, fieldKindLabel } from '../../lib/kinds.js'
+import { formatLength, formatOffset } from '../../lib/format.js'
 
 export const ROW_HEIGHT = 28
 const OVERSCAN = 8

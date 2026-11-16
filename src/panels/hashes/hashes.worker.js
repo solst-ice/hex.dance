@@ -1,5 +1,5 @@
 import { ALGORITHMS } from './digests.js'
-import { acceptChunks } from './chunkStream.js'
+import { acceptChunks } from '../../lib/chunkStream.js'
 
 let hashers = []
 
