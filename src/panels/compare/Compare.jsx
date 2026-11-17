@@ -1,7 +1,7 @@
 /* eslint-disable react/prop-types -- the project does not use prop-types */
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { useFile, useSelection } from '../../state/hooks.js'
+import { useFile, useSelectionActions } from '../../state/hooks.js'
 import { GAP_CHOICES } from './diff.js'
 import { exportText, hexOffset, offsetDigits, percent, plural, shiftText, sizeText, verdict } from './format.js'
 import { itemAt, itemCount, itemNear } from './items.js'
@@ -308,7 +308,7 @@ function Results({ comparison, running, stale, rerun, a, aName, b, revision, gap
 
 export default function Compare() {
   const { file, buffer, bytes, revision, openFile } = useFile()
-  const { jumpTo } = useSelection()
+  const { jumpTo } = useSelectionActions()
   const state = useCompareState()
   const { b, gap } = state
   const { result, running, stale, rerun } = useComparison({ buffer, bytes, revision, b, gap })
@@ -351,9 +351,6 @@ export default function Compare() {
 
   return (
     <div className={`hd-panel compare-panel${drop.dragging ? ' is-dragging' : ''}`} ref={drop.ref} {...drop.handlers}>
-      <div className="hd-panel-header">
-        <h2 className="hd-panel-title">Compare</h2>
-      </div>
       <FileInput inputRef={inputRef} onFile={pick} />
       <Files
         file={file}

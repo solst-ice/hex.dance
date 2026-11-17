@@ -7,8 +7,7 @@
  *   .hd-panel-header          title row: title on the left, actions on the right
  *   .hd-panel-title           panel heading (h2/h3)
  *   .hd-section-title         smaller heading inside a panel
- *   .hd-tabs / .hd-tab        tab strip and its buttons; [aria-selected="true"] marks the active tab
- *   .hd-tab-badge             count or label shown inside a tab
+ *   .hd-tab-badge             count or label shown beside a section title
  *   .hd-button                bordered button; .hd-button--active, .hd-button--small
  *   .hd-input                 single-line text input (also for <select>)
  *   .hd-table                 compact data table; .hd-table--clickable highlights rows on hover,
@@ -67,48 +66,7 @@
   text-transform: uppercase;
 }
 
-/* Tabs */
-.hd-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  border-bottom: 1px solid var(--hd-border);
-}
-
-.hd-tab {
-  background: transparent;
-  border: 1px solid transparent;
-  border-bottom: none;
-  border-radius: 6px 6px 0 0;
-  color: var(--text-muted);
-  cursor: pointer;
-  font-family: 'Unifont', monospace;
-  font-size: 0.95em;
-  letter-spacing: 1px;
-  margin-bottom: -1px;
-  padding: 8px 14px;
-  text-transform: uppercase;
-  transition: color 0.2s ease, background-color 0.2s ease;
-}
-
-.hd-tab:hover {
-  border-color: transparent;
-  color: var(--neon-blue);
-  background: var(--hd-tint);
-}
-
-.hd-tab[aria-selected="true"] {
-  background: var(--darker-bg);
-  border-color: var(--hd-border-strong);
-  color: var(--neon-blue);
-  text-shadow: 0 0 8px color-mix(in srgb, var(--neon-blue) 40%, transparent);
-}
-
-.hd-tab:focus-visible {
-  outline: 2px solid var(--hd-focus);
-  outline-offset: -2px;
-}
-
+/* Count or label beside a title (section headers) */
 .hd-tab-badge {
   background: var(--hd-pink-tint);
   border-radius: 8px;

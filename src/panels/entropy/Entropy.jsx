@@ -158,9 +158,8 @@ function Entropy() {
   const regions = analysis?.regions || null
 
   return (
-    <section className="hd-panel entropy-panel" aria-label="Entropy" data-status={result?.status || 'idle'}>
+    <section className="hd-panel entropy-panel" data-status={result?.status || 'idle'}>
       <div className="hd-panel-header">
-        <h2 className="hd-panel-title">Entropy</h2>
         {result && size > 0 && (
           <span className="hd-muted entropy-block">
             {result.points.toLocaleString()} blocks of {formatBytes(result.blockSize)}

@@ -1,7 +1,13 @@
-/* Page layout once a file is open */
+/* Page layout once a file is open: the full window width, less a gutter */
 
 .container.has-file {
-  max-width: 1500px;
+  margin: 12px 0 0;
+  max-width: none;
+  padding: 0 16px 12px;
+}
+
+.has-file .site-header {
+  margin-bottom: 12px;
 }
 
 /* File name and "open another file", shown in the slim header */
@@ -71,7 +77,6 @@
   display: grid;
   gap: 20px;
   grid-template-columns: minmax(0, 1fr);
-  margin-bottom: 32px;
 }
 
 .workspace-main,
@@ -81,6 +86,12 @@
   flex-direction: column;
   gap: 20px;
   min-width: 0;
+}
+
+.workspace-side {
+  gap: 0;
+  /* SectionStack keeps the reader's place itself */
+  overflow-anchor: none;
 }
 
 /* The grid gap already spaces the hex view */
@@ -93,17 +104,75 @@
   height: 360px;
 }
 
+/*
+ * Wide screens: the header and the hex column stay put while the page
+ * scrolls the sections. One page scrollbar: both are sticky, so the browser's
+ * find-in-page and ordinary scrolling keep working. The hex column is as wide
+ * as a 16-byte row needs; the sections take the rest. The hex view grows to
+ * fill the height the docks leave; if the window is too short for the
+ * column, the column scrolls on its own.
+ */
 @media (min-width: 1200px) {
-  .workspace {
-    /* The hex view needs about 760px to keep each 16-byte row on one line */
-    grid-template-columns: minmax(760px, 1.2fr) minmax(0, 1fr);
-    align-items: start;
+  /* Pinned where it starts, 12px down, so nothing below it moves when the
+     page scrolls; a band of page background hides what passes above it */
+  .has-file .site-header {
+    box-shadow: 0 -12px 0 var(--dark-bg);
+    overflow-anchor: none;
+    position: sticky;
+    top: 12px;
+    z-index: 40;
   }
-}
 
-.panel-tabs-body {
-  padding-top: 16px;
-  min-width: 0;
+  .workspace {
+    --workspace-top: calc(var(--hd-header-h, 64px) + 24px);
+    align-items: start;
+    /* 16-byte rows; on very wide screens room for 24, so the sections do not stretch absurdly */
+    grid-template-columns: clamp(700px, 36vw, 960px) minmax(0, 1fr);
+  }
+
+  .workspace-main {
+    gap: 12px;
+    height: calc(100vh - var(--workspace-top) - 12px);
+    /* Room for the hex view's glow inside the scroll box */
+    margin: 0 -8px;
+    overflow-anchor: none;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0 8px;
+    position: sticky;
+    scrollbar-width: thin;
+    top: var(--workspace-top);
+  }
+
+  /* Over the sticky header while the hex view is fullscreen */
+  .workspace-main:has(.hexview.is-fullscreen) {
+    z-index: 1000;
+  }
+
+  .workspace-dock {
+    flex: none;
+    gap: 12px;
+  }
+
+  /* The hex view takes the height the docks leave, whatever its rows hold */
+  .workspace-main > .hexview:not(.is-fullscreen) {
+    flex: 1 1 0;
+    /* About 12 rows at least */
+    min-height: calc(var(--hx-row-h) * 12 + 150px);
+  }
+
+  .workspace-main > .hexview:not(.is-fullscreen) .hx-view {
+    flex: 1 1 0;
+  }
+
+  .workspace-main > .hexview:not(.is-fullscreen) .hx-body {
+    height: auto;
+    max-height: none;
+  }
+
+  .workspace-main > .workspace-placeholder {
+    flex: 1 0 auto;
+  }
 }
 
 /* Shown while a file is dragged over the page */

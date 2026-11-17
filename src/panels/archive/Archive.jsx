@@ -11,7 +11,7 @@ function Archive() {
   return (
     <section className="hd-panel">
       <div className="hd-panel-header">
-        <h2 className="hd-panel-title">Archive Contents</h2>
+        <h3 className="hd-panel-title">Archive Contents</h3>
       </div>
       <pre className="tree-view">{tree}</pre>
     </section>

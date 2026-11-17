@@ -34,7 +34,7 @@ export default function CrcTool({ bytes }) {
 
   return (
     <section className="ch-tool" aria-label="CRC-32 helper">
-      <h3 className="hd-section-title">CRC-32 helper</h3>
+      <h4 className="hd-section-title">CRC-32 helper</h4>
       <p className="ch-small hd-muted">Select bytes in the hex view by dragging (or shift+click), or type them in hex.</p>
       <div className="hd-row">
         <button type="button" className="hd-button hd-button--small" onClick={fromSelection} disabled={!canUseSelection}>

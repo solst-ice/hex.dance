@@ -150,7 +150,6 @@ export default function Poster() {
   return (
     <div className="hd-panel poster">
       <div className="hd-panel-header">
-        <h2 className="hd-panel-title">Poster</h2>
         {stale && (
           <button type="button" className="hd-button hd-button--small hd-button--active" onClick={() => setBuiltRevision(revision)}>
             Refresh after edits

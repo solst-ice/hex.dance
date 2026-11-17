@@ -255,9 +255,6 @@ function Dance() {
 
   return (
     <section className="hd-panel dance-panel" data-status={status}>
-      <div className="hd-panel-header">
-        <h2 className="hd-panel-title">Dance</h2>
-      </div>
       <p className="dance-intro">
         Every byte becomes one sample of sound: its value sets where the speaker cone sits.
         Text stays in a narrow band of values, so it buzzes; compressed or encrypted data uses every value evenly, so it hisses like static;

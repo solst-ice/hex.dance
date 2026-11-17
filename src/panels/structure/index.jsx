@@ -4,6 +4,7 @@ import Structure from './Structure.jsx'
 export default {
   id: 'structure',
   title: 'Structure',
+  description: "The file's fields decoded and explained, with a guided tour of the format",
   order: 5,
   placement: 'tab',
   isAvailable: ({ file }) => Boolean(file),

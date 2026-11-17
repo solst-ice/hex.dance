@@ -1,5 +1,7 @@
 import { useContext, useEffect, useSyncExternalStore } from 'react'
-import { FileContext, HexViewContext, SelectionContext, WorkspaceContext } from './contexts.js'
+import {
+  FileContext, HexViewContext, SectionContext, SelectionActionsContext, SelectionContext, WorkspaceContext
+} from './contexts.js'
 
 /**
  * @typedef {'idle' | 'reading' | 'analyzing' | 'ready' | 'error'} FileStatus
@@ -19,7 +21,8 @@ import { FileContext, HexViewContext, SelectionContext, WorkspaceContext } from 
 
 /**
  * @typedef {{ start: number, end: number }} ByteRange   `end` is exclusive
- * @typedef {{ id: string, start: number, end: number, label?: string, color?: string }} Highlight
+ * @typedef {{ id: string, start: number, end: number, label?: string, color?: string, section?: string|null }} Highlight
+ *   `section`: the section that set it (see useHighlightLayer); null or absent for the hex view and docks
  *
  * @typedef {Object} SelectionState
  * @property {ByteRange|null} selection
@@ -28,6 +31,10 @@ import { FileContext, HexViewContext, SelectionContext, WorkspaceContext } from 
  * @property {(highlights: Highlight[] | ((previous: Highlight[]) => Highlight[])) => void} setHighlights
  * @property {(offset: number, length?: number) => void} jumpTo   select the range and scroll the hex view to it
  * @property {{ current: { scrollToOffset?: (offset: number) => void } | null }} hexApiRef   passed to the hex view as `apiRef`
+ *
+ * @typedef {Pick<SelectionState, 'setSelection' | 'setHighlights' | 'jumpTo' | 'hexApiRef'> & {
+ *   subscribeJumps: (listener: (offset: number) => void) => () => void
+ * }} SelectionActions   never change identity
  */
 
 /** @returns {FileState} */
@@ -45,10 +52,28 @@ export function useSelection() {
 }
 
 /**
+ * The selection's setters, `jumpTo` and `hexApiRef`, without the selection
+ * itself: the object never changes, so callers that only act on the
+ * selection do not re-render when it changes.
+ * @returns {SelectionActions}
+ */
+export function useSelectionActions() {
+  const value = useContext(SelectionActionsContext)
+  if (!value) throw new Error('useSelectionActions must be used inside <SelectionProvider>')
+  return value
+}
+
+/**
  * @typedef {Object} WorkspaceState
- * @property {string|null} activePanelId   id of the tab panel last chosen by the user or by `openPanel`;
- *   null, or an id that is not available for the current file, shows the first tab
- * @property {(id: string) => void} openPanel   switch the tab strip to a panel
+ * @property {string|null} activePanelId   id of the current section: the one last clicked, focused,
+ *   chosen in the section index or opened with `openPanel`, or else the first one substantially on
+ *   screen. Only the current section's hex-view highlights are shown.
+ * @property {(id: string) => void} openPanel   expand a section, make it current and scroll it into view
+ * @property {{ id: string, seq: number, focus: boolean } | null} reveal   latest request to bring a
+ *   section into view, for the sections column
+ * @property {(id: string, options?: { focus?: boolean }) => void} revealPanel   like `openPanel`;
+ *   `focus` also moves keyboard focus to the section's header
+ * @property {(id: string|null) => void} setCurrentPanel   make a section current without scrolling
  */
 
 /** @returns {WorkspaceState} */
@@ -63,17 +88,23 @@ export function useWorkspace() {
  * own layer, so several panels can tint the hex view without overwriting one
  * another. The layer is removed when the caller unmounts.
  *
+ * Inside a section, the layer is tagged with the section's id and the hex
+ * view only shows it while that section is current.
+ *
  * @param {string} layer   unique name, normally the panel id
  * @param {Array<{ start: number, end: number, id?: string|number, label?: string, color?: string }>|null} ranges
  *   memoise this array: a new identity replaces the layer
  */
 export function useHighlightLayer(layer, ranges) {
-  const { setHighlights } = useSelection()
+  const { setHighlights } = useSelectionActions()
+  // Layers set from inside a section are only shown while it is current
+  const section = useContext(SectionContext)
+  const sectionId = section ? section.id : null
 
   useEffect(() => {
     const prefix = `${layer}:`
     const isOther = (highlight) => !String(highlight.id).startsWith(prefix)
-    const mine = (ranges || []).map((range, index) => ({ ...range, id: `${prefix}${range.id ?? index}` }))
+    const mine = (ranges || []).map((range, index) => ({ ...range, id: `${prefix}${range.id ?? index}`, section: sectionId }))
 
     setHighlights(previous => {
       const others = previous.filter(isOther)
@@ -83,7 +114,7 @@ export function useHighlightLayer(layer, ranges) {
       const others = previous.filter(isOther)
       return others.length === previous.length ? previous : others
     })
-  }, [layer, ranges, setHighlights])
+  }, [layer, ranges, setHighlights, sectionId])
 }
 
 function useHexViewStore() {

@@ -1,6 +1,6 @@
 /* eslint-disable react/prop-types -- the project does not use prop-types */
 import { memo, useCallback, useMemo, useRef, useState } from 'react'
-import { useFile, useHighlightLayer, useSelection } from '../../state/index.js'
+import { useFile, useHighlightLayer, useSelectionActions } from '../../state/index.js'
 import { useCarveScan } from './useCarveScan.js'
 import { buildReport, extractName, rangeEnd } from './report.js'
 import { extractedFile, originOf } from './extract.js'
@@ -19,7 +19,7 @@ function duration(ms) {
 
 // Gives the panel jumpTo without re-rendering it on every selection change
 function JumpBridge({ jumpRef }) {
-  const { jumpTo } = useSelection()
+  const { jumpTo } = useSelectionActions()
   jumpRef.current = jumpTo
   return null
 }
@@ -174,7 +174,6 @@ function Carve() {
       <JumpBridge jumpRef={jumpRef} />
       <Tint ranges={ranges} />
       <div className="hd-panel-header">
-        <h2 className="hd-panel-title">Embedded</h2>
         {scan && !scanning && (
           <button type="button" className="hd-button hd-button--small" onClick={() => setToken(t => t + 1)}>Rescan</button>
         )}

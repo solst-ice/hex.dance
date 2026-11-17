@@ -4,6 +4,7 @@ import Strings from './Strings.jsx'
 export default {
   id: 'strings',
   title: 'Strings',
+  description: 'Readable text found in the bytes',
   order: 30,
   placement: 'tab',
   isAvailable: ({ file }) => Boolean(file),

@@ -1,6 +1,6 @@
 /* eslint-disable react/prop-types -- the project does not use prop-types */
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useFile, useSelection } from '../../state/hooks.js'
+import { useFile, useSelectionActions } from '../../state/hooks.js'
 import { streamToWorker } from '../../lib/chunkStream.js'
 import CopyButton from '../../components/CopyButton.jsx'
 import { CLASSES } from './classify.js'
@@ -91,7 +91,7 @@ function useStringScan({ buffer, bytes, minLength, token, revision }) {
 
 // Gives the panel `jumpTo` without re-rendering it on every selection change
 function JumpBridge({ jumpRef }) {
-  const { jumpTo } = useSelection()
+  const { jumpTo } = useSelectionActions()
   jumpRef.current = jumpTo
   return null
 }
@@ -203,7 +203,6 @@ function Strings() {
     >
       <JumpBridge jumpRef={jumpRef} />
       <div className="hd-panel-header">
-        <h2 className="hd-panel-title">Strings</h2>
         <MinLengthInput value={minLength} onChange={setMinLength} />
       </div>
 

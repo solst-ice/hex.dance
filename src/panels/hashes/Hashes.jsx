@@ -248,10 +248,7 @@ function Hashes() {
   if (!bytes) return <section className="hd-panel"><p className="hd-empty">Reading file…</p></section>
 
   return (
-    <section className="hd-panel hashes-panel" aria-label="Hashes">
-      <div className="hd-panel-header">
-        <h2 className="hd-panel-title">Hashes</h2>
-      </div>
+    <section className="hd-panel hashes-panel">
       <p className="hd-muted hashes-note">Computed in your browser. Nothing is looked up or sent anywhere.</p>
       <WholeFile buffer={buffer} bytes={bytes} revision={revision} onHashes={setFileHashes} />
       <MemoSelectionHashes buffer={buffer} bytes={bytes} revision={revision} onHashes={setSelectionHashes} />

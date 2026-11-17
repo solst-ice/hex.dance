@@ -1,6 +1,6 @@
 /* eslint-disable react/prop-types -- the project does not use prop-types */
 import { useEffect, useMemo, useState } from 'react'
-import { useHighlightLayer, useSelection } from '../../state/hooks.js'
+import { useHighlightLayer, useSelectionActions } from '../../state/hooks.js'
 import { HEX, formatOffset } from '../../components/hex/bytes.js'
 import { glitchCopy, pickOffsets, suggestSkip } from './glitch.js'
 import useBlobUrl from './useBlobUrl.js'
@@ -26,7 +26,7 @@ function glitchedName(name) {
 }
 
 function Bench({ bytes, revision, media, fileName, originalUrl }) {
-  const { jumpTo } = useSelection()
+  const { jumpTo } = useSelectionActions()
   const size = bytes.length
   const [count, setCount] = useState(8)
   const [skip, setSkip] = useState(() => suggestSkip(bytes, media.mime))

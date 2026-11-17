@@ -1,6 +1,6 @@
 /* eslint-disable react/prop-types -- the project does not use prop-types */
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useSelection } from '../../state/hooks.js'
+import { useSelectionActions } from '../../state/hooks.js'
 import { HEX, formatOffset } from '../../components/hex/bytes.js'
 import { detectStride, offsetAt, overviewStrip, paintByteMap, pixelsPerRow } from './bytemap.js'
 import { cssColor, fitCanvas, rgbString, useThemeVersion } from '../../lib/canvasColors.js'
@@ -42,7 +42,7 @@ function rangeRects(a, b, { top, stride, rows, mode }) {
 }
 
 export default function ByteMap({ bytes, revision, colors, viewport }) {
-  const { jumpTo } = useSelection()
+  const { jumpTo } = useSelectionActions()
   const size = bytes.length
   const boxRef = useRef(null)
   const mapRef = useRef(null)
@@ -167,11 +167,14 @@ export default function ByteMap({ bytes, revision, colors, viewport }) {
     const canvas = overlayRef.current
     if (!canvas) return
     const onWheel = (event) => {
-      event.preventDefault()
       const L = live.current
       const px = event.deltaMode === 1 ? event.deltaY * 20 : event.deltaMode === 2 ? event.deltaY * MAP_HEIGHT : event.deltaY
       const rowsDelta = Math.sign(px) * Math.max(1, Math.round(Math.abs(px) / L.scale))
-      setTop(clampTop(L.shownTop + rowsDelta * L.stride, L.stride, L.size, L.windowBytes))
+      const next = clampTop(L.shownTop + rowsDelta * L.stride, L.stride, L.size, L.windowBytes)
+      // At either end (or when the whole file fits) the page scrolls instead
+      if (next === L.shownTop) return
+      event.preventDefault()
+      setTop(next)
     }
     canvas.addEventListener('wheel', onWheel, { passive: false })
     return () => canvas.removeEventListener('wheel', onWheel)

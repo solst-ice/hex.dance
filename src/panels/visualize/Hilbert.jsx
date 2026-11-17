@@ -1,6 +1,6 @@
 /* eslint-disable react/prop-types -- the project does not use prop-types */
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useSelection } from '../../state/hooks.js'
+import { useSelectionActions } from '../../state/hooks.js'
 import { formatOffset } from '../../components/hex/bytes.js'
 import { cellColors, hilbertLayout, hilbertPixels } from './stats.js'
 import { cssColor, fitCanvas, rgbString, useThemeVersion } from '../../lib/canvasColors.js'
@@ -18,7 +18,7 @@ const CLASS_LEGEND = [
 ]
 
 export default function Hilbert({ size, pass, colors, viewport }) {
-  const { jumpTo } = useSelection()
+  const { jumpTo } = useSelectionActions()
   const boxRef = useRef(null)
   const pixelsRef = useRef(null)
   const overlayRef = useRef(null)
