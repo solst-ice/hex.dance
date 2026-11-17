@@ -177,6 +177,18 @@
   padding: 6px 10px;
 }
 
+/* A <select>'s list is drawn by the browser outside the page, and a
+   translucent background ends up over white there: keep both opaque */
+select.hd-input {
+  background-color: color-mix(in srgb, var(--neon-blue) 7%, var(--darker-bg));
+}
+
+select.hd-input option,
+select.hd-input optgroup {
+  background-color: var(--darker-bg);
+  color: var(--text);
+}
+
 .hd-input:focus {
   border-color: var(--neon-blue);
   box-shadow: var(--hd-glow);
