@@ -77,7 +77,7 @@ function Shell() {
         <header ref={headerRef} className={`description site-header ${compact ? 'is-compact' : ''}`}>
           {compact && <HeaderRain file={file} bytes={bytes} dragging={isDragging} />}
           <div className="site-header-row">
-            <Title glitchKey={file} />
+            <Title glitchKey={file} banner={!compact} />
             {compact && (
               <div className="site-header-file">
                 <FileUploader onFile={openFile} isDragging={isDragging} fileName={file.name} />

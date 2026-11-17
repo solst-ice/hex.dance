@@ -60,6 +60,11 @@
   min-width: 0;
 }
 
+/* Block-letter copy of the title; only the text-mode theme shows it */
+.glitch-title-banner {
+  display: none;
+}
+
 /* Title decoding from its bytes on first load */
 .glitch-title.is-decoding {
   overflow: hidden;

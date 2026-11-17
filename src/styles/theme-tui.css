@@ -172,6 +172,51 @@
   opacity: 1;
 }
 
+/* Landing page: the block-letter banner stands in for the heading's text,
+   which stays in the document for assistive technology */
+:root[data-theme="tui"] .glitch-title:has(.glitch-title-banner) .glitch-title-text {
+  border: 0;
+  clip: rect(0 0 0 0);
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+:root[data-theme="tui"] .glitch-title-banner {
+  align-items: flex-start;
+  display: inline-flex;
+  /* 54 cells of half an em; shrinks to fit a phone */
+  font-size: min(16px, calc((100vw - 80px) / 27));
+  gap: 0.5em;
+  line-height: 1;
+  text-transform: none;
+}
+
+:root[data-theme="tui"] .glitch-title-banner-art,
+:root[data-theme="tui"] .glitch-title-banner-cursor {
+  display: block;
+  white-space: pre;
+}
+
+:root[data-theme="tui"] .glitch-title-banner-cursor {
+  animation: tui-blink 1.06s steps(1, end) infinite;
+  color: var(--tui-bright-green);
+}
+
+@keyframes tui-blink {
+  50% { visibility: hidden; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-theme="tui"] .glitch-title-banner-cursor {
+    animation: none;
+  }
+}
+
 /* ---- frames ------------------------------------------------------------- */
 
 :root[data-theme="tui"] .description,
