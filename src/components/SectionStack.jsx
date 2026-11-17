@@ -74,7 +74,8 @@ function alignTo(element, top, spacer, ownScroll) {
 // section showing above that is not what they are reading
 const PROBE_PX = 40
 
-// What the reader is looking at: the top edge of the first section that
+// What the reader is looking at: at the start of the column, the column's
+// top; otherwise the top edge of the first section that
 // starts in the visible area. Sections above it, including the one spanning
 // the top of the area, grow upwards out of the reader's way as they load.
 // When one section fills the whole area, the element just under the index
@@ -83,6 +84,8 @@ const PROBE_PX = 40
 function findAnchor(stack, top, bottom, boxes, elements) {
   if (!stack) return null
   const line = top + PROBE_PX
+  // At the start of the column nothing above can grow: content grows down
+  if (boxes[0] && boxes[0].top >= top - 1) return { element: elements.get(boxes[0].id), top: boxes[0].top }
   const edge = boxes.find(box => box.top >= line && box.top < bottom)
   if (edge) return { element: elements.get(edge.id), top: edge.top }
   const rect = stack.getBoundingClientRect()
