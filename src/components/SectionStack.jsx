@@ -128,7 +128,7 @@ function SectionStack({ panels, analysis, file, status }) {
   const elements = useRef(new Map())
   const toggles = useRef(new Map())
   const latest = useRef(null)
-  latest.current = { shownIds, activePanelId, setCurrentPanel, status }
+  latest.current = { shownIds, activePanelId, setCurrentPanel, status, collapsed }
   const lastMount = useRef(-Infinity)
   const settleTimer = useRef(0)
   // Whether the reader is scrolling through the sections (so the ones ahead
@@ -383,10 +383,18 @@ function SectionStack({ panels, analysis, file, status }) {
   // section (or the first one on screen) stays where it is
   const keep = useRef(null)
   const toggleEverything = useCallback(() => {
-    const { shownIds, activePanelId } = latest.current
+    const { shownIds, activePanelId, collapsed } = latest.current
     const top = areaTop()
-    const candidates = [activePanelId, ...shownIds]
+    // Collapsing everything asks for the list of sections: bring the first
+    // header up under the index (if the page is scrolled past it)
+    const collapsing = !shownIds.every(id => collapsed.has(id))
+    const candidates = collapsing ? shownIds.slice(0, 1) : [activePanelId, ...shownIds]
     for (const id of candidates) {
+      if (collapsing) {
+        const rect = elements.current.get(id)?.getBoundingClientRect()
+        if (rect) keep.current = { id, top: rect.top }
+        break
+      }
       const rect = elements.current.get(id)?.getBoundingClientRect()
       if (rect && rect.bottom > top && rect.top < window.innerHeight) {
         keep.current = { id, top: rect.top }
