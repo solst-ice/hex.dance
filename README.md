@@ -1,28 +1,27 @@
-# HEX.DANCE
+# hex.dance
 
-Basic client-side binary and file analysis and hex dump viewer and editor.
+A hex viewer, editor and file analyser that runs entirely in your browser. Files never leave your device.
 
-## Features
+**[hex.dance](https://hex.dance/)**
 
-- Privacy: Runs fully client-side in the browser (files are never sent to a server)
-- Hex dump viewer and editor
-- Basic file and binary analysis
-- Basic Mach-O parser
+## What it does
 
-## Details
+- **Hex view and editor** that stays fast on large files, with keyboard navigation, go-to, undo and redo.
+- **Understands 39 formats**, including ELF, PE, Mach-O, WebAssembly, ZIP, tar, PNG, JPEG, PDF and SQLite: fields decoded and described, symbols for executables, listings for archives.
+- **Tools:** strings, search, hashes, entropy, embedded-file scan, compare, preview, byte visualisations, a printable poster, and the bytes played as sound.
+- **Learn:** guided challenges on files made for the purpose.
 
-HEX.DANCE is built with:
-- React + Vite for the frontend
-- Custom Mach-O binary parser
-- CSS animations for visual effects
-- No backend required - all processing happens in the browser
+## Develop
 
-### Supported Binary Types
+Needs Node 22.
 
-- Mach-O 32-bit (`MH_MAGIC`: 0xfeedface)
-- Mach-O 64-bit (`MH_MAGIC_64`: 0xfeedfacf)
-- Universal binaries (`FAT_MAGIC`: 0xcafebabe)
-- Handles both native and byte-swapped variants
-- Images (JPG, PNG, GIF)
-- PDF
-- Zip files with content listing
+```bash
+npm install
+npm run dev      # local server
+npm test         # unit tests
+npm run lint
+npm run build
+npm run deploy   # publish dist/ to GitHub Pages
+```
+
+React and Vite, plain JavaScript, no runtime dependencies beyond React. A format is one module in `src/formats/`; a panel is one folder in `src/panels/`.
