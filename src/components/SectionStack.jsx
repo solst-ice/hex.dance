@@ -70,6 +70,31 @@ function alignTo(element, top, spacer, ownScroll) {
   scrollPage(delta, ownScroll)
 }
 
+// How far under the index the reader's eye is taken to be; a sliver of a
+// section showing above that is not what they are reading
+const PROBE_PX = 40
+
+// What the reader is looking at: the top edge of the first section that
+// starts in the visible area. Sections above it, including the one spanning
+// the top of the area, grow upwards out of the reader's way as they load.
+// When one section fills the whole area, the element just under the index
+// (or the box of a list it scrolls within: a row moves when its list
+// scrolls, which is not the page moving).
+function findAnchor(stack, top, bottom, boxes, elements) {
+  if (!stack) return null
+  const line = top + PROBE_PX
+  const edge = boxes.find(box => box.top >= line && box.top < bottom)
+  if (edge) return { element: elements.get(edge.id), top: edge.top }
+  const rect = stack.getBoundingClientRect()
+  let element = document.elementFromPoint(rect.left + rect.width / 2, line)
+  if (!element || !stack.contains(element)) return null
+  for (let node = element.parentElement; node && node !== stack; node = node.parentElement) {
+    const overflow = getComputedStyle(node).overflowY
+    if ((overflow === 'auto' || overflow === 'scroll') && node.scrollHeight > node.clientHeight) element = node
+  }
+  return { element, top: element.getBoundingClientRect().top }
+}
+
 /**
  * Every available 'tab' panel, in registry order, as a collapsible section,
  * under a pinned index of the sections. Sections mount when they come near
@@ -116,12 +141,13 @@ function SectionStack({ panels, analysis, file, status }) {
   // Empty space after the last section (see alignTo)
   const spacerRef = useRef(null)
   const lastTops = useRef(new Map())
-  // { id, top }: the section being read (the first one not hidden under the
-  // index) and where its top edge was. Sections above it change height as
-  // they mount and load; the page scrolls by as much so that what the reader
-  // is looking at stays put. The browser's own scroll anchoring is off for
-  // the sections (it would anchor to whatever is hidden under the index).
+  // What the reader is looking at (see findAnchor) and where it was. Sections
+  // above it change height as they mount and load; the page scrolls by as
+  // much so that it stays put. The browser's own scroll anchoring is off for
+  // the sections (it anchors to whatever is hidden under the index).
   const reading = useRef(null)
+  // { element, top, until }: what the reader last clicked or typed into
+  const interaction = useRef(null)
 
   // Top of the area sections scroll through: just under the pinned index
   const areaTop = useCallback(() => {
@@ -148,11 +174,13 @@ function SectionStack({ panels, analysis, file, status }) {
         return
       }
     }
-    const anchor = reading.current
-    const element = anchor && elements.current.get(anchor.id)
-    if (!element) return
-    const delta = element.getBoundingClientRect().top - anchor.top
-    if (Math.abs(delta) >= 1) scrollPage(delta, ownScroll)
+    // Something the reader just clicked or typed into stays put; otherwise
+    // what they are looking at (see findAnchor)
+    const touched = interaction.current
+    const touchedLive = touched && touched.element.isConnected && performance.now() < touched.until
+    const mark = touchedLive ? touched : reading.current
+    if (!mark || !mark.element.isConnected) return
+    alignTo(mark.element, mark.top, spacerRef.current, ownScroll)
   }, [])
 
   const measure = useCallback(() => {
@@ -199,8 +227,7 @@ function SectionStack({ panels, analysis, file, status }) {
     // Only while the index is pinned, i.e. the reader is in the sections
     const nav = navRef.current
     const pinned = nav && nav.getBoundingClientRect().top <= (parseFloat(getComputedStyle(nav).top) || 0) + 1
-    const first = pinned ? boxes.find(box => box.bottom > top) : null
-    reading.current = first ? { id: first.id, top: first.top } : null
+    reading.current = pinned ? findAnchor(stackRef.current, top, bottom, boxes, elements.current) : null
   }, [areaTop, keepPlace])
 
   useEffect(() => () => clearTimeout(settleTimer.current), [])
@@ -211,16 +238,31 @@ function SectionStack({ panels, analysis, file, status }) {
     const schedule = () => {
       if (!frame) frame = requestAnimationFrame(() => { frame = 0; ownScroll.current = false; measure() })
     }
+    let lastY = window.scrollY
     const onScroll = () => {
+      const moved = window.scrollY - lastY
+      lastY = window.scrollY
       if (ownScroll.current) ownScroll.current = false
       else {
+        // The reader's own scrolling moves what they look at by as much
         scrolling.current = true
-        reading.current = null
+        interaction.current = null
+        if (reading.current) reading.current = { ...reading.current, top: reading.current.top - moved }
       }
       schedule()
     }
     // The reader taking over the scrolling ends any hold
     const release = () => { hold.current = null }
+    // Whatever the reader clicks or types into in the sections stays put
+    // while the panel reacts, e.g. a tree row they expand
+    const touch = (event) => {
+      const stack = stackRef.current
+      const target = event.target
+      if (!stack || !(target instanceof Element) || !stack.contains(target) || navRef.current?.contains(target)) return
+      interaction.current = { element: target, top: target.getBoundingClientRect().top, until: performance.now() + HOLD_MS }
+    }
+    window.addEventListener('pointerdown', touch, { capture: true })
+    window.addEventListener('keydown', touch, { capture: true })
     window.addEventListener('scroll', onScroll, { passive: true })
     window.addEventListener('resize', schedule)
     for (const type of ['wheel', 'touchstart', 'keydown', 'mousedown']) {
@@ -237,6 +279,8 @@ function SectionStack({ panels, analysis, file, status }) {
     return () => {
       cancelAnimationFrame(frame)
       window.removeEventListener('scroll', onScroll)
+      window.removeEventListener('pointerdown', touch, { capture: true })
+      window.removeEventListener('keydown', touch, { capture: true })
       window.removeEventListener('resize', schedule)
       for (const type of ['wheel', 'touchstart', 'keydown', 'mousedown']) {
         window.removeEventListener(type, release, { capture: true })
