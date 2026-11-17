@@ -655,6 +655,12 @@
   color: var(--tui-bar);
 }
 
+@media (max-width: 600px) {
+  :root[data-theme="tui"] .site-header.is-compact .site-header-row .hd-button {
+    font-size: 0.875em;
+  }
+}
+
 :root[data-theme="tui"] .file-bar.dragging {
   border: 1px solid var(--tui-black);
 }
@@ -1435,4 +1441,47 @@
 :root[data-theme="tui"] .compare-drop-overlay {
   background: rgba(0, 0, 0, 0.8);
   border: 1px solid var(--tui-bright-yellow);
+}
+
+/* ---- privacy note ------------------------------------------------------------ */
+
+/* A window with its title set into the top border, on the landing page and
+   under the status bar alike */
+:root[data-theme="tui"] .privacy-note,
+:root[data-theme="tui"] .privacy--inline .privacy-note,
+:root[data-theme="tui"] .privacy--menu .privacy-note {
+  --hd-focus: var(--tui-bright-magenta);
+  background: var(--tui-black);
+  border: 1px solid var(--tui-frame-strong);
+  color: var(--tui-white);
+  padding: 0 2ch 12px;
+}
+
+:root[data-theme="tui"] .privacy--inline .privacy-note {
+  margin-top: calc(var(--tui-half) + 8px);
+}
+
+/* Clear of the bar, so the title on the frame does not cover the buttons */
+:root[data-theme="tui"] .privacy--menu .privacy-note {
+  margin-top: var(--tui-half);
+}
+
+:root[data-theme="tui"] .privacy-title {
+  background: var(--tui-black);
+  color: var(--tui-bright-cyan);
+  line-height: calc(2 * var(--tui-half));
+  margin: calc(-1 * var(--tui-half) - 1px) 0 4px;
+  text-transform: none;
+  white-space: nowrap;
+  width: fit-content;
+}
+
+:root[data-theme="tui"] .privacy-title::before {
+  color: var(--tui-frame-strong);
+  content: '┤ ';
+}
+
+:root[data-theme="tui"] .privacy-title::after {
+  color: var(--tui-frame-strong);
+  content: ' ├';
 }
