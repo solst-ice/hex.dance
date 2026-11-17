@@ -43,9 +43,10 @@ function storage() {
  * loading in one column never moves another:
  *   groups       the section groups it shows (see columnGroups)
  *   spacer       empty space after its last section (see alignTo)
- *   hold         { id, top, until }: keep this section's top edge at `top` while it settles
- *   reading      what the reader is looking at (see findAnchor) and where it was
- *   interaction  { element, top, until }: what the reader last clicked or typed into
+ *   hold         { id, top, base, until }: keep this section's top edge at `top` while it settles
+ *   reading      { element, top, base }: what the reader is looking at (see findAnchor) and where
+ *   interaction  { element, top, base, until }: what the reader last clicked or typed into
+ *                (`base`: the scroller's origin when `top` was taken, see originOf)
  *   scrolling    whether the reader is scrolling it (so sections ahead may load early), as opposed
  *                to having just opened a file or jumped
  *   scrollTop    where it was scrolled to, as far as we know: our own scrolls update it at once,
@@ -75,6 +76,13 @@ function roomBelow({ element }) {
   return element
     ? element.scrollHeight - element.clientHeight - element.scrollTop
     : document.documentElement.scrollHeight - window.innerHeight - window.scrollY
+}
+
+// Where a scroller's content is measured from: a column's own top edge,
+// which moves when the index above it changes height (that is not the
+// column scrolling); the page's sections are measured from the window
+function originOf({ element }) {
+  return element ? element.getBoundingClientRect().top : 0
 }
 
 // Takes in any scrolling the reader has done since we last looked: what they
@@ -264,7 +272,7 @@ function SectionStack({ panels, analysis, file, status, footer = null }) {
       const element = elements.current.get(held.id)
       if (!element || performance.now() > held.until) scroller.hold = null
       else {
-        alignTo(scroller, element, held.top)
+        alignTo(scroller, element, held.top + originOf(scroller) - held.base)
         return
       }
     }
@@ -274,11 +282,11 @@ function SectionStack({ panels, analysis, file, status, footer = null }) {
     const touchedLive = touched && touched.element.isConnected && performance.now() < touched.until
     const mark = touchedLive ? touched : scroller.reading
     if (!mark || !mark.element.isConnected) return
-    alignTo(scroller, mark.element, mark.top)
+    alignTo(scroller, mark.element, mark.top + originOf(scroller) - mark.base)
   }, [])
 
   const holdSection = useCallback((scroller, id, top) => {
-    scroller.hold = { id, top, until: performance.now() + HOLD_MS }
+    scroller.hold = { id, top, base: originOf(scroller), until: performance.now() + HOLD_MS }
   }, [])
 
   const measure = useCallback(() => {
@@ -325,10 +333,19 @@ function SectionStack({ panels, analysis, file, status, footer = null }) {
       if (sinceLastMount < SETTLE_MS) wait = Math.min(wait, SETTLE_MS - sinceLastMount)
       columnViews.push({ views, areaHeight: Math.max(0, bottom - Math.max(0, top)) })
 
-      // The page: only while the index is pinned, i.e. the reader is in the sections
-      const pinned = scroller.element ||
-        (nav && nav.getBoundingClientRect().top <= (parseFloat(getComputedStyle(nav).top) || 0) + 1)
-      scroller.reading = pinned ? findAnchor(scroller.element || stackRef.current, top, bottom, boxes, elements.current) : null
+      // Only once the reader has scrolled into the sections: before that,
+      // content just grows downwards and there is nothing to keep in place.
+      // A column is in its sections when it is scrolled at all; the page when
+      // it is scrolled and the index is stuck, i.e. pushed down from its own
+      // place at the top of the sections. Merely being at its sticky offset is
+      // not enough: on wide screens that is also where it starts, and while
+      // the header settles the offset can even push it down unscrolled.
+      const scrolledIn = scroller.element
+        ? scroller.element.scrollTop > 0
+        : Boolean(window.scrollY > 0 && nav && stackRef.current &&
+          stackRef.current.getBoundingClientRect().top < nav.getBoundingClientRect().top - 1)
+      const anchor = scrolledIn ? findAnchor(scroller.element || stackRef.current, top, bottom, boxes, elements.current) : null
+      scroller.reading = anchor && { ...anchor, base: originOf(scroller) }
     }
     setView(previous => (sameLists(previous.candidates, candidates) && sameSet(previous.onScreen, onScreen)
       ? previous
@@ -471,7 +488,9 @@ function SectionStack({ panels, analysis, file, status, footer = null }) {
       if (!section || !stack.contains(section)) return
       const scroller = scrollerOf(section.dataset.section)
       if (scroller) {
-        scroller.interaction = { element: target, top: target.getBoundingClientRect().top, until: performance.now() + HOLD_MS }
+        scroller.interaction = {
+          element: target, top: target.getBoundingClientRect().top, base: originOf(scroller), until: performance.now() + HOLD_MS
+        }
       }
     }
     window.addEventListener('pointerdown', touch, { capture: true })
