@@ -548,6 +548,25 @@ function SectionStack({ panels, analysis, file, status, footer = null }) {
     for (const id of mounted) if (!before.has(id)) mountedAt.current.set(id, now)
   }, [mounted])
 
+  // After collapse all / expand all (see toggleEverything): put each column's
+  // kept section back where it was. This runs before the measurement below,
+  // so that what mounts next is what is on screen once the columns have
+  // settled, not what was on screen before.
+  const keep = useRef(null)
+  useLayoutEffect(() => {
+    const kept = keep.current
+    if (!kept) return
+    keep.current = null
+    for (const { scroller, id, top } of kept) {
+      const element = elements.current.get(id)
+      if (!element || !scrollers.current.includes(scroller)) continue
+      const target = Math.max(top, targetTop(scroller))
+      scroller.scrolling = false
+      alignTo(scroller, element, target)
+      holdSection(scroller, id, target)
+    }
+  }, [collapsed, targetTop, holdSection])
+
   // Re-measure when sections appear, collapse or mount, or the file's state
   // changes, even if no size happens to change
   useLayoutEffect(() => {
@@ -591,7 +610,6 @@ function SectionStack({ panels, analysis, file, status, footer = null }) {
 
   // Collapse all / expand all, keeping the reader's place in each column:
   // the current section (or the first one on screen) stays where it is
-  const keep = useRef(null)
   const toggleEverything = useCallback(() => {
     const { shownIds, activePanelId, collapsed } = latest.current
     // Collapsing everything asks for the list of sections: bring each
@@ -617,20 +635,6 @@ function SectionStack({ panels, analysis, file, status, footer = null }) {
       return next
     })
   }, [areaOf, idsIn])
-
-  useLayoutEffect(() => {
-    const kept = keep.current
-    if (!kept) return
-    keep.current = null
-    for (const { scroller, id, top } of kept) {
-      const element = elements.current.get(id)
-      if (!element || !scrollers.current.includes(scroller)) continue
-      const target = Math.max(top, targetTop(scroller))
-      scroller.scrolling = false
-      alignTo(scroller, element, target)
-      holdSection(scroller, id, target)
-    }
-  }, [collapsed, targetTop, holdSection])
 
   const chooseSection = useCallback((id) => revealPanel(id, { focus: true }), [revealPanel])
 
