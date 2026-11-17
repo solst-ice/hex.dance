@@ -15,6 +15,7 @@ import './styles/workspace.css'
 import './styles/sections.css'
 import './styles/shell.css'
 import './styles/theme.css'
+import './styles/theme-tui.css'
 
 // How long the header rain falls after a file is opened
 const BURST_MS = 2500

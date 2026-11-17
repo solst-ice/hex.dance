@@ -211,6 +211,20 @@
   background: linear-gradient(135deg, #33ff66 0 50%, #c4ff4d 50% 100%);
 }
 
+/* Text mode: a square cell with a prompt in it */
+.theme-swatch--tui {
+  background: #000;
+  border-radius: 0;
+  color: #55ff55;
+  display: inline-grid;
+  font: 16px/1 'Unifont', monospace;
+  place-items: center;
+}
+
+.theme-swatch--tui::before {
+  content: '>_';
+}
+
 .theme-swatch:hover {
   box-shadow: var(--hd-glow);
 }

@@ -1,0 +1,1393 @@
+/*
+ * Text mode: a theme that looks like a terminal application (htop, Midnight
+ * Commander, Turbo Vision) rather than a recolour of the neon look. Flat and
+ * square, single-line frames with the title set into the top border,
+ * inverse-video bars for whatever is selected or current, controls drawn as
+ * text ([ Open file ], [x], [-]) and a 16-colour palette on black.
+ *
+ * Every rule here is scoped to :root[data-theme="tui"], so the other themes
+ * do not change at all. The variable contract is the one in theme.css; the
+ * rest of this file restyles the shared classes where colour alone cannot
+ * give the look.
+ */
+
+/* ---- palette ---------------------------------------------------------- */
+
+/* Sixteen colours in the ANSI order. The "normal" ones are lifted from the
+   classic VGA values so that text in them keeps 4.5:1 on black; pure blue
+   is too dark for text and is used only as a background (input fields,
+   heat maps). */
+:root[data-theme="tui"] {
+  --tui-black: #000;
+  --tui-red: #e04040;
+  --tui-green: #20b820;
+  --tui-yellow: #c8a000;
+  --tui-blue: #0000aa;
+  --tui-magenta: #d050d0;
+  --tui-cyan: #00b4b4;
+  --tui-white: #c0c0c0;
+  --tui-bright-black: #808080;
+  --tui-bright-red: #ff6464;
+  --tui-bright-green: #55ff55;
+  --tui-bright-yellow: #ffff55;
+  --tui-bright-blue: #8c8cff;
+  --tui-bright-magenta: #ff64ff;
+  --tui-bright-cyan: #55ffff;
+  --tui-bright-white: #fff;
+
+  /* Roles */
+  --tui-frame: var(--tui-bright-black);
+  --tui-frame-strong: var(--tui-white);
+  --tui-bar: var(--tui-white);
+  --tui-bar-text: var(--tui-black);
+  --tui-select: var(--tui-cyan);
+  --tui-select-text: var(--tui-black);
+  --tui-hover: #262626;
+  --tui-field: var(--tui-blue);
+  --tui-shade: #3a3a3a;
+  /* Half a line: a title row centred on its frame's top border */
+  --tui-half: 12px;
+
+  --neon-blue: var(--tui-bright-cyan);
+  --neon-pink: var(--tui-bright-yellow);
+  --neon-yellow: var(--tui-bright-white);
+  --dark-bg: var(--tui-black);
+  --darker-bg: var(--tui-black);
+
+  --text: var(--tui-white);
+  --text-muted: var(--tui-bright-black);
+
+  --grid-color: transparent;
+  --glitch-color: transparent;
+
+  --hd-border: var(--tui-frame);
+  --hd-border-strong: var(--tui-frame-strong);
+  --hd-tint: var(--tui-hover);
+  --hd-tint-strong: var(--tui-hover);
+  --hd-pink-tint: var(--tui-hover);
+  --hd-glow: none;
+  --hd-pink-glow: none;
+  --hd-focus: var(--tui-bright-magenta);
+  --hd-link: var(--tui-bright-cyan);
+  --hd-link-hover: var(--tui-bright-yellow);
+
+  --rain-color: var(--tui-green);
+  --rain-drag-color: var(--tui-bright-yellow);
+
+  --hx-accent: var(--tui-bright-cyan);
+  --hx-edit-accent: var(--tui-bright-yellow);
+  --hx-offset: var(--tui-bright-blue);
+  --hx-muted: var(--tui-bright-black);
+  --hx-text: var(--tui-bright-white);
+  --hx-detail: var(--tui-white);
+  --hx-rule: var(--tui-frame);
+  --hx-byte-zero: var(--tui-bright-black);
+  --hx-byte-print: var(--tui-bright-cyan);
+  --hx-byte-ctrl: var(--tui-bright-green);
+  --hx-byte-ff: var(--tui-bright-magenta);
+  --hx-byte-high: var(--tui-yellow);
+  --hx-hover-bg: var(--tui-shade);
+  --hx-selection: var(--tui-select);
+  --hx-cursor: var(--tui-bright-white);
+  --hx-cursor-bg: var(--tui-bright-white);
+  --hx-highlight: var(--tui-bright-yellow);
+  --hx-modified: var(--tui-bright-red);
+  --hx-flash: var(--tui-shade);
+
+  --text-bright: var(--tui-bright-white);
+  --hd-surface: var(--tui-black);
+  --hd-surface-raised: var(--tui-shade);
+  --hd-success: var(--tui-bright-green);
+  --hd-warning: var(--tui-bright-yellow);
+  --hd-danger: var(--tui-bright-red);
+  --hd-heat-low: var(--tui-blue);
+
+  /* Eleven kinds from sixteen colours: the bright hues first, then the
+     normal ones whose lightness sets them apart from their bright twins */
+  --hd-kind-magic: var(--tui-bright-magenta);
+  --hd-kind-header: var(--tui-bright-cyan);
+  --hd-kind-size: var(--tui-bright-yellow);
+  --hd-kind-count: #d78a00;
+  --hd-kind-offset: var(--tui-bright-red);
+  --hd-kind-flags: var(--tui-bright-blue);
+  --hd-kind-string: var(--tui-bright-green);
+  --hd-kind-checksum: var(--tui-bright-white);
+  --hd-kind-data: #4a80ff;
+  --hd-kind-padding: var(--tui-bright-black);
+  --hd-kind-other: #00a8a8;
+
+  scrollbar-color: var(--tui-bright-black) var(--tui-black);
+}
+
+/* ---- flat, square, one face on one grid -------------------------------- */
+
+:root[data-theme="tui"] *,
+:root[data-theme="tui"] *::before,
+:root[data-theme="tui"] *::after {
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  letter-spacing: 0 !important;
+  text-shadow: none !important;
+}
+
+:root[data-theme="tui"] body {
+  background: var(--tui-black);
+}
+
+/* Headings at the body size: a terminal has one size of text */
+:root[data-theme="tui"] :is(h1, h2, h3, h4, .hd-panel-title, .panel-section-title, .hx-header h2, .file-metadata h2, .zip-contents h2) {
+  font-size: 1em;
+}
+
+:root[data-theme="tui"] a {
+  text-decoration-color: currentColor;
+  text-decoration-thickness: 1px;
+}
+
+/* The bands that hide content scrolling under the sticky header and index */
+@media (min-width: 1200px) {
+  :root[data-theme="tui"] .has-file .site-header {
+    box-shadow: 0 -12px 0 var(--tui-black) !important;
+  }
+}
+
+:root[data-theme="tui"] .section-nav {
+  box-shadow: 0 -12px 0 var(--tui-black) !important;
+}
+
+/* ---- title -------------------------------------------------------------- */
+
+:root[data-theme="tui"] .glitch-title {
+  color: var(--tui-bright-cyan);
+}
+
+/* No glitching copies in text mode */
+:root[data-theme="tui"] .glitch-title::before,
+:root[data-theme="tui"] .glitch-title::after,
+:root[data-theme="tui"] .glitch-title-decode {
+  display: none;
+}
+
+:root[data-theme="tui"] .glitch-title.is-decoding .glitch-title-text {
+  opacity: 1;
+}
+
+/* ---- frames ------------------------------------------------------------- */
+
+:root[data-theme="tui"] .description,
+:root[data-theme="tui"] .hd-panel,
+:root[data-theme="tui"] .file-metadata,
+:root[data-theme="tui"] .zip-contents,
+:root[data-theme="tui"] .symbol-section,
+:root[data-theme="tui"] .function-list:not(.metadata-grid),
+:root[data-theme="tui"] .function-list.metadata-grid,
+:root[data-theme="tui"] .function-list.empty {
+  background: var(--tui-black);
+  border: 1px solid var(--tui-frame);
+}
+
+:root[data-theme="tui"] .hd-panel:focus-within {
+  border-color: var(--tui-frame-strong);
+}
+
+/* A title set into its frame's top border: ┤ TITLE ├. The title row is
+   pulled up by half its height so the border runs through its middle; the
+   title's black background cuts the line, and the ┤ ├ join it again. */
+:root[data-theme="tui"] .hd-panel {
+  padding: 12px 2ch;
+}
+
+:root[data-theme="tui"] .hd-panel:where(:has(> :is(.hd-panel-title, .hd-panel-header:not(:empty)):first-child)),
+:root[data-theme="tui"] .file-metadata,
+:root[data-theme="tui"] .zip-contents,
+:root[data-theme="tui"] .function-list:not(.metadata-grid) {
+  padding-top: 0;
+}
+
+:root[data-theme="tui"] .hd-panel > :is(.hd-panel-title, .hd-panel-header):first-child,
+:root[data-theme="tui"] .file-metadata > h2,
+:root[data-theme="tui"] .zip-contents > h2,
+:root[data-theme="tui"] .function-list:not(.metadata-grid) > .function-list-header {
+  margin-top: calc(-1 * var(--tui-half) - 1px);
+}
+
+:root[data-theme="tui"] .hd-panel > .hd-panel-title:first-child,
+:root[data-theme="tui"] .hd-panel > .hd-panel-header:first-child > .hd-panel-title,
+:root[data-theme="tui"] .file-metadata > h2,
+:root[data-theme="tui"] .zip-contents > h2,
+:root[data-theme="tui"] .function-list:not(.metadata-grid) .function-list-header h2,
+:root[data-theme="tui"] .hx-header h2 {
+  background: var(--tui-black);
+  color: var(--tui-bright-cyan);
+  line-height: calc(2 * var(--tui-half));
+  margin-bottom: 8px;
+  padding: 0;
+  white-space: nowrap;
+  width: fit-content;
+}
+
+:root[data-theme="tui"] .hd-panel > .hd-panel-header:first-child > .hd-panel-title,
+:root[data-theme="tui"] .function-list:not(.metadata-grid) .function-list-header h2,
+:root[data-theme="tui"] .hx-header h2 {
+  margin-bottom: 0;
+}
+
+:root[data-theme="tui"] .hd-panel > .hd-panel-header:first-child > :not(.hd-panel-title) {
+  background: var(--tui-black);
+  outline-offset: 0;
+}
+
+:root[data-theme="tui"] .hd-panel > .hd-panel-title:first-child::before,
+:root[data-theme="tui"] .hd-panel > .hd-panel-header:first-child > .hd-panel-title::before,
+:root[data-theme="tui"] .file-metadata > h2::before,
+:root[data-theme="tui"] .zip-contents > h2::before,
+:root[data-theme="tui"] .function-list:not(.metadata-grid) .function-list-header h2::before,
+:root[data-theme="tui"] .hx-header h2::before {
+  color: var(--tui-frame);
+  content: '┤ ';
+}
+
+:root[data-theme="tui"] .hd-panel > .hd-panel-title:first-child::after,
+:root[data-theme="tui"] .hd-panel > .hd-panel-header:first-child > .hd-panel-title::after,
+:root[data-theme="tui"] .file-metadata > h2::after,
+:root[data-theme="tui"] .zip-contents > h2::after,
+:root[data-theme="tui"] .function-list:not(.metadata-grid) .function-list-header h2::after,
+:root[data-theme="tui"] .hx-header h2::after {
+  color: var(--tui-frame);
+  content: ' ├';
+}
+
+/* Sub-headings as a labelled rule: LIBRARIES ────── */
+:root[data-theme="tui"] .hd-section-title {
+  align-items: center;
+  display: flex;
+  gap: 1ch;
+}
+
+:root[data-theme="tui"] .hd-section-title::after {
+  border-top: 1px solid var(--tui-frame);
+  content: '';
+  flex: 1 1 0;
+  min-width: 2ch;
+}
+
+/* ---- buttons and links drawn as text ------------------------------------ */
+
+:root[data-theme="tui"] :is(.hd-button, .hx-btn, .edit-button, .expand-toggle) {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--tui-bright-cyan);
+  line-height: 1.25;
+  padding: 1px 0;
+  text-transform: none;
+  transform: none !important;
+  transition: none;
+  white-space: nowrap;
+}
+
+:root[data-theme="tui"] :is(.hd-button, .hx-btn, .edit-button, .expand-toggle)::before {
+  content: '[ ';
+}
+
+:root[data-theme="tui"] :is(.hd-button, .hx-btn, .edit-button, .expand-toggle)::after {
+  content: ' ]';
+}
+
+:root[data-theme="tui"] .hd-button--small {
+  font-size: 0.9em;
+  padding: 1px 0;
+}
+
+:root[data-theme="tui"] .sample-button {
+  min-width: 0;
+}
+
+:root[data-theme="tui"] .hd-button--small::before {
+  content: '[';
+}
+
+:root[data-theme="tui"] .hd-button--small::after {
+  content: ']';
+}
+
+:root[data-theme="tui"] :is(.hd-button, .hx-btn, .edit-button, .expand-toggle):hover:not(:disabled) {
+  background: var(--tui-bright-cyan);
+  border-color: var(--tui-bright-cyan);
+  color: var(--tui-black);
+}
+
+:root[data-theme="tui"] .hd-button--active,
+:root[data-theme="tui"] :is(.hd-button, .hx-btn)[aria-pressed="true"],
+:root[data-theme="tui"] .hd-button--active:hover:not(:disabled),
+:root[data-theme="tui"] :is(.hd-button, .hx-btn)[aria-pressed="true"]:hover:not(:disabled) {
+  background: var(--tui-bright-yellow);
+  border-color: var(--tui-bright-yellow);
+  color: var(--tui-black);
+}
+
+:root[data-theme="tui"] :is(.hd-button, .hx-btn):disabled,
+:root[data-theme="tui"] :is(.hd-button, .hx-btn):disabled:hover {
+  background: transparent;
+  border-color: transparent;
+  color: var(--tui-bright-black);
+  opacity: 1;
+}
+
+/* ---- fields ------------------------------------------------------------- */
+
+/* Input fields as a blue well, as in DOS-era forms */
+:root[data-theme="tui"] .hd-input,
+:root[data-theme="tui"] select.hd-input,
+:root[data-theme="tui"] .hx-goto input {
+  background: var(--tui-field);
+  border: 1px solid var(--tui-field);
+  color: var(--tui-bright-white);
+}
+
+:root[data-theme="tui"] .hd-input:focus,
+:root[data-theme="tui"] .hx-goto input:focus {
+  border-color: var(--tui-bright-cyan);
+}
+
+:root[data-theme="tui"] .hd-input::placeholder,
+:root[data-theme="tui"] .hx-goto input::placeholder {
+  color: var(--tui-white);
+}
+
+:root[data-theme="tui"] select.hd-input option,
+:root[data-theme="tui"] select.hd-input optgroup {
+  background-color: var(--tui-black);
+  color: var(--tui-white);
+}
+
+/* Checkboxes and radio buttons as [x] and (•) */
+:root[data-theme="tui"] input[type="checkbox"],
+:root[data-theme="tui"] input[type="radio"] {
+  appearance: none;
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  display: inline-block;
+  flex: none;
+  font: inherit;
+  height: 1.25em;
+  line-height: 1.25;
+  margin: 0;
+  padding: 0;
+  vertical-align: middle;
+  width: 3ch;
+}
+
+:root[data-theme="tui"] input[type="checkbox"]::before {
+  content: '[ ]';
+}
+
+:root[data-theme="tui"] input[type="checkbox"]:checked::before {
+  content: '[x]';
+}
+
+:root[data-theme="tui"] input[type="radio"]::before {
+  content: '( )';
+}
+
+:root[data-theme="tui"] input[type="radio"]:checked::before {
+  content: '(•)';
+}
+
+:root[data-theme="tui"] input[type="checkbox"]:disabled,
+:root[data-theme="tui"] input[type="radio"]:disabled {
+  color: var(--tui-bright-black);
+  cursor: default;
+}
+
+/* Sliders: a rule with a block for the thumb */
+:root[data-theme="tui"] input[type="range"] {
+  appearance: none;
+  background: linear-gradient(var(--tui-frame), var(--tui-frame)) center / 100% 1px no-repeat;
+  height: 16px;
+}
+
+:root[data-theme="tui"] input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  background: var(--tui-bright-cyan);
+  border: none;
+  height: 16px;
+  width: 8px;
+}
+
+:root[data-theme="tui"] input[type="range"]::-moz-range-thumb {
+  background: var(--tui-bright-cyan);
+  border: none;
+  height: 16px;
+  width: 8px;
+}
+
+/* Progress as a row of character cells: ████░░░░ */
+:root[data-theme="tui"] progress {
+  appearance: none;
+  background: repeating-linear-gradient(90deg, var(--tui-shade) 0 7px, transparent 7px 8px);
+  border: none;
+  height: 12px;
+}
+
+:root[data-theme="tui"] progress::-webkit-progress-bar {
+  background: transparent;
+}
+
+:root[data-theme="tui"] progress::-webkit-progress-value {
+  background: repeating-linear-gradient(90deg, var(--tui-bright-cyan) 0 7px, transparent 7px 8px);
+}
+
+:root[data-theme="tui"] progress::-moz-progress-bar {
+  background: repeating-linear-gradient(90deg, var(--tui-bright-cyan) 0 7px, transparent 7px 8px);
+}
+
+/* ---- tables, lists, labels ---------------------------------------------- */
+
+:root[data-theme="tui"] .hd-table th {
+  border-bottom: 1px solid var(--tui-frame);
+  color: var(--tui-bright-yellow);
+}
+
+:root[data-theme="tui"] .hd-table td,
+:root[data-theme="tui"] .hd-table tbody th {
+  border-bottom: none;
+}
+
+:root[data-theme="tui"] .hd-table--clickable tbody tr:hover {
+  background: var(--tui-hover);
+  color: var(--tui-bright-white);
+}
+
+/* The selected row is an inverse bar */
+:root[data-theme="tui"] .hd-table tbody tr.is-selected,
+:root[data-theme="tui"] .hd-table tbody tr.is-selected:hover {
+  background: var(--tui-select);
+  color: var(--tui-select-text);
+}
+
+:root[data-theme="tui"] .hd-table tbody tr.is-selected * {
+  color: inherit;
+}
+
+:root[data-theme="tui"] .hd-badge {
+  border: none;
+  padding: 0;
+}
+
+:root[data-theme="tui"] .hd-badge::before {
+  content: '<';
+}
+
+:root[data-theme="tui"] .hd-badge::after {
+  content: '>';
+}
+
+:root[data-theme="tui"] .hd-tab-badge {
+  background: none;
+  color: var(--tui-bright-yellow);
+  padding: 0;
+}
+
+:root[data-theme="tui"] .metadata-value,
+:root[data-theme="tui"] .tree-view {
+  background: transparent;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+:root[data-theme="tui"] .metadata-value {
+  padding-bottom: 0;
+  padding-top: 0;
+}
+
+:root[data-theme="tui"] .function-item li {
+  background: transparent;
+}
+
+:root[data-theme="tui"] .function-item li:hover {
+  background: var(--tui-hover);
+  color: var(--tui-bright-white);
+}
+
+:root[data-theme="tui"] .function-item li.selected {
+  background: var(--tui-select);
+  border-left: none;
+  color: var(--tui-select-text);
+}
+
+/* ---- landing page ------------------------------------------------------- */
+
+:root[data-theme="tui"] .file-uploader,
+:root[data-theme="tui"] .file-uploader:hover,
+:root[data-theme="tui"] .file-uploader:has(:focus-visible) {
+  background: var(--tui-black);
+  border: 1px solid var(--tui-frame);
+  transition: none;
+}
+
+:root[data-theme="tui"] .file-uploader:hover,
+:root[data-theme="tui"] .file-uploader:has(:focus-visible) {
+  border-color: var(--tui-frame-strong);
+}
+
+:root[data-theme="tui"] .file-uploader.dragging {
+  background: var(--tui-black);
+  border-color: var(--tui-bright-yellow);
+}
+
+:root[data-theme="tui"] .upload-area label {
+  color: var(--tui-bright-yellow);
+  font-size: 1em;
+  padding: 0 1ch;
+}
+
+:root[data-theme="tui"] .upload-area label::before {
+  content: '[\00a0';
+}
+
+:root[data-theme="tui"] .upload-area label::after {
+  content: '\00a0]';
+}
+
+:root[data-theme="tui"] .file-uploader:hover .upload-area label,
+:root[data-theme="tui"] .file-uploader:has(:focus-visible) .upload-area label,
+:root[data-theme="tui"] .file-uploader.dragging .upload-area label {
+  background: var(--tui-bright-yellow);
+  color: var(--tui-black);
+}
+
+:root[data-theme="tui"] .upload-hint {
+  background: var(--tui-black);
+  display: table;
+  margin: 8px auto 0;
+  padding: 0 1ch;
+}
+
+/* ---- the slim header as a status bar ----------------------------------- */
+
+:root[data-theme="tui"] .site-header.is-compact {
+  background: var(--tui-bar);
+  border: none;
+  color: var(--tui-bar-text);
+  padding: 0 1ch;
+}
+
+/* No rain behind a status bar */
+:root[data-theme="tui"] .site-header.is-compact > .matrix-rain {
+  display: none;
+}
+
+:root[data-theme="tui"] .site-header.is-compact .site-header-row {
+  --hd-focus: var(--tui-black);
+  min-height: 32px;
+}
+
+:root[data-theme="tui"] .site-header.is-compact .glitch-title {
+  background: var(--tui-black);
+  color: var(--tui-bright-cyan);
+  font-size: 1em;
+  line-height: 32px;
+  padding: 0 1ch;
+}
+
+:root[data-theme="tui"] .site-header.is-compact .file-bar-name {
+  color: var(--tui-bar-text);
+}
+
+:root[data-theme="tui"] .site-header.is-compact .site-header-row .hd-button {
+  color: var(--tui-bar-text);
+  font-size: 1em;
+}
+
+:root[data-theme="tui"] .site-header.is-compact .site-header-row .hd-button:hover:not(:disabled),
+:root[data-theme="tui"] .site-header.is-compact .site-header-row .hd-button[aria-expanded="true"],
+:root[data-theme="tui"] .site-header.is-compact .site-header-row .hd-button--active,
+:root[data-theme="tui"] .site-header.is-compact .site-header-row .hd-button[aria-pressed="true"] {
+  background: var(--tui-black);
+  border-color: var(--tui-black);
+  color: var(--tui-bar);
+}
+
+:root[data-theme="tui"] .file-bar.dragging {
+  border: 1px solid var(--tui-black);
+}
+
+/* Drop-down panels under the header are ordinary black windows again */
+:root[data-theme="tui"] .sample-menu-list {
+  --hd-focus: var(--tui-bright-magenta);
+  background: var(--tui-black);
+  border: 1px solid var(--tui-frame-strong);
+  color: var(--tui-white);
+}
+
+:root[data-theme="tui"] .site-header.is-compact .sample-menu-list .hd-button {
+  color: var(--tui-bright-cyan);
+}
+
+:root[data-theme="tui"] .site-header.is-compact .sample-menu-list .hd-button:hover:not(:disabled) {
+  background: var(--tui-bright-cyan);
+  border-color: var(--tui-bright-cyan);
+  color: var(--tui-black);
+}
+
+/* ---- theme switcher ------------------------------------------------------ */
+
+:root[data-theme="tui"] .theme-swatch {
+  border-color: var(--tui-frame);
+}
+
+:root[data-theme="tui"] .theme-swatch[aria-pressed="true"] {
+  box-shadow: 0 0 0 2px var(--tui-black), 0 0 0 3px var(--tui-bright-white) !important;
+}
+
+:root[data-theme="tui"] .site-header.is-compact .theme-swatch {
+  border-color: var(--tui-black);
+}
+
+:root[data-theme="tui"] .site-header.is-compact .theme-swatch[aria-pressed="true"] {
+  box-shadow: 0 0 0 2px var(--tui-bar), 0 0 0 3px var(--tui-black) !important;
+}
+
+/* ---- section index: a menu bar ------------------------------------------ */
+
+:root[data-theme="tui"] .section-nav::after {
+  background: var(--tui-frame);
+}
+
+:root[data-theme="tui"] .section-nav-list {
+  gap: 4px 0;
+}
+
+:root[data-theme="tui"] .section-nav-link,
+:root[data-theme="tui"] .section-nav-toggle-all {
+  background: transparent;
+  border: 1px solid transparent;
+  font-size: 1rem;
+  line-height: 1.25;
+  padding: 0 1ch;
+  text-transform: none;
+  transition: none;
+}
+
+:root[data-theme="tui"] .section-nav-link {
+  color: var(--tui-white);
+}
+
+:root[data-theme="tui"] .section-nav-link:hover {
+  background: var(--tui-hover);
+  color: var(--tui-bright-white);
+}
+
+:root[data-theme="tui"] .section-nav-link.is-collapsed {
+  background: transparent;
+  border-style: solid;
+  color: var(--tui-bright-black);
+}
+
+:root[data-theme="tui"] .section-nav-link.is-collapsed:hover {
+  background: var(--tui-hover);
+  color: var(--tui-bright-white);
+}
+
+:root[data-theme="tui"] .section-nav-link[aria-current="true"],
+:root[data-theme="tui"] .section-nav-link[aria-current="true"]:hover {
+  background: var(--tui-select);
+  border-color: var(--tui-select);
+  color: var(--tui-select-text);
+}
+
+:root[data-theme="tui"] .section-nav-badge {
+  background: none;
+  color: var(--tui-bright-yellow);
+  padding: 0;
+}
+
+:root[data-theme="tui"] .section-nav-link[aria-current="true"] .section-nav-badge {
+  background: none;
+  color: inherit;
+}
+
+:root[data-theme="tui"] .section-nav-toggle-all {
+  color: var(--tui-bright-yellow);
+}
+
+:root[data-theme="tui"] .section-nav-toggle-all:hover {
+  background: var(--tui-bright-yellow);
+  color: var(--tui-black);
+}
+
+/* [-] collapse all, [+] expand all */
+:root[data-theme="tui"] .section-nav-toggle-icon {
+  height: auto;
+  width: auto;
+}
+
+:root[data-theme="tui"] .section-nav-toggle-icon::before {
+  border: none;
+  content: '[-]';
+  height: auto;
+  position: static;
+  transform: none;
+  width: auto;
+}
+
+:root[data-theme="tui"] .section-nav-toggle-icon.is-collapsed::before {
+  content: '[+]';
+  transform: none;
+}
+
+:root[data-theme="tui"] .section-nav-toggle-icon::after {
+  display: none;
+}
+
+@media (max-width: 700px) {
+  :root[data-theme="tui"] .section-nav-list {
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+}
+
+/* ---- sections: a frame each, the header set into its top border -------- */
+
+:root[data-theme="tui"] .panel-section {
+  border: 1px solid var(--tui-frame);
+  margin-top: var(--tui-half);
+}
+
+:root[data-theme="tui"] .panel-section.is-current {
+  border-color: var(--tui-frame-strong);
+}
+
+/* Collapsed: only the top rule is left, ──[+] STRINGS ─── */
+:root[data-theme="tui"] .panel-section[data-state="collapsed"] {
+  border-color: var(--tui-frame) transparent transparent;
+}
+
+:root[data-theme="tui"] .panel-section-heading {
+  margin: calc(-1 * var(--tui-half) - 1px) 0 0;
+}
+
+:root[data-theme="tui"] .panel-section-toggle,
+:root[data-theme="tui"] .panel-section-toggle:hover,
+:root[data-theme="tui"] .panel-section.is-current .panel-section-toggle {
+  align-items: center;
+  background: transparent;
+  border: none;
+  column-gap: 0;
+  font-size: 1rem;
+  line-height: calc(2 * var(--tui-half));
+  padding: 0 0 0 1ch;
+  transition: none;
+}
+
+:root[data-theme="tui"] .panel-section-chevron,
+:root[data-theme="tui"] .panel-section-name {
+  background: var(--tui-black);
+}
+
+:root[data-theme="tui"] .panel-section-chevron,
+:root[data-theme="tui"] .panel-section[data-state="collapsed"] .panel-section-chevron {
+  border: none;
+  color: var(--tui-bright-cyan);
+  height: auto;
+  margin: 0;
+  padding-left: 1ch;
+  transform: none;
+  transition: none;
+  width: auto;
+}
+
+:root[data-theme="tui"] .panel-section-chevron {
+  white-space: pre;
+}
+
+:root[data-theme="tui"] .panel-section-chevron::before {
+  content: '[-] ';
+}
+
+:root[data-theme="tui"] .panel-section[data-state="collapsed"] .panel-section-chevron::before {
+  content: '[+] ';
+}
+
+:root[data-theme="tui"] .panel-section-name {
+  align-items: center;
+  padding-right: 1ch;
+}
+
+:root[data-theme="tui"] .panel-section-title {
+  color: var(--tui-bright-cyan);
+  font-size: 1em;
+  line-height: inherit;
+}
+
+:root[data-theme="tui"] .panel-section-toggle:hover .panel-section-chevron,
+:root[data-theme="tui"] .panel-section-toggle:hover .panel-section-name,
+:root[data-theme="tui"] .panel-section-toggle:hover .panel-section-title {
+  color: var(--tui-bright-white);
+}
+
+/* The current section's header is an inverse bar */
+:root[data-theme="tui"] .panel-section.is-current .panel-section-chevron,
+:root[data-theme="tui"] .panel-section.is-current .panel-section-name,
+:root[data-theme="tui"] .panel-section.is-current .panel-section-title,
+:root[data-theme="tui"] .panel-section.is-current .panel-section-name .hd-tab-badge {
+  background: var(--tui-select);
+  color: var(--tui-select-text);
+}
+
+:root[data-theme="tui"] .panel-section-description {
+  background: var(--tui-black);
+  flex: 0 1 auto;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  padding: 0 1ch;
+}
+
+:root[data-theme="tui"] .panel-section.is-arriving .panel-section-toggle {
+  animation: none;
+}
+
+:root[data-theme="tui"] .panel-section-heading {
+  margin-bottom: 4px;
+}
+
+:root[data-theme="tui"] .panel-section-body {
+  padding: 4px 1ch 1ch;
+}
+
+/* Room above a frame whose title sits on its top border */
+:root[data-theme="tui"] .panel-section-body > .hd-stack > .hd-panel:first-child,
+:root[data-theme="tui"] .panel-section-body > .hd-stack > :is(.file-metadata, .zip-contents, .function-list):first-child {
+  margin-top: var(--tui-half);
+}
+
+:root[data-theme="tui"] .panel-section-placeholder {
+  border: none;
+}
+
+/* Inside a section's frame, panels drop their own */
+:root[data-theme="tui"] .panel-section-body > .hd-panel {
+  border: none;
+  padding: 8px 1ch;
+}
+
+:root[data-theme="tui"] .panel-section-body > .hd-panel > :is(.hd-panel-title, .hd-panel-header):first-child {
+  margin-left: 0;
+  margin-top: 0;
+}
+
+:root[data-theme="tui"] .panel-section-body > .hd-panel > .hd-panel-header:first-child > * {
+  background: none;
+}
+
+:root[data-theme="tui"] .panel-section-body > .hd-panel > .hd-panel-title:first-child::before,
+:root[data-theme="tui"] .panel-section-body > .hd-panel > .hd-panel-title:first-child::after,
+:root[data-theme="tui"] .panel-section-body > .hd-panel > .hd-panel-header:first-child > .hd-panel-title::before,
+:root[data-theme="tui"] .panel-section-body > .hd-panel > .hd-panel-header:first-child > .hd-panel-title::after {
+  content: none;
+}
+
+/* ---- hex view ----------------------------------------------------------- */
+
+/* The frame is drawn by ::before, half a line down, so the header row
+   (title and buttons) sits on its top edge */
+:root[data-theme="tui"] .hexview,
+:root[data-theme="tui"] .hexview.is-editing {
+  background: var(--tui-black);
+  border: none;
+  overflow: visible;
+  padding: 0 2ch 8px;
+}
+
+:root[data-theme="tui"] .hexview::before,
+:root[data-theme="tui"] .hexview.is-editing::before,
+:root[data-theme="tui"] .hexview.is-fullscreen::before {
+  animation: none;
+  background: none;
+  border: 1px solid var(--tui-frame-strong);
+  display: block;
+  height: auto;
+  inset: var(--tui-half) 0 0 0;
+  pointer-events: none;
+}
+
+:root[data-theme="tui"] .hexview.is-editing::before {
+  border-color: var(--tui-bright-yellow);
+}
+
+/* While editing, the cursor is a yellow block */
+:root[data-theme="tui"] .hexview.is-editing {
+  --hx-cursor: var(--tui-bright-yellow);
+  --hx-cursor-bg: var(--tui-bright-yellow);
+}
+
+:root[data-theme="tui"] .hexview.is-fullscreen {
+  padding: 0 2ch 8px;
+}
+
+:root[data-theme="tui"] .hx-header {
+  min-height: calc(2 * var(--tui-half));
+  position: relative;
+}
+
+:root[data-theme="tui"] .is-editing .hx-header h2 {
+  color: var(--tui-bright-yellow);
+}
+
+:root[data-theme="tui"] .hx-toolbar {
+  background: var(--tui-black);
+  gap: 0 1ch;
+  padding: 0 1ch;
+}
+
+:root[data-theme="tui"] .hx-btn,
+:root[data-theme="tui"] .hx-btn-fullscreen {
+  font-size: 16px;
+  min-width: 0;
+}
+
+:root[data-theme="tui"] .hx-btn-download.is-modified {
+  color: var(--tui-bright-red);
+}
+
+:root[data-theme="tui"] .hx-edit-label {
+  animation: none;
+  background: var(--tui-bright-yellow);
+  color: var(--tui-black);
+  padding: 0 1ch;
+}
+
+:root[data-theme="tui"] .hx-goto {
+  background: transparent;
+  border: 1px solid var(--tui-frame);
+}
+
+:root[data-theme="tui"] .hx-goto label {
+  color: var(--tui-bright-yellow);
+}
+
+:root[data-theme="tui"] .hx-row:hover {
+  background: var(--tui-hover);
+}
+
+:root[data-theme="tui"] .hx-cell.is-hl {
+  color: var(--tui-bright-white);
+}
+
+/* Selection and the cursor in inverse video */
+:root[data-theme="tui"] .hx-cell.is-sel {
+  background-color: var(--tui-select);
+  color: var(--tui-select-text);
+}
+
+:root[data-theme="tui"] .hx-cell.is-hover {
+  background-color: var(--tui-shade);
+  color: var(--tui-bright-white);
+}
+
+:root[data-theme="tui"] .hx-cell.is-cur {
+  box-shadow: inset 0 0 0 1px var(--tui-bright-black) !important;
+}
+
+:root[data-theme="tui"] .hx-cell.is-cur.is-active {
+  box-shadow: inset 0 0 0 1px var(--hx-cursor) !important;
+}
+
+:root[data-theme="tui"] .hx-body:focus .hx-cell.is-cur.is-active {
+  box-shadow: none !important;
+  color: var(--tui-black);
+}
+
+:root[data-theme="tui"] .hx-body:focus .hx-cell.is-cur.is-nib {
+  color: var(--hx-text);
+}
+
+:root[data-theme="tui"] .hx-cell.is-mod {
+  color: var(--tui-bright-red);
+}
+
+:root[data-theme="tui"] .hx-label {
+  background: var(--tui-bright-yellow);
+  color: var(--tui-black);
+}
+
+/* Scroll bar: ▲, a light-shade track, a solid thumb, ▼ */
+:root[data-theme="tui"] .hx-jump {
+  background: transparent;
+  border: none;
+  color: var(--tui-bright-cyan);
+  font-size: 12px;
+}
+
+:root[data-theme="tui"] .hx-jump:hover:not(:disabled) {
+  background: var(--tui-bright-cyan);
+  color: var(--tui-black);
+}
+
+:root[data-theme="tui"] .hx-track {
+  background: repeating-conic-gradient(var(--tui-shade) 0 25%, transparent 0 50%) 0 0 / 2px 2px;
+  border-left: none;
+}
+
+:root[data-theme="tui"] .hx-thumb,
+:root[data-theme="tui"] .hx-track:hover .hx-thumb {
+  background: var(--tui-white);
+  left: 0;
+  opacity: 1;
+  right: 0;
+  transition: none;
+}
+
+:root[data-theme="tui"] .is-editing .hx-thumb {
+  background: var(--tui-bright-yellow);
+}
+
+:root[data-theme="tui"] .hx-track.is-disabled .hx-thumb {
+  background: var(--tui-shade);
+}
+
+@media (max-width: 600px) {
+  :root[data-theme="tui"] .hx-btn::before {
+    content: '[';
+  }
+
+  :root[data-theme="tui"] .hx-btn::after {
+    content: ']';
+  }
+}
+
+/* ---- narrow screens: back to the hex view ------------------------------- */
+
+:root[data-theme="tui"] .hex-return {
+  background: var(--tui-select);
+  border: 1px solid var(--tui-select);
+  color: var(--tui-select-text);
+  padding: 2px 1ch;
+}
+
+:root[data-theme="tui"] .hex-return:hover {
+  background: var(--tui-bright-white);
+  border-color: var(--tui-bright-white);
+}
+
+:root[data-theme="tui"] .hex-return-arrow,
+:root[data-theme="tui"] .hex-return-arrow.is-down {
+  border: none;
+  height: auto;
+  margin: 0;
+  transform: none;
+  width: auto;
+}
+
+:root[data-theme="tui"] .hex-return-arrow::before {
+  content: '▲';
+}
+
+:root[data-theme="tui"] .hex-return-arrow.is-down::before {
+  content: '▼';
+}
+
+/* ---- drag and drop ------------------------------------------------------ */
+
+:root[data-theme="tui"] .drop-overlay {
+  background: rgba(0, 0, 0, 0.75);
+  border: 1px solid var(--tui-bright-yellow);
+  color: var(--tui-black);
+  font-size: 1em;
+}
+
+:root[data-theme="tui"] .drop-overlay span {
+  background: var(--tui-bright-yellow);
+  padding: 0 1ch;
+}
+
+/* ---- footer ------------------------------------------------------------- */
+
+:root[data-theme="tui"] .site-footer {
+  font-size: 1em;
+}
+
+/* ---- docks: Inspector ---------------------------------------------------- */
+
+:root[data-theme="tui"] .hd-panel.insp {
+  --insp-label: var(--tui-bright-yellow);
+  --insp-value: var(--tui-bright-cyan);
+  --insp-muted: var(--tui-bright-black);
+  --insp-cell-bg: transparent;
+  --insp-cell-hover: var(--tui-hover);
+  --insp-rule: var(--tui-frame);
+  --insp-menu-bg: var(--tui-black);
+  padding: 0 1ch 6px;
+}
+
+/* Its header row sits on the frame like a title */
+:root[data-theme="tui"] .insp-head {
+  margin-top: calc(-1 * var(--tui-half) + 2px);
+}
+
+:root[data-theme="tui"] .insp-head {
+  column-gap: 0;
+}
+
+:root[data-theme="tui"] .insp-head > * {
+  background: var(--tui-black);
+}
+
+:root[data-theme="tui"] .insp-toggle {
+  border: none;
+  color: var(--tui-bright-cyan);
+  font-size: 1em;
+  padding: 0 1ch;
+  text-transform: uppercase;
+}
+
+:root[data-theme="tui"] .insp-toggle:hover {
+  background: var(--tui-bright-cyan);
+  color: var(--tui-black);
+}
+
+:root[data-theme="tui"] .insp-chevron,
+:root[data-theme="tui"] .insp.is-collapsed .insp-chevron {
+  border: none;
+  height: auto;
+  transform: none;
+  transition: none;
+  width: auto;
+}
+
+:root[data-theme="tui"] .insp-chevron::before {
+  content: '[-]';
+}
+
+:root[data-theme="tui"] .insp.is-collapsed .insp-chevron::before {
+  content: '[+]';
+}
+
+:root[data-theme="tui"] .insp-at {
+  padding-right: 1ch;
+}
+
+:root[data-theme="tui"] .insp-summary {
+  background: none;
+}
+
+:root[data-theme="tui"] .insp-actions {
+  padding: 0 1ch;
+}
+
+:root[data-theme="tui"] .insp-order {
+  border: none;
+}
+
+:root[data-theme="tui"] .insp-seg {
+  padding: 0 1ch;
+}
+
+:root[data-theme="tui"] .insp-seg.is-on {
+  background: var(--tui-select);
+  color: var(--tui-select-text);
+}
+
+:root[data-theme="tui"] .insp-cell {
+  border: none;
+  padding: 1px 1ch;
+}
+
+:root[data-theme="tui"] .insp-cell:hover:not(:disabled) {
+  background: var(--tui-hover);
+}
+
+:root[data-theme="tui"] .insp-menu {
+  border-color: var(--tui-frame-strong);
+}
+
+:root[data-theme="tui"] .insp-menu-item:hover,
+:root[data-theme="tui"] .insp-menu-item:focus {
+  background: var(--tui-select);
+  color: var(--tui-select-text);
+}
+
+/* ---- docks: Anatomy ---------------------------------------------------------- */
+
+:root[data-theme="tui"] .ax-bar {
+  border-color: var(--tui-frame);
+}
+
+:root[data-theme="tui"] .ax-seg {
+  opacity: 1;
+}
+
+:root[data-theme="tui"] .ax-seg:hover {
+  filter: brightness(1.25);
+}
+
+:root[data-theme="tui"] .ax-marker {
+  background: var(--tui-bright-white);
+}
+
+:root[data-theme="tui"] .ax-title {
+  color: var(--tui-bright-cyan);
+}
+
+/* ---- disclosure widgets ---------------------------------------------------- */
+
+:root[data-theme="tui"] summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+:root[data-theme="tui"] summary::-webkit-details-marker {
+  display: none;
+}
+
+:root[data-theme="tui"] summary::before {
+  content: '[+] ';
+  white-space: pre;
+}
+
+:root[data-theme="tui"] details[open] > summary::before {
+  content: '[-] ';
+}
+
+/* ---- panels ------------------------------------------------------------------ */
+
+/* Panel tokens: grey frames, no tints */
+:root[data-theme="tui"] {
+  --insp-cell-bg: transparent;
+  --symbols-rule: var(--tui-frame);
+  --symbols-row-hover: var(--tui-hover);
+  --symbols-tag-bg: transparent;
+  --search-chip-border: var(--tui-frame);
+  --search-chip-on-bg: var(--tui-select);
+  --search-row-hover: var(--tui-hover);
+  --search-muted: var(--tui-white);
+  --carve-line: var(--tui-frame);
+  --carve-row-hover: var(--tui-hover);
+  --ch-border: var(--tui-frame);
+  --ch-tint: var(--tui-shade);
+  --ch-ok-tint: transparent;
+  --hd-compare-line: var(--tui-frame);
+}
+
+/* Frames inside panels: lists, cards, previews */
+:root[data-theme="tui"] :is(.sx-card, .sx-tree, .strings-list, .symbols-table, .carve-finding, .carve-list, .carve-details, .carve-end, .ch-item, .ch-status, .compare-map, .pv-frame, .pv-change, .viz-hit, .dance-meter, .poster-preview) {
+  border-color: var(--tui-frame);
+}
+
+:root[data-theme="tui"] :is(.sx-detail, .carve-finding, .carve-confirm, .ch-goal, .compare-shift) {
+  background: transparent;
+  border-left-width: 1px;
+}
+
+:root[data-theme="tui"] .sx-detail {
+  border: 1px solid var(--tui-frame);
+}
+
+:root[data-theme="tui"] .sx-tour {
+  border-color: var(--tui-bright-yellow);
+}
+
+:root[data-theme="tui"] .ch-item.is-active {
+  border-color: var(--tui-frame-strong);
+}
+
+:root[data-theme="tui"] .ch-item.is-active .ch-item-number {
+  background: var(--tui-select);
+  color: var(--tui-select-text);
+}
+
+:root[data-theme="tui"] .ch-status.is-solved {
+  border-color: var(--tui-bright-green);
+}
+
+/* Hovered rows in a dark bar, the current one in an inverse bar */
+:root[data-theme="tui"] :is(.sx-row:hover, .sx-row.is-hovered, .strings-row:hover, .symbols-row:hover, .search-row:hover, .carve-row:hover, .compare-item:hover) {
+  background: var(--tui-hover);
+}
+
+:root[data-theme="tui"] :is(.sx-row.is-active, .strings-row.is-active, .symbols-row.is-selected, .search-row.is-current, .carve-row.is-active, .compare-item.is-selected),
+:root[data-theme="tui"] :is(.sx-row.is-active, .strings-row.is-active, .symbols-row.is-selected, .search-row.is-current, .carve-row.is-active, .compare-item.is-selected) * {
+  background-color: var(--tui-select);
+  border-color: var(--tui-select-text);
+  color: var(--tui-select-text) !important;
+}
+
+/* The structure tree marks its active row with a frame while it has focus */
+:root[data-theme="tui"] .sx-tree:focus-visible .sx-row.is-active {
+  outline: 1px solid var(--tui-bright-white);
+  outline-offset: -1px;
+}
+
+:root[data-theme="tui"] .compare-map-active {
+  outline: 1px solid var(--tui-bright-white);
+}
+
+/* Segmented controls and filter chips as text: [HEX] TEXT NUMBER */
+:root[data-theme="tui"] .search-modes {
+  border: none;
+  gap: 1ch;
+}
+
+:root[data-theme="tui"] .search-mode,
+:root[data-theme="tui"] .search-mode + .search-mode {
+  border: none;
+  color: var(--tui-white);
+  padding: 0 1ch;
+  text-transform: none;
+}
+
+:root[data-theme="tui"] :is(.search-chip, .symbols-chip) {
+  border: none;
+  padding: 0 1ch;
+}
+
+:root[data-theme="tui"] :is(.search-mode, .search-chip, .symbols-chip):hover {
+  background: var(--tui-hover);
+  color: var(--tui-bright-white);
+}
+
+:root[data-theme="tui"] :is(.search-mode.is-on, .search-chip.is-on, .symbols-chip.is-active),
+:root[data-theme="tui"] :is(.search-mode.is-on, .search-chip.is-on, .symbols-chip.is-active):hover {
+  background: var(--tui-select);
+  color: var(--tui-select-text);
+}
+
+:root[data-theme="tui"] .symbols-chip {
+  color: var(--tui-bright-yellow);
+}
+
+:root[data-theme="tui"] .symbols-tag {
+  border: none;
+  padding: 0;
+}
+
+:root[data-theme="tui"] .symbols-tag::before {
+  content: '<';
+}
+
+:root[data-theme="tui"] .symbols-tag::after {
+  content: '>';
+}
+
+:root[data-theme="tui"] .strings-enc {
+  border-color: var(--tui-frame);
+}
+
+/* Bars made of cells, like the progress elements */
+:root[data-theme="tui"] .viz-progress,
+:root[data-theme="tui"] .ch-progress {
+  background: repeating-linear-gradient(90deg, var(--tui-shade) 0 7px, transparent 7px 8px);
+  height: 12px;
+}
+
+:root[data-theme="tui"] .viz-progress span,
+:root[data-theme="tui"] .ch-progress span {
+  background: repeating-linear-gradient(90deg, var(--tui-bright-cyan) 0 7px, transparent 7px 8px);
+}
+
+:root[data-theme="tui"] .compare-drop-overlay {
+  background: rgba(0, 0, 0, 0.8);
+  border: 1px solid var(--tui-bright-yellow);
+}
