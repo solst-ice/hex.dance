@@ -1,6 +1,7 @@
 /* eslint-disable react/prop-types -- the project does not use prop-types */
 import { useMemo } from 'react'
 import HexDump from './HexDump'
+import HexReturn from './HexReturn'
 import PanelBoundary from './PanelBoundary'
 import SectionStack from './SectionStack'
 import { availablePanels } from '../panels/index.js'
@@ -74,6 +75,7 @@ function Workspace({ footer = null }) {
         <SectionStack panels={tabPanels} analysis={analysis} file={file} status={status} />
         {footer}
       </div>
+      <HexReturn panels={tabPanels} />
     </div>
   )
 }

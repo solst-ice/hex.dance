@@ -362,6 +362,63 @@
   }
 }
 
+/* ---- narrow screens: a way to the hex view and back -------------------- */
+
+.hex-return {
+  align-items: center;
+  background: var(--darker-bg);
+  border: 1px solid var(--neon-blue);
+  border-radius: 999px;
+  bottom: max(16px, env(safe-area-inset-bottom));
+  box-shadow: var(--hd-glow), 0 6px 20px rgba(0, 0, 0, 0.6);
+  color: var(--neon-blue);
+  cursor: pointer;
+  display: inline-flex;
+  font-family: 'Unifont', monospace;
+  font-size: 0.95em;
+  gap: 8px;
+  left: 50%;
+  letter-spacing: 1px;
+  max-width: calc(100vw - 32px);
+  overflow: hidden;
+  padding: 10px 18px;
+  position: fixed;
+  text-overflow: ellipsis;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  z-index: 60;
+}
+
+.hex-return:hover {
+  background: var(--hd-tint-strong);
+}
+
+.hex-return:focus-visible {
+  outline: 2px solid var(--hd-focus);
+  outline-offset: 3px;
+}
+
+.hex-return-arrow {
+  border-left: 2px solid currentColor;
+  border-top: 2px solid currentColor;
+  flex: none;
+  height: 7px;
+  margin-top: 4px;
+  transform: rotate(45deg);
+  width: 7px;
+}
+
+.hex-return-arrow.is-down {
+  margin-top: -4px;
+  transform: rotate(225deg);
+}
+
+@media (min-width: 1200px) {
+  .hex-return {
+    display: none;
+  }
+}
+
 /* A panel header left with nothing in it once its title moved to the section header */
 .panel-section-body .hd-panel-header:empty {
   display: none;
