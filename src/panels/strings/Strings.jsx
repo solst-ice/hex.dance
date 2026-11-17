@@ -203,7 +203,6 @@ function Strings() {
     >
       <JumpBridge jumpRef={jumpRef} />
       <div className="hd-panel-header">
-        <h2 className="hd-panel-title">Strings</h2>
         <MinLengthInput value={minLength} onChange={setMinLength} />
       </div>
 

@@ -1,16 +1,24 @@
+/* eslint-disable react/prop-types -- the project does not use prop-types */
 import { useMemo } from 'react'
 import HexDump from './HexDump'
 import PanelBoundary from './PanelBoundary'
-import PanelTabs from './PanelTabs'
+import SectionStack from './SectionStack'
 import { availablePanels } from '../panels/index.js'
-import { useFile, useHexViewReporter, useSelection } from '../state/hooks.js'
+import { useFile, useHexViewReporter, useSelection, useWorkspace } from '../state/hooks.js'
 
 // The only part of the layout that follows the selection, so selecting bytes
 // does not re-render the panels
 function HexArea() {
   const { file, buffer, status, notifyEdit } = useFile()
   const { selection, setSelection, highlights, hexApiRef } = useSelection()
+  const { activePanelId } = useWorkspace()
   const { setCursor, setViewport } = useHexViewReporter()
+
+  // Of the sections' layers, only the current section's are shown
+  const shown = useMemo(() => {
+    const kept = highlights.filter(highlight => !highlight.section || highlight.section === activePanelId)
+    return kept.length === highlights.length ? highlights : kept
+  }, [highlights, activePanelId])
 
   if (!buffer) {
     return (
@@ -25,7 +33,7 @@ function HexArea() {
       fileName={file.name}
       selection={selection}
       onSelectionChange={setSelection}
-      highlights={highlights}
+      highlights={shown}
       onEdit={notifyEdit}
       apiRef={hexApiRef}
       onCursorChange={setCursor}
@@ -35,10 +43,13 @@ function HexArea() {
 }
 
 /**
- * Layout once a file is open: hex view with the dock panels under it, and
- * the tab panels beside it on wide screens or below it on narrow ones.
+ * Layout once a file is open: the hex view with the dock panels under it,
+ * and every 'tab' panel stacked as a collapsible section beside it on wide
+ * screens or below it on narrow ones. On wide screens the hex column stays
+ * in place while the page scrolls the sections. `footer` ends the sections
+ * column, so the hex column can stay pinned to the very bottom of the page.
  */
-function Workspace() {
+function Workspace({ footer = null }) {
   const { file, analysis, status } = useFile()
 
   const context = useMemo(() => ({ file, analysis, status }), [file, analysis, status])
@@ -60,7 +71,8 @@ function Workspace() {
         )}
       </div>
       <div className="workspace-side">
-        <PanelTabs panels={tabPanels} analysis={analysis} resetKey={file} />
+        <SectionStack panels={tabPanels} analysis={analysis} file={file} status={status} />
+        {footer}
       </div>
     </div>
   )

@@ -216,9 +216,6 @@ function Structure() {
 
   return (
     <section className="hd-panel structure-panel">
-      <div className="hd-panel-header">
-        <h2 className="hd-panel-title">Structure</h2>
-      </div>
       {!analysis && <p className="hd-empty">{status === 'error' ? 'This file could not be analysed.' : 'Analyzing…'}</p>}
       {analysis && <FormatCard key={analysis.formatId} card={card} />}
       {analysis && analysis.fields.length === 0 && (

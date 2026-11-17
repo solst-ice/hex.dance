@@ -4,6 +4,7 @@ import Overview from './Overview.jsx'
 export default {
   id: 'overview',
   title: 'Overview',
+  description: 'What the file is: its type, size and the metadata its format records',
   order: 0,
   placement: 'tab',
   isAvailable: ({ file }) => Boolean(file),

@@ -4,6 +4,7 @@ import Entropy from './Entropy.jsx'
 export default {
   id: 'entropy',
   title: 'Entropy',
+  description: 'How random the bytes are from start to end, and which values occur',
   order: 45,
   placement: 'tab',
   isAvailable: ({ file }) => Boolean(file),

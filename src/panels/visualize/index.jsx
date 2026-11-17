@@ -4,6 +4,7 @@ import Visualize from './Visualize.jsx'
 export default {
   id: 'visualize',
   title: 'Visualize',
+  description: 'The bytes drawn as pictures, to spot patterns at a glance',
   order: 60,
   placement: 'tab',
   isAvailable: ({ file }) => Boolean(file && file.size > 0),

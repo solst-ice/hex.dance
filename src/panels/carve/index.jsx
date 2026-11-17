@@ -4,6 +4,7 @@ import Carve from './Carve.jsx'
 export default {
   id: 'carve',
   title: 'Embedded',
+  description: 'Other files hidden inside this one, found by their signatures',
   order: 32,
   placement: 'tab',
   isAvailable: ({ file }) => Boolean(file),

@@ -59,9 +59,6 @@ function Visualize() {
 
   return (
     <section className="hd-panel visualize-panel" data-view={view}>
-      <div className="hd-panel-header">
-        <h2 className="hd-panel-title">Visualize</h2>
-      </div>
       <div className="viz-switch" role="group" aria-label="Visualization">
         {VIEWS.map(([id, label]) => (
           <button

@@ -4,6 +4,7 @@ import Symbols from './Symbols.jsx'
 export default {
   id: 'symbols',
   title: 'Symbols',
+  description: 'Functions and data the program names, imports and exports',
   order: 10,
   placement: 'tab',
   isAvailable: ({ analysis }) => Boolean(analysis && analysis.symbols.length > 0),

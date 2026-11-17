@@ -30,7 +30,6 @@ function Preview() {
   return (
     <section className="hd-panel preview-panel" data-kind={media.kind} data-revision={version ?? ''}>
       <div className="hd-panel-header">
-        <h2 className="hd-panel-title">Preview</h2>
         <span className="hd-badge">{media.label}</span>
       </div>
       <MediaView url={url} media={media} caption={file?.name || 'File'} />

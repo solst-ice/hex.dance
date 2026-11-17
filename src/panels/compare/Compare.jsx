@@ -351,9 +351,6 @@ export default function Compare() {
 
   return (
     <div className={`hd-panel compare-panel${drop.dragging ? ' is-dragging' : ''}`} ref={drop.ref} {...drop.handlers}>
-      <div className="hd-panel-header">
-        <h2 className="hd-panel-title">Compare</h2>
-      </div>
       <FileInput inputRef={inputRef} onFile={pick} />
       <Files
         file={file}

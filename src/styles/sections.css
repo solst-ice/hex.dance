@@ -1,0 +1,368 @@
+/*
+ * The sections column: a pinned index of the sections, then every panel as a
+ * collapsible section. Colours come from theme.css.
+ *
+ *   .section-nav                index, sticky at the top of the column
+ *   .section-nav-link           one chip per section; [aria-current="true"] marks the current one
+ *   .section-nav-toggle-all     collapse / expand every section
+ *   .panel-section              one section; .is-current, [data-state], [data-mounted]
+ *   .panel-section-toggle       its header bar (a button)
+ *   .panel-section-body         the panel, or a placeholder until it mounts
+ */
+
+.section-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+/* Room to bring the last sections to the top; sized by SectionStack */
+.section-stack-end {
+  flex: none;
+  height: 0;
+  margin-top: -16px;
+}
+
+/* ---- index ------------------------------------------------------------ */
+
+.section-nav {
+  align-items: flex-start;
+  background: var(--dark-bg);
+  /* A band of page background above it hides sections scrolling under */
+  box-shadow: 0 -12px 0 var(--dark-bg);
+  display: flex;
+  gap: 8px;
+  margin-bottom: -4px;
+  overflow-anchor: none;
+  padding: 0 0 8px;
+  position: sticky;
+  top: 0;
+  z-index: 30;
+}
+
+.section-nav::after {
+  background: linear-gradient(90deg, var(--hd-border-strong), var(--hd-border) 60%, transparent);
+  bottom: 0;
+  content: '';
+  height: 1px;
+  left: 0;
+  position: absolute;
+  right: 0;
+}
+
+.section-nav-list {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  min-width: 0;
+  padding: 0;
+  position: relative;
+}
+
+.section-nav-link,
+.section-nav-toggle-all {
+  align-items: center;
+  border-radius: 999px;
+  cursor: pointer;
+  display: inline-flex;
+  font-family: 'Unifont', monospace;
+  font-size: 0.82em;
+  gap: 6px;
+  letter-spacing: 1px;
+  line-height: 1.2;
+  padding: 4px 10px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.section-nav-link {
+  background: var(--hd-tint);
+  border: 1px solid var(--hd-border-strong);
+  color: var(--neon-blue);
+  transition: background-color 0.15s ease, box-shadow 0.15s ease, color 0.15s ease;
+}
+
+.section-nav-link:hover {
+  background: var(--hd-tint-strong);
+  box-shadow: var(--hd-glow);
+}
+
+.section-nav-link.is-collapsed {
+  background: transparent;
+  border-style: dashed;
+}
+
+.section-nav-link[aria-current="true"] {
+  background: var(--neon-blue);
+  border-color: var(--neon-blue);
+  box-shadow: var(--hd-glow);
+  color: var(--darker-bg);
+}
+
+.section-nav-badge {
+  background: var(--hd-pink-tint);
+  border-radius: 8px;
+  color: var(--neon-pink);
+  font-size: 0.9em;
+  letter-spacing: 0;
+  padding: 0 5px;
+}
+
+.section-nav-link[aria-current="true"] .section-nav-badge {
+  background: var(--darker-bg);
+}
+
+.section-nav-toggle-all {
+  background: transparent;
+  border: 1px solid var(--neon-pink);
+  color: var(--neon-pink);
+  flex: none;
+}
+
+.section-nav-toggle-all:hover {
+  background: var(--hd-pink-tint);
+  box-shadow: var(--hd-pink-glow);
+}
+
+/* Two chevrons: pointing in when collapsing, out when expanding */
+.section-nav-toggle-icon {
+  display: inline-block;
+  height: 10px;
+  position: relative;
+  width: 8px;
+}
+
+.section-nav-toggle-icon::before,
+.section-nav-toggle-icon::after {
+  border-left: 2px solid currentColor;
+  border-top: 2px solid currentColor;
+  content: '';
+  height: 4px;
+  left: 1px;
+  position: absolute;
+  width: 4px;
+}
+
+.section-nav-toggle-icon::before {
+  top: 0;
+  transform: rotate(225deg);
+}
+
+.section-nav-toggle-icon::after {
+  bottom: 0;
+  transform: rotate(45deg);
+}
+
+.section-nav-toggle-icon.is-collapsed::before {
+  top: 1px;
+  transform: rotate(45deg);
+}
+
+.section-nav-toggle-icon.is-collapsed::after {
+  bottom: 1px;
+  transform: rotate(225deg);
+}
+
+.section-nav-link:focus-visible,
+.section-nav-toggle-all:focus-visible {
+  outline: 2px solid var(--hd-focus);
+  outline-offset: 2px;
+}
+
+/* Wide screens: the index sits under the pinned header */
+@media (min-width: 1200px) {
+  .section-nav {
+    top: calc(var(--hd-header-h, 64px) + 24px);
+  }
+}
+
+/* Phones: one row of chips that scrolls sideways */
+@media (max-width: 700px) {
+  .section-nav {
+    align-items: center;
+    margin-left: -16px;
+    margin-right: -16px;
+    padding: 8px 16px;
+  }
+
+  .section-nav-list {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    /* Room for the focus ring inside the scroll box */
+    padding: 4px 2px;
+    scrollbar-width: none;
+    -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent);
+    mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent);
+  }
+
+  .section-nav-list::-webkit-scrollbar {
+    display: none;
+  }
+
+  .section-nav-list > li {
+    flex: none;
+  }
+
+  .section-nav-list > li:last-child {
+    padding-right: 20px;
+  }
+
+  .section-nav-toggle-all {
+    padding: 6px 10px;
+  }
+}
+
+/* ---- sections ----------------------------------------------------------- */
+
+.panel-section {
+  min-width: 0;
+}
+
+/* Focus and find-in-page bring things out from under the pinned index */
+.panel-section,
+.panel-section * {
+  scroll-margin-top: var(--sections-top, 0px);
+}
+
+.panel-section-heading {
+  font: inherit;
+  margin: 0 0 8px;
+}
+
+.panel-section[data-state="collapsed"] .panel-section-heading {
+  margin-bottom: 0;
+}
+
+.panel-section-toggle {
+  align-items: baseline;
+  background: linear-gradient(90deg, var(--hd-tint-strong), var(--hd-tint) 55%, transparent);
+  border: 1px solid var(--hd-border);
+  border-left: 3px solid var(--hd-border-strong);
+  border-radius: 6px;
+  color: var(--text);
+  column-gap: 12px;
+  cursor: pointer;
+  display: flex;
+  flex-wrap: wrap;
+  font-family: 'Unifont', monospace;
+  padding: 8px 14px 8px 12px;
+  row-gap: 2px;
+  text-align: left;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  width: 100%;
+}
+
+.panel-section-toggle:hover {
+  border-color: var(--hd-border-strong);
+}
+
+.panel-section-toggle:focus-visible {
+  outline: 2px solid var(--hd-focus);
+  outline-offset: 2px;
+}
+
+.panel-section.is-current .panel-section-toggle {
+  border-color: var(--hd-border-strong);
+  border-left-color: var(--neon-pink);
+  box-shadow: var(--hd-glow);
+}
+
+.panel-section-chevron {
+  align-self: center;
+  border-bottom: 2px solid var(--neon-blue);
+  border-right: 2px solid var(--neon-blue);
+  flex: none;
+  height: 7px;
+  margin: 0 2px 4px;
+  transform: rotate(45deg);
+  transition: transform 0.15s ease;
+  width: 7px;
+}
+
+.panel-section[data-state="collapsed"] .panel-section-chevron {
+  margin: 0 3px 0 0;
+  transform: rotate(-45deg);
+}
+
+.panel-section-name {
+  align-items: baseline;
+  display: inline-flex;
+  flex: none;
+  gap: 4px;
+}
+
+.panel-section-title {
+  color: var(--neon-blue);
+  font-size: 1.3em;
+  letter-spacing: 2px;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+.panel-section.is-current .panel-section-title {
+  text-shadow: 0 0 8px color-mix(in srgb, var(--neon-blue) 45%, transparent);
+}
+
+.panel-section-badge {
+  margin-left: 4px;
+}
+
+.panel-section-description {
+  color: var(--text-muted);
+  flex: 1 1 18em;
+  font-size: 0.9em;
+  line-height: 1.4;
+  min-width: 0;
+}
+
+.panel-section-body[hidden] {
+  display: none;
+}
+
+.panel-section-placeholder {
+  align-items: center;
+  border: 1px dashed var(--hd-border);
+  border-radius: 8px;
+  box-sizing: border-box;
+  color: var(--text-muted);
+  display: flex;
+  font-size: 0.9em;
+  height: 160px;
+  justify-content: center;
+}
+
+/* Brief flash on a section brought into view from the index */
+.panel-section.is-arriving .panel-section-toggle {
+  animation: section-arrive 0.6s ease-out 1;
+}
+
+@keyframes section-arrive {
+  from {
+    background-color: color-mix(in srgb, var(--neon-blue) 30%, transparent);
+  }
+
+  to {
+    background-color: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel-section.is-arriving .panel-section-toggle {
+    animation: none;
+  }
+
+  .section-nav-link,
+  .panel-section-toggle,
+  .panel-section-chevron {
+    transition: none;
+  }
+}
+
+/* A panel header left with nothing in it once its title moved to the section header */
+.panel-section-body .hd-panel-header:empty {
+  display: none;
+}

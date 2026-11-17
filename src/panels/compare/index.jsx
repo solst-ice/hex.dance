@@ -4,6 +4,7 @@ import Compare from './Compare.jsx'
 export default {
   id: 'compare',
   title: 'Compare',
+  description: 'Line this file up against another one and see what differs',
   order: 47,
   placement: 'tab',
   isAvailable: ({ file }) => Boolean(file),

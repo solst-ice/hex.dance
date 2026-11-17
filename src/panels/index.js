@@ -10,8 +10,10 @@
  * @typedef {Object} PanelModule
  * @property {string} id
  * @property {string} title
+ * @property {string} [description]          one plain line on what the panel is for, shown in its section header
  * @property {number} order                  ascending; ties are broken by id
- * @property {'tab'|'dock'} placement        'tab': in the tab strip; 'dock': always visible under the hex view
+ * @property {'tab'|'dock'} placement        'tab': a collapsible section beside (or below) the hex view;
+ *                                            'dock': always visible under the hex view
  * @property {(context: PanelContext) => boolean} isAvailable
  * @property {(context: { analysis: import('../analysis/types.js').Analysis|null }) => string|number|null} [badge]
  * @property {import('react').ComponentType} Component   takes no props; reads state through useFile/useSelection

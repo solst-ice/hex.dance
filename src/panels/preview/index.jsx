@@ -31,6 +31,7 @@ function isAvailable({ file, analysis }) {
 export default {
   id: 'preview',
   title: 'Preview',
+  description: 'The file shown as the image, sound or video it contains, with a glitch lab',
   order: 50,
   placement: 'tab',
   isAvailable,

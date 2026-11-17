@@ -214,7 +214,7 @@ function Search() {
   const position = current >= 0 && shown ? current + 1 : null
 
   return (
-    <section className="hd-panel search" aria-label="Search">
+    <section className="hd-panel search">
       <SelectionBridge bridge={bridge} />
       <SearchHighlights ranges={ranges} />
       <div className="search-modes" role="group" aria-label="Search for">

@@ -174,7 +174,6 @@ function Carve() {
       <JumpBridge jumpRef={jumpRef} />
       <Tint ranges={ranges} />
       <div className="hd-panel-header">
-        <h2 className="hd-panel-title">Embedded</h2>
         {scan && !scanning && (
           <button type="button" className="hd-button hd-button--small" onClick={() => setToken(t => t + 1)}>Rescan</button>
         )}

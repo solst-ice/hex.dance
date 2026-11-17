@@ -4,6 +4,7 @@ import Challenges from './Challenges.jsx'
 export default {
   id: 'challenges',
   title: 'Learn',
+  description: 'Guided challenges: fix and explore files made for the purpose',
   order: 90,
   placement: 'tab',
   isAvailable: ({ file }) => Boolean(file),

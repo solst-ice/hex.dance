@@ -74,10 +74,19 @@ export default function Challenges() {
 
   useEffect(() => {
     mounted.current = true
-    if (focusNextMount && headingRef.current) headingRef.current.focus()
-    focusNextMount = false
-    return () => { mounted.current = false }
+    return () => {
+      mounted.current = false
+      focusNextMount = false
+    }
   }, [])
+
+  // After this panel loads a challenge file, move focus to its heading. Only
+  // a load started here sets the flag, and it is cleared at once, so the
+  // panel never takes focus just for being mounted.
+  useEffect(() => {
+    if (focusNextMount && headingRef.current) headingRef.current.focus({ preventScroll: true })
+    focusNextMount = false
+  }, [file])
 
   const open = useCallback(async (challenge) => {
     setConfirmId(null)
@@ -142,7 +151,6 @@ export default function Challenges() {
         />
       ) : (
         <div className="hd-panel-header">
-          <h2 className="hd-panel-title" ref={headingRef} tabIndex={-1}>Learn</h2>
           <span className="hd-muted">{solved.size} of {CHALLENGES.length} solved</span>
         </div>
       )}
