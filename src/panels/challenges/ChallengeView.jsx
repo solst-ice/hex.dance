@@ -100,9 +100,9 @@ export default function ChallengeView({
   return (
     <article className="ch-view" aria-labelledby={`ch-title-${challenge.id}`}>
       <div className="hd-panel-header">
-        <h2 className="hd-panel-title" id={`ch-title-${challenge.id}`} ref={headingRef} tabIndex={-1}>
+        <h3 className="hd-panel-title" id={`ch-title-${challenge.id}`} ref={headingRef} tabIndex={-1}>
           <span className="ch-title-number">{String(number).padStart(2, '0')}</span> {challenge.title}
-        </h2>
+        </h3>
         <span className="hd-row ch-meta">
           <span className={`hd-badge ch-diff ch-diff--${challenge.difficulty}`}>{challenge.difficulty}</span>
           {wasSolved && <span className="ch-solved-mark" title="Solved before">✓<span className="ch-visually-hidden"> solved before</span></span>}
@@ -158,7 +158,7 @@ export default function ChallengeView({
 
       {solvedNow && (
         <section className="ch-learned" aria-label="What you learned">
-          <h3 className="hd-section-title">What you learned</h3>
+          <h4 className="hd-section-title">What you learned</h4>
           {challenge.learned.map((paragraph, index) => <p key={index}><Rich text={paragraph} /></p>)}
           {challenge.spec && (
             <p className="ch-small">

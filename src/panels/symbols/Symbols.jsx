@@ -164,9 +164,9 @@ function Symbols() {
     <section className="hd-panel symbols-panel">
       <SelectionBridge apiRef={jumpRef} />
       <div className="hd-panel-header">
-        <h2 className="hd-panel-title">
+        <h3 className="hd-panel-title">
           {TITLES[analysis.formatId] || 'Symbols'} <span className="hd-muted symbols-count">{model.count.toLocaleString()}</span>
-        </h2>
+        </h3>
       </div>
 
       {capabilities.length > 0 && (

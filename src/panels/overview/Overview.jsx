@@ -85,7 +85,7 @@ function Overview() {
   return (
     <div className="hd-stack overview">
       <section className="hd-panel">
-        <h2 className="hd-panel-title overview-title">File Information</h2>
+        <h3 className="hd-panel-title overview-title">File Information</h3>
         <div className="metadata-grid">
           <Card label="File Name" value={file.name} />
           <Card label="File Size" value={formatBytes(file.size)} />
@@ -110,7 +110,7 @@ function Overview() {
 
       {warnings.length > 0 && (
         <section className="hd-panel overview-warnings">
-          <h3 className="hd-section-title">Warnings</h3>
+          <h4 className="hd-section-title">Warnings</h4>
           <ul>
             {warnings.map((warning, index) => <li key={index} className="hd-warning">{warning}</li>)}
           </ul>
@@ -120,7 +120,7 @@ function Overview() {
       {analysis && analysis.summary.length > 0 && (
         <section className="hd-panel">
           <div className="hd-panel-header">
-            <h2 className="hd-panel-title">{analysis.formatId === 'unknown' ? 'Metadata' : analysis.formatName}</h2>
+            <h3 className="hd-panel-title">{analysis.formatId === 'unknown' ? 'Metadata' : analysis.formatName}</h3>
             {hasDetails && (
               <button className="hd-button" onClick={() => setOpened({ ...state, all: !state.all })}>
                 {state.all ? 'Collapse All' : 'Expand All'}
@@ -141,7 +141,7 @@ function Overview() {
           )}
           {groups.map(([group, entries]) => (
             <div key={group}>
-              <h3 className="hd-section-title">{group}</h3>
+              <h4 className="hd-section-title">{group}</h4>
               <ul className="overview-rows">
                 {entries.map((entry, index) => (
                   <DetailRow
