@@ -216,6 +216,18 @@
   }
 }
 
+/* Small phones: the collapse / expand button shows only its icon, so the
+   chips get the row (its aria-label and title still name it) */
+@media (max-width: 600px) {
+  .section-nav-toggle-all {
+    padding: 6px 9px;
+  }
+
+  .section-nav-toggle-text {
+    display: none;
+  }
+}
+
 /* ---- sections ----------------------------------------------------------- */
 
 .panel-section {
@@ -314,7 +326,7 @@
 .panel-section-description {
   color: var(--text-muted);
   flex: 1 1 18em;
-  font-size: 0.9em;
+  font-size: 13px;
   line-height: 1.4;
   min-width: 0;
 }

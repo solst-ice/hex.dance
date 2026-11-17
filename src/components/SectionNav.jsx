@@ -55,9 +55,10 @@ const SectionNav = forwardRef(function SectionNav(
         className="section-nav-toggle-all"
         onClick={onToggleAll}
         aria-label={allCollapsed ? 'Expand all sections' : 'Collapse all sections'}
+        title={allCollapsed ? 'Expand all sections' : 'Collapse all sections'}
       >
         <span className={`section-nav-toggle-icon${allCollapsed ? ' is-collapsed' : ''}`} aria-hidden="true" />
-        {allCollapsed ? 'Expand all' : 'Collapse all'}
+        <span className="section-nav-toggle-text">{allCollapsed ? 'Expand all' : 'Collapse all'}</span>
       </button>
     </nav>
   )
