@@ -11,7 +11,9 @@
  * @property {string} id
  * @property {string} title
  * @property {string} [description]          one plain line on what the panel is for, shown in its section header
- * @property {number} order                  ascending; ties are broken by id
+ * @property {number} order                  ascending; ties are broken by id. 'tab' panels run group by group
+ * @property {1|2|3} [group]                 'tab' panels: 1 what the file is, 2 finding things in the bytes,
+ *                                            3 seeing and playing; each group is a column on wide screens
  * @property {'tab'|'dock'} placement        'tab': a collapsible section beside (or below) the hex view;
  *                                            'dock': always visible under the hex view
  * @property {(context: PanelContext) => boolean} isAvailable

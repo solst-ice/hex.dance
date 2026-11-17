@@ -6,6 +6,7 @@ export default {
   title: 'Compare',
   description: 'Line this file up against another one and see what differs',
   order: 47,
+  group: 2,
   placement: 'tab',
   isAvailable: ({ file }) => Boolean(file),
   Component: Compare

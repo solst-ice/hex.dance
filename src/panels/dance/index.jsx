@@ -6,6 +6,7 @@ export default {
   title: 'Dance',
   description: 'The bytes played as sound',
   order: 70,
+  group: 3,
   placement: 'tab',
   isAvailable: ({ file }) => Boolean(file && file.size > 0),
   Component: Dance

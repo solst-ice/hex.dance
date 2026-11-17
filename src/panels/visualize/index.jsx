@@ -6,6 +6,7 @@ export default {
   title: 'Visualize',
   description: 'The bytes drawn as pictures, to spot patterns at a glance',
   order: 60,
+  group: 3,
   placement: 'tab',
   isAvailable: ({ file }) => Boolean(file && file.size > 0),
   Component: Visualize

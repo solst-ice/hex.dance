@@ -6,6 +6,7 @@ export default {
   title: 'Strings',
   description: 'Readable text found in the bytes',
   order: 30,
+  group: 2,
   placement: 'tab',
   isAvailable: ({ file }) => Boolean(file),
   Component: Strings

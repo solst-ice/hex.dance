@@ -32,7 +32,8 @@ export default {
   id: 'preview',
   title: 'Preview',
   description: 'The file shown as the image, sound or video it contains, with a glitch lab',
-  order: 50,
+  order: 25,
+  group: 1,
   placement: 'tab',
   isAvailable,
   Component: Preview

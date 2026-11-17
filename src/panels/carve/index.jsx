@@ -6,6 +6,7 @@ export default {
   title: 'Embedded',
   description: 'Other files hidden inside this one, found by their signatures',
   order: 32,
+  group: 2,
   placement: 'tab',
   isAvailable: ({ file }) => Boolean(file),
   Component: Carve
