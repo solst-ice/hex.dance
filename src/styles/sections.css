@@ -1,10 +1,14 @@
 /*
- * The sections column: a pinned index of the sections, then every panel as a
- * collapsible section. Colours come from theme.css.
+ * The sections area: a pinned index of the sections, then every panel as a
+ * collapsible section, in one, two or three columns. Colours come from theme.css.
  *
- *   .section-nav                index, sticky at the top of the column
+ *   .section-stack              the whole area; [data-columns] is 1, 2 or 3
+ *   .section-nav                index, sticky at the top of the area
  *   .section-nav-link           one chip per section; [aria-current="true"] marks the current one
  *   .section-nav-toggle-all     collapse / expand every section
+ *   .section-columns            the sections, in three groups:
+ *   .section-column             one group ([data-group]); a column of its own with three columns
+ *   .section-column-rest        holds groups 2 and 3; one column with two columns
  *   .panel-section              one section; .is-current, [data-state], [data-mounted]
  *   .panel-section-toggle       its header bar (a button)
  *   .panel-section-body         the panel, or a placeholder until it mounts
@@ -17,11 +21,93 @@
   min-width: 0;
 }
 
-/* Room to bring the last sections to the top; sized by SectionStack */
-.section-stack-end {
+/*
+ * The markup is the same whatever the number of columns, so a change of
+ * width never remounts a panel: SectionStack sets data-columns, and the
+ * containers that are not columns in that layout drop out of it
+ * (display: contents), leaving their sections in the column around them.
+ * With one column (the default, also before it is measured) every section
+ * sits straight in .section-stack and the page scrolls them.
+ */
+.section-columns,
+.section-column,
+.section-column-rest {
+  display: contents;
+}
+
+/* Room to bring the last sections of a column to the top; sized by
+   SectionStack. Only the spacer at the end of each column is used. */
+.section-column-end {
+  display: none;
   flex: none;
   height: 0;
   margin-top: -16px;
+}
+
+.section-column-end[data-group="3"],
+.section-stack[data-columns="2"] .section-column-end[data-group="1"],
+.section-stack[data-columns="3"] .section-column-end {
+  display: block;
+}
+
+/* The footer follows the spacer at the end of the last column, as close
+   as if the spacer were not there */
+.section-stack-footer {
+  margin-top: -16px;
+}
+
+/*
+ * Several columns: the index stays across the top of the area and each
+ * column scrolls on its own under it, like the hex column (the page does
+ * not scroll; see workspace.css). The columns' padding leaves room for the
+ * glow of a section header and for focus rings inside the scroll box.
+ */
+.section-stack[data-columns="2"],
+.section-stack[data-columns="3"] {
+  height: 100%;
+}
+
+.section-stack[data-columns="2"] .section-columns,
+.section-stack[data-columns="3"] .section-columns {
+  display: grid;
+  flex: 1 1 0;
+  gap: 4px;
+  margin: -8px -8px 0;
+  min-height: 0;
+}
+
+.section-stack[data-columns="2"] .section-columns {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.section-stack[data-columns="3"] .section-columns {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.section-stack[data-columns="2"] .section-column[data-group="1"],
+.section-stack[data-columns="2"] .section-column-rest,
+.section-stack[data-columns="3"] .section-column {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+  min-width: 0;
+  /* SectionStack keeps the reader's place itself */
+  overflow-anchor: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 8px 8px 12px;
+  /* Holds the panels' absolutely placed parts (e.g. text for screen
+     readers), which would otherwise stretch the page */
+  position: relative;
+  scrollbar-width: thin;
+}
+
+.section-stack[data-columns="2"] .section-column[data-group="1"]:focus-visible,
+.section-stack[data-columns="2"] .section-column-rest:focus-visible,
+.section-stack[data-columns="3"] .section-column:focus-visible {
+  outline: 1px dashed var(--hd-focus);
+  outline-offset: -1px;
 }
 
 /* ---- index ------------------------------------------------------------ */
@@ -171,6 +257,14 @@
 .section-nav-toggle-all:focus-visible {
   outline: 2px solid var(--hd-focus);
   outline-offset: 2px;
+}
+
+/* Where one column ends and the next begins, between their chips */
+.section-stack[data-columns="2"] .section-nav-group-start[data-group="2"],
+.section-stack[data-columns="3"] .section-nav-group-start {
+  border-left: 1px solid var(--hd-border-strong);
+  margin-left: 4px;
+  padding-left: 10px;
 }
 
 /* Wide screens: the index sits under the pinned header */

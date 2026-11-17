@@ -5,6 +5,8 @@ import { forwardRef, memo, useEffect, useRef } from 'react'
  * The index of the sections, pinned at the top of the sections column: one
  * chip per section (the current one marked) and a button that collapses or
  * expands them all. On phones the chips scroll sideways in a single row.
+ * `items` carry their group; a divider between two groups shows where one
+ * column ends when there are several (see sections.css).
  */
 const SectionNav = forwardRef(function SectionNav(
   { items, currentId, collapsed, allCollapsed, onChoose, onToggleAll },
@@ -29,11 +31,12 @@ const SectionNav = forwardRef(function SectionNav(
   return (
     <nav className="section-nav" aria-label="Sections" ref={ref}>
       <ul className="section-nav-list" ref={listRef}>
-        {items.map(({ panel, badge }) => {
+        {items.map(({ panel, badge, group }, index) => {
           const isCurrent = panel.id === currentId
           const isCollapsed = collapsed.has(panel.id)
+          const startsGroup = index > 0 && group !== items[index - 1].group
           return (
-            <li key={panel.id}>
+            <li key={panel.id} className={startsGroup ? 'section-nav-group-start' : undefined} data-group={group}>
               <button
                 type="button"
                 className={`section-nav-link${isCollapsed ? ' is-collapsed' : ''}`}

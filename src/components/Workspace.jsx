@@ -47,8 +47,9 @@ function HexArea() {
  * Layout once a file is open: the hex view with the dock panels under it,
  * and every 'tab' panel stacked as a collapsible section beside it on wide
  * screens or below it on narrow ones. On wide screens the hex column stays
- * in place while the page scrolls the sections. `footer` ends the sections
- * column, so the hex column can stay pinned to the very bottom of the page.
+ * in place while the page (or, with several columns of sections, each
+ * column) scrolls the sections. `footer` ends the last column of sections,
+ * so the hex column can stay pinned to the very bottom of the page.
  */
 function Workspace({ footer = null }) {
   const { file, analysis, status } = useFile()
@@ -72,8 +73,7 @@ function Workspace({ footer = null }) {
         )}
       </div>
       <div className="workspace-side">
-        <SectionStack panels={tabPanels} analysis={analysis} file={file} status={status} />
-        {footer}
+        <SectionStack panels={tabPanels} analysis={analysis} file={file} status={status} footer={footer} />
       </div>
       <HexReturn panels={tabPanels} />
     </div>
