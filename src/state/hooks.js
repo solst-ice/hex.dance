@@ -1,5 +1,7 @@
 import { useContext, useEffect, useSyncExternalStore } from 'react'
-import { FileContext, HexViewContext, SelectionContext, WorkspaceContext } from './contexts.js'
+import {
+  FileContext, HexViewContext, SelectionActionsContext, SelectionContext, WorkspaceContext
+} from './contexts.js'
 
 /**
  * @typedef {'idle' | 'reading' | 'analyzing' | 'ready' | 'error'} FileStatus
@@ -28,6 +30,10 @@ import { FileContext, HexViewContext, SelectionContext, WorkspaceContext } from 
  * @property {(highlights: Highlight[] | ((previous: Highlight[]) => Highlight[])) => void} setHighlights
  * @property {(offset: number, length?: number) => void} jumpTo   select the range and scroll the hex view to it
  * @property {{ current: { scrollToOffset?: (offset: number) => void } | null }} hexApiRef   passed to the hex view as `apiRef`
+ *
+ * @typedef {Pick<SelectionState, 'setSelection' | 'setHighlights' | 'jumpTo' | 'hexApiRef'> & {
+ *   subscribeJumps: (listener: (offset: number) => void) => () => void
+ * }} SelectionActions   never change identity
  */
 
 /** @returns {FileState} */
@@ -41,6 +47,18 @@ export function useFile() {
 export function useSelection() {
   const value = useContext(SelectionContext)
   if (!value) throw new Error('useSelection must be used inside <SelectionProvider>')
+  return value
+}
+
+/**
+ * The selection's setters, `jumpTo` and `hexApiRef`, without the selection
+ * itself: the object never changes, so callers that only act on the
+ * selection do not re-render when it changes.
+ * @returns {SelectionActions}
+ */
+export function useSelectionActions() {
+  const value = useContext(SelectionActionsContext)
+  if (!value) throw new Error('useSelectionActions must be used inside <SelectionProvider>')
   return value
 }
 
@@ -68,7 +86,7 @@ export function useWorkspace() {
  *   memoise this array: a new identity replaces the layer
  */
 export function useHighlightLayer(layer, ranges) {
-  const { setHighlights } = useSelection()
+  const { setHighlights } = useSelectionActions()
 
   useEffect(() => {
     const prefix = `${layer}:`

@@ -1,6 +1,6 @@
 /* eslint-disable react/prop-types -- the project does not use prop-types */
 import { memo, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { useFile, useHexViewport, useHighlightLayer, useSelection } from '../../state/hooks.js'
+import { useFile, useHexViewport, useHighlightLayer, useSelection, useSelectionActions } from '../../state/hooks.js'
 import { FIELD_KIND_ORDER, fieldKind, fieldKindColor, fieldKindLabel, regionKind, regionKindLabel } from '../../lib/kinds.js'
 import { buildTreeIndex, collectLeaves, leavesIn } from '../../lib/fieldIndex.js'
 import { formatLength, formatOffset } from '../../lib/format.js'
@@ -101,7 +101,7 @@ function Legend({ kinds, fieldKinds }) {
 
 function Anatomy() {
   const { analysis, bytes } = useFile()
-  const { jumpTo } = useSelection()
+  const { jumpTo } = useSelectionActions()
   const barRef = useRef(null)
   const [width, setWidth] = useState(0)
   const [focus, setFocus] = useState(null)

@@ -1,6 +1,6 @@
 /* eslint-disable react/prop-types -- the project does not use prop-types */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useFile, useSelection } from '../../state/hooks.js'
+import { useFile, useSelectionActions } from '../../state/hooks.js'
 import { copyText } from '../../lib/clipboard.js'
 import { formatOffset } from '../../lib/format.js'
 import SymbolTable from './SymbolTable.jsx'
@@ -19,7 +19,7 @@ const loadDemangler = () => (demanglerPromise ||= import('../../formats/demangle
 // Keeps hex-view selection changes away from the table: only this component
 // re-renders when the selection moves, and it renders nothing.
 function SelectionBridge({ apiRef }) {
-  const { jumpTo } = useSelection()
+  const { jumpTo } = useSelectionActions()
   apiRef.current = jumpTo
   return null
 }

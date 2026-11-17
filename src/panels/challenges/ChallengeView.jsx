@@ -1,6 +1,6 @@
 /* eslint-disable react/prop-types -- the project does not use prop-types */
 import { useEffect, useId, useState } from 'react'
-import { useSelection } from '../../state/hooks.js'
+import { useSelectionActions } from '../../state/hooks.js'
 import { runCheck } from './challenges.js'
 import { hintsRevealed, setHintsRevealed } from './progress.js'
 import CrcTool from './CrcTool.jsx'
@@ -10,7 +10,7 @@ const CHECK_DELAY_MS = 300
 
 // Kept apart so only these buttons re-render when the selection changes
 function ShowWhere({ targets, disabled }) {
-  const { jumpTo } = useSelection()
+  const { jumpTo } = useSelectionActions()
   return targets.map(target => (
     <button key={target.label} type="button" className="hd-button hd-button--small ch-where" disabled={disabled}
       onClick={() => jumpTo(target.offset, target.length)}

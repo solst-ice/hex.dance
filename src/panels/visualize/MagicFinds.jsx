@@ -1,6 +1,6 @@
 /* eslint-disable react/prop-types -- the project does not use prop-types */
 import { memo, useState } from 'react'
-import { useSelection } from '../../state/hooks.js'
+import { useSelectionActions } from '../../state/hooks.js'
 import { HEX, formatOffset } from '../../components/hex/bytes.js'
 import { MAGIC_CONSTANTS, expectedByChance } from './magic.js'
 
@@ -13,7 +13,7 @@ function chanceText(expected) {
 }
 
 function Offsets({ hit }) {
-  const { jumpTo } = useSelection()
+  const { jumpTo } = useSelectionActions()
   const [all, setAll] = useState(false)
   const shown = all ? hit.offsets : hit.offsets.slice(0, OFFSETS_SHOWN)
   const hiddenListed = hit.offsets.length - shown.length

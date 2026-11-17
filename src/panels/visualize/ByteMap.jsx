@@ -1,6 +1,6 @@
 /* eslint-disable react/prop-types -- the project does not use prop-types */
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useSelection } from '../../state/hooks.js'
+import { useSelectionActions } from '../../state/hooks.js'
 import { HEX, formatOffset } from '../../components/hex/bytes.js'
 import { detectStride, offsetAt, overviewStrip, paintByteMap, pixelsPerRow } from './bytemap.js'
 import { cssColor, fitCanvas, rgbString, useThemeVersion } from '../../lib/canvasColors.js'
@@ -42,7 +42,7 @@ function rangeRects(a, b, { top, stride, rows, mode }) {
 }
 
 export default function ByteMap({ bytes, revision, colors, viewport }) {
-  const { jumpTo } = useSelection()
+  const { jumpTo } = useSelectionActions()
   const size = bytes.length
   const boxRef = useRef(null)
   const mapRef = useRef(null)
