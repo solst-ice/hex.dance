@@ -423,3 +423,13 @@
 .panel-section-body .hd-panel-header:empty {
   display: none;
 }
+
+/*
+ * Lists inside panels stop scroll chaining (overscroll-behavior: contain),
+ * which made sense with one panel at a time. In the stacked page a reader
+ * wheeling down would get stuck on the first list under the pointer, so
+ * scrolling past a list's end carries on with the page.
+ */
+.panel-section-body * {
+  overscroll-behavior: auto;
+}
