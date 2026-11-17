@@ -273,7 +273,7 @@
   margin: 0;
 }
 
-/* Title: text plus two clipped copies that only move while glitching */
+/* Title: text plus two clipped copies that glitch continuously */
 .glitch-title {
   position: relative;
   color: var(--neon-blue);
@@ -296,16 +296,20 @@
   pointer-events: none;
 }
 
+/* Different periods, so the two copies drift in and out of step */
 .glitch-title::before {
   left: 2px;
   text-shadow: -2px 0 var(--neon-pink);
+  animation: glitch-1 2s infinite linear alternate-reverse;
 }
 
 .glitch-title::after {
   left: -2px;
   text-shadow: 2px 0 var(--neon-blue);
+  animation: glitch-2 3s infinite linear alternate-reverse;
 }
 
+/* A faster burst on hover and when a file is opened */
 .glitch-title:hover::before,
 .glitch-title.is-glitching::before {
   animation: glitch-1 0.35s linear 2 alternate-reverse;

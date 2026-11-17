@@ -16,8 +16,9 @@ function decoded(resolved) {
 }
 
 /**
- * Site title. On first load it decodes from its own bytes; afterwards the
- * glitch plays on hover and whenever `glitchKey` changes (a file is opened).
+ * Site title. On first load it decodes from its own bytes; afterwards it
+ * glitches continuously (in CSS), with a faster burst on hover and whenever
+ * `glitchKey` changes (a file is opened).
  * The heading always contains the real text; the animated copies are hidden
  * from assistive technology.
  */
