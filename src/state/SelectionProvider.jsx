@@ -31,10 +31,10 @@ export default function SelectionProvider({ children }) {
     })
   }, [])
 
-  const jumpTo = useCallback((offset, length = 1) => {
+  const jumpTo = useCallback((offset, length = 1, { flash = true } = {}) => {
     if (!Number.isFinite(offset) || offset < 0) return
     setSelection({ start: offset, end: offset + Math.max(1, length) })
-    hexApiRef.current?.scrollToOffset?.(offset)
+    hexApiRef.current?.scrollToOffset?.(offset, { flash })
     jumpListeners.forEach(listener => listener(offset))
   }, [setSelection, jumpListeners])
 

@@ -46,8 +46,15 @@ import {
  * @property {(selection: ByteRange|null | ((previous: ByteRange|null) => ByteRange|null)) => void} setSelection
  * @property {Highlight[]} highlights
  * @property {(highlights: Highlight[] | ((previous: Highlight[]) => Highlight[])) => void} setHighlights
- * @property {(offset: number, length?: number) => void} jumpTo   select the range and scroll the hex view to it
- * @property {{ current: { scrollToOffset?: (offset: number) => void } | null }} hexApiRef   passed to the hex view as `apiRef`
+ * @property {(offset: number, length?: number, options?: ScrollOptions) => void} jumpTo   select the range and
+ *   scroll the hex view to it
+ * @property {{ current: HexViewApi | null }} hexApiRef   passed to the hex view as `apiRef`
+ *
+ * @typedef {{ flash?: boolean }} ScrollOptions   `flash` (default true) briefly lights up the row
+ *   scrolled to. Pass false where the reader steps through offsets one after another (arrow keys
+ *   through a list, following a playhead), so the view follows without flickering.
+ * @typedef {{ scrollToOffset: (offset: number, options?: ScrollOptions) => void }} HexViewApi
+ *   what the hex view puts in `apiRef`: scroll so the offset is comfortably in view
  *
  * @typedef {Pick<SelectionState, 'setSelection' | 'setHighlights' | 'jumpTo' | 'hexApiRef'> & {
  *   subscribeJumps: (listener: (offset: number) => void) => () => void

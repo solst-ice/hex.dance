@@ -58,7 +58,8 @@ function cellInfo(el, body) {
  * `fileName`, `selection` + `onSelectionChange` (controlled selection),
  * `highlights`, `onEdit({ type, start, end, modifiedCount })` after every change to the bytes
  * (`modifiedCount`: bytes that now differ from the buffer as given), `onDownload()` after the
- * Download button saved them, `apiRef` (receives `{ scrollToOffset }`), and
+ * Download button saved them, `apiRef` (receives `{ scrollToOffset(offset, { flash = true }) }`,
+ * see HexViewApi in state/hooks.js), and
  * `onCursorChange(offset|null)` and `onViewportChange({ start, end, bytesPerRow, visibleRows }|null)`,
  * which report the cursor and the bytes on screen (`end` exclusive, at most
  * the size) whenever they change, and null when the view goes away.
@@ -228,11 +229,14 @@ function HexView({
     setColumn(value)
   }, [])
 
-  const revealOffset = useCallback(offset => {
+  // `flash: false` only scrolls, for callers that step through offsets one
+  // after another, where a flash on every step would only flicker
+  const revealOffset = useCallback((offset, { flash = true } = {}) => {
     const L = live.current
     if (!L.size) return
     const o = Math.min(Math.max(0, Math.floor(Number(offset)) || 0), L.size - 1)
     scrollToRow(comfortableTop(rowOf(o, L.bytesPerRow), L.top, L.visibleRows))
+    if (!flash) return
     setFlash(prev => ({ offset: o, n: (prev?.n ?? 0) + 1 }))
     clearTimeout(timers.current.flash)
     timers.current.flash = setTimeout(() => setFlash(null), FLASH_MS)

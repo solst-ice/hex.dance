@@ -83,7 +83,8 @@ function RangeList({ stats, ranges, version, revision, activeIndex, a, b, digits
     else if (event.key === 'End') next = count - 1
     if (next === null) return
     event.preventDefault()
-    onActivate(next)
+    // Stepping through the list: the hex view follows without flashing
+    onActivate(next, { flash: false })
   }
 
   return (
