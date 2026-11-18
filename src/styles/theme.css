@@ -27,6 +27,12 @@
  *                                               other); region kinds and charts reuse them, so they
  *                                               stay distinguishable from each other in every theme
  *
+ * Themes: neon (the defaults below), amber, green, and tui (text mode). Text
+ * mode keeps this contract but its look is more than colour, so it lives in
+ * styles/theme-tui.css, where every rule is scoped to :root[data-theme="tui"].
+ * A new theme goes in THEMES (src/components/themes.js) and in
+ * public/theme-init.js, with a swatch in styles/shell.css.
+ *
  * Panels that need a tint of an accent can use
  * color-mix(in srgb, var(--neon-blue) 10%, transparent) so it follows the theme.
  * Canvases resolve these variables through src/lib/canvasColors.js, which

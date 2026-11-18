@@ -187,3 +187,99 @@ export function sameSet(a, b) {
   for (const item of a) if (!b.has(item)) return false
   return true
 }
+
+/*
+ * Columns. On wide screens the sections area holds one, two or three
+ * columns, as many as fit at a readable width. What goes in which column is
+ * by meaning, the same for every file: each 'tab' panel belongs to a group,
+ * and the groups fill the columns in order.
+ */
+
+/** The groups of sections, in order; `label` names a group's column for assistive tech. */
+export const SECTION_GROUPS = [
+  { id: 1, label: 'What the file is' },
+  { id: 2, label: 'Finding things in the bytes' },
+  { id: 3, label: 'Seeing and playing' }
+]
+
+// Narrowest a column may be, and the space between two columns
+export const MIN_COLUMN_PX = 640
+export const COLUMN_GAP_PX = 24
+// Widest a column may be; three of them, with the gaps, cap the sections area
+export const MAX_COLUMN_PX = 1100
+export const MAX_SECTIONS_PX = MAX_COLUMN_PX * 3 + COLUMN_GAP_PX * 2
+
+/**
+ * How many columns a sections area of `width` pixels holds: as many as fit
+ * at `MIN_COLUMN_PX` each, from one to three. Narrow screens (where the
+ * sections run under the hex view) always get one.
+ * @param {number} width  @param {{ wide?: boolean }} [options]
+ * @returns {1|2|3}
+ */
+export function columnCount(width, { wide = true } = {}) {
+  if (!wide || !(width > 0)) return 1
+  for (const count of [3, 2]) {
+    if (width >= count * MIN_COLUMN_PX + (count - 1) * COLUMN_GAP_PX) return count
+  }
+  return 1
+}
+
+/**
+ * Which groups each column shows: the first group always has a column of
+ * its own; with two columns the others share the second.
+ * @param {number} count
+ * @returns {number[][]}
+ */
+export function columnGroups(count) {
+  if (count >= 3) return [[1], [2], [3]]
+  if (count === 2) return [[1], [2, 3]]
+  return [[1, 2, 3]]
+}
+
+/** A panel's group, 1 to 3; panels without a valid one join the first. */
+export function sectionGroup(panel) {
+  const group = panel?.group
+  return SECTION_GROUPS.some(entry => entry.id === group) ? group : 1
+}
+
+/**
+ * Splits items (in registry order) by group, keeping their order within
+ * each group. Returns one list per entry of SECTION_GROUPS, empty ones included.
+ * @template T
+ * @param {T[]} items  @param {(item: T) => number} groupOf
+ * @returns {T[][]}
+ */
+export function splitByGroup(items, groupOf) {
+  const lists = SECTION_GROUPS.map(() => [])
+  for (const item of items) {
+    const index = SECTION_GROUPS.findIndex(entry => entry.id === groupOf(item))
+    lists[Math.max(0, index)].push(item)
+  }
+  return lists
+}
+
+/**
+ * The current section across several columns, each scrolling on its own.
+ * The current one stays while any of it is visible in its column. Otherwise
+ * the choice is made among the sections of the column the reader scrolled
+ * (`scrolled`, an index into `columns`), or else of the current section's
+ * own column (the first column when there is none), as chooseCurrent does
+ * for one column. With nothing visible in that column, the current section
+ * stays.
+ * @param {string|null} currentId
+ * @param {{ views: SectionView[], areaHeight: number }[]} columns
+ * @param {number|null} [scrolled]
+ * @returns {string|null}
+ */
+export function chooseCurrentAcross(currentId, columns, scrolled = null) {
+  if (columns.length === 1) return chooseCurrent(currentId, columns[0].views, columns[0].areaHeight)
+  const all = columns.flatMap(column => column.views)
+  if (all.length === 0) return currentId
+  const current = all.find(view => view.id === currentId)
+  if (current && current.visible > 0) return currentId
+  let index = scrolled ?? columns.findIndex(column => column.views.some(view => view.id === currentId))
+  if (!(index >= 0 && index < columns.length)) index = 0
+  const column = columns[index]
+  if (!column.views.some(view => view.visible > 0)) return current ? currentId : all[0].id
+  return chooseCurrent(currentId, column.views, column.areaHeight)
+}

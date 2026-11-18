@@ -6,7 +6,8 @@ export const CRT_KEY = 'hexdance.crt'
 export const THEMES = [
   { id: 'neon', label: 'Neon', color: '#060714' },
   { id: 'amber', label: 'Amber terminal', color: '#0c0803' },
-  { id: 'green', label: 'Green phosphor', color: '#020904' }
+  { id: 'green', label: 'Green phosphor', color: '#020904' },
+  { id: 'tui', label: 'Text mode', color: '#000000' }
 ]
 
 function read(key) {

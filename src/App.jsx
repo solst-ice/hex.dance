@@ -3,6 +3,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import FileUploader from './components/FileUploader'
 import GlitchFavicon from './components/GlitchFavicon'
 import MatrixRain from './components/MatrixRain'
+import PrivacyNote from './components/PrivacyNote'
 import SampleFiles from './components/SampleFiles'
 import ThemeSwitcher from './components/ThemeSwitcher'
 import Title from './components/Title'
@@ -15,6 +16,7 @@ import './styles/workspace.css'
 import './styles/sections.css'
 import './styles/shell.css'
 import './styles/theme.css'
+import './styles/theme-tui.css'
 
 // How long the header rain falls after a file is opened
 const BURST_MS = 2500
@@ -76,11 +78,12 @@ function Shell() {
         <header ref={headerRef} className={`description site-header ${compact ? 'is-compact' : ''}`}>
           {compact && <HeaderRain file={file} bytes={bytes} dragging={isDragging} />}
           <div className="site-header-row">
-            <Title glitchKey={file} />
+            <Title glitchKey={file} banner={!compact} />
             {compact && (
               <div className="site-header-file">
                 <FileUploader onFile={openFile} isDragging={isDragging} fileName={file.name} />
                 <SampleFiles onFile={openFile} variant="menu" />
+                <PrivacyNote variant="menu" />
               </div>
             )}
             <ThemeSwitcher />
@@ -91,6 +94,7 @@ function Shell() {
               the formats it recognises. Everything runs in your browser, so your files never leave your device.
             </p>
           )}
+          {!compact && <PrivacyNote variant="inline" />}
         </header>
         <main className={compact ? 'site-main' : 'site-main landing'}>
           {compact ? (

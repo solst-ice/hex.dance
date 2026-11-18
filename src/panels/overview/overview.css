@@ -13,6 +13,11 @@
   padding: 0;
 }
 
+/* Long values with no spaces (a Windows PDB path) wrap rather than widen the page on phones */
+.overview-rows li {
+  overflow-wrap: anywhere;
+}
+
 .overview-row-label {
   color: var(--neon-pink);
 }

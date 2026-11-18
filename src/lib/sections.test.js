@@ -1,8 +1,9 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  COLLAPSED_KEY, allCollapsed, chooseCurrent, classifySections, keepOnScreen, mountCandidates, nearestFirst, nextMounted,
-  readCollapsed, sameSet, setCollapsed, toggleAll, writeCollapsed
+  COLLAPSED_KEY, COLUMN_GAP_PX, MAX_COLUMN_PX, MAX_SECTIONS_PX, MIN_COLUMN_PX, SECTION_GROUPS, allCollapsed, chooseCurrent,
+  chooseCurrentAcross, classifySections, columnCount, columnGroups, keepOnScreen, mountCandidates, nearestFirst, nextMounted,
+  readCollapsed, sameSet, sectionGroup, setCollapsed, splitByGroup, toggleAll, writeCollapsed
 } from './sections.js'
 
 function memoryStorage(initial = {}) {
@@ -174,4 +175,67 @@ test('compares sets by content', () => {
   assert.equal(sameSet(new Set([1, 2]), new Set([2, 1])), true)
   assert.equal(sameSet(new Set([1]), new Set([1, 2])), false)
   assert.equal(sameSet(new Set([1, 3]), new Set([1, 2])), false)
+})
+
+test('fits one, two or three columns by the width of the sections area', () => {
+  assert.equal(columnCount(1168), 1)
+  assert.equal(columnCount(MIN_COLUMN_PX * 2 + COLUMN_GAP_PX - 1), 1)
+  assert.equal(columnCount(MIN_COLUMN_PX * 2 + COLUMN_GAP_PX), 2)
+  // 2560px window with today's hex column
+  assert.equal(columnCount(1548), 2)
+  assert.equal(columnCount(MIN_COLUMN_PX * 3 + COLUMN_GAP_PX * 2 - 1), 2)
+  assert.equal(columnCount(MIN_COLUMN_PX * 3 + COLUMN_GAP_PX * 2), 3)
+  // 3440px, and far wider: never more than three
+  assert.equal(columnCount(2428), 3)
+  assert.equal(columnCount(10000), 3)
+  // Narrow screens, and nothing measured yet
+  assert.equal(columnCount(5000, { wide: false }), 1)
+  assert.equal(columnCount(0), 1)
+  assert.equal(columnCount(NaN), 1)
+  assert.equal(MAX_SECTIONS_PX, MAX_COLUMN_PX * 3 + COLUMN_GAP_PX * 2)
+})
+
+test('puts the first group in a column of its own, the others after it', () => {
+  assert.deepEqual(columnGroups(1), [[1, 2, 3]])
+  assert.deepEqual(columnGroups(2), [[1], [2, 3]])
+  assert.deepEqual(columnGroups(3), [[1], [2], [3]])
+  assert.deepEqual(SECTION_GROUPS.map(group => group.id), [1, 2, 3])
+})
+
+test('splits sections by group, keeping their order', () => {
+  assert.equal(sectionGroup({ group: 2 }), 2)
+  assert.equal(sectionGroup({ group: 7 }), 1)
+  assert.equal(sectionGroup({}), 1)
+  const items = [
+    { id: 'overview', group: 1 }, { id: 'strings', group: 2 }, { id: 'preview', group: 1 },
+    { id: 'dance', group: 3 }, { id: 'odd' }
+  ]
+  assert.deepEqual(splitByGroup(items, sectionGroup).map(list => list.map(item => item.id)),
+    [['overview', 'preview', 'odd'], ['strings'], ['dance']])
+  assert.deepEqual(splitByGroup([], sectionGroup), [[], [], []])
+})
+
+test('chooses the current section across columns', () => {
+  const column = (...views) => ({ views: views.map(([id, visible, height = 400]) => ({ id, visible, height })), areaHeight: 800 })
+  const columns = [
+    column(['a', 0], ['b', 300]),
+    column(['c', 0], ['d', 400]),
+    column(['e', 200], ['f', 0])
+  ]
+  // Still visible in its own column: stays, whichever column scrolled
+  assert.equal(chooseCurrentAcross('b', columns, 2), 'b')
+  // Gone: chosen among the sections of the column that scrolled
+  assert.equal(chooseCurrentAcross('c', columns, 2), 'e')
+  assert.equal(chooseCurrentAcross('c', columns, 0), 'b')
+  // Nothing scrolled: its own column
+  assert.equal(chooseCurrentAcross('c', columns), 'd')
+  // None yet: the first column
+  assert.equal(chooseCurrentAcross(null, columns), 'b')
+  // The column that scrolled shows nothing: the current one stays
+  const empty = [column(['a', 300]), column(['c', 0]), column()]
+  assert.equal(chooseCurrentAcross('c', empty, 1), 'c')
+  assert.equal(chooseCurrentAcross('c', empty, 2), 'c')
+  // One column: as chooseCurrent
+  assert.equal(chooseCurrentAcross('a', [column(['a', 0], ['b', 300])]), 'b')
+  assert.equal(chooseCurrentAcross('a', [column()]), 'a')
 })

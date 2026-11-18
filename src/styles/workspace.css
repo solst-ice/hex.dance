@@ -1,9 +1,12 @@
-/* Page layout once a file is open: the full window width, less a gutter */
+/* Page layout once a file is open: the full window width, less a gutter.
+   The gap above is padding, not margin, so that it does not add to the
+   body's own height of a whole window (the page must not scroll when the
+   sections scroll in columns of their own). */
 
 .container.has-file {
-  margin: 12px 0 0;
+  margin: 0;
   max-width: none;
-  padding: 0 16px 12px;
+  padding: 12px 16px;
 }
 
 .has-file .site-header {
@@ -172,6 +175,24 @@
 
   .workspace-main > .workspace-placeholder {
     flex: 1 0 auto;
+  }
+
+  /* Several columns of sections: the sections area is as tall as the hex
+     column and its columns scroll on their own, so the page does not */
+  .workspace-side:has(> .section-stack[data-columns="2"]),
+  .workspace-side:has(> .section-stack[data-columns="3"]) {
+    height: calc(100vh - var(--workspace-top) - 12px);
+    position: sticky;
+    top: var(--workspace-top);
+  }
+
+  /* Past three columns at their widest (MAX_SECTIONS_PX in lib/sections.js,
+     3,348px), the workspace stops growing and stays in the middle: the hex
+     column at its widest, the gap and the sections (the gutters are padding) */
+  .container.has-file {
+    margin-left: auto;
+    margin-right: auto;
+    max-width: calc(960px + 20px + 3348px);
   }
 }
 
