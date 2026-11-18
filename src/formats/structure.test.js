@@ -469,12 +469,48 @@ test('Java class: a huge constant pool is capped', () => {
   assert.deepEqual(result.warnings, [])
 })
 
+// What the panels rely on in an Analysis, whatever the format: every array is
+// there, every field has a string name and an integer range inside the file
+// with a positive length, values are strings, regions lie inside the file in
+// offset order. Empty regions, overlapping siblings or a child reaching past
+// its parent are not part of it: the Anatomy bar falls back to the fields,
+// and the field index and the anatomy segments cope with any order. Each
+// parser's own tree rules are checked by its tests above with checkTree.
+function checkContract(analysis, size) {
+  for (const key of ['formatId', 'formatName', 'category']) assert.equal(typeof analysis[key], 'string', key)
+  for (const key of ['summary', 'fields', 'regions', 'symbols', 'entries', 'warnings']) assert.ok(Array.isArray(analysis[key]), key)
+  const visit = (fields) => {
+    let count = 0
+    for (const f of fields) {
+      assert.equal(typeof f.name, 'string')
+      assert.ok(Number.isInteger(f.offset) && Number.isInteger(f.length) && f.length > 0, `${f.name}: integer range`)
+      assert.ok(f.offset >= 0 && f.offset + f.length <= size, `${f.name}: inside the file`)
+      if (f.value !== undefined) assert.equal(typeof f.value, 'string', `${f.name}: value is a string`)
+      count++
+      if (f.children !== undefined) count += visit(f.children)
+    }
+    return count
+  }
+  const fieldCount = visit(analysis.fields)
+  checkRegions(analysis.regions, size)
+  return fieldCount
+}
+
+const countFields = (fields = []) => fields.reduce((n, f) => n + 1 + countFields(f.children), 0)
+
 test('analysis results of every format pass through analyzeBytes unchanged in shape', () => {
-  for (const file of [buildFullPNG(), buildFullJPEG(), buildFullGIF(), buildFullZip([{ name: 'a', data: 'b' }]), buildFullPDF(), buildFullClass()]) {
+  const cases = [
+    [png, buildFullPNG()], [jpeg, buildFullJPEG()], [gif, buildFullGIF()],
+    [zip, buildFullZip([{ name: 'a', data: 'b' }])], [pdf, buildFullPDF()], [javaClass, buildFullClass()]
+  ]
+  for (const [format, file] of cases) {
     const analysis = analyzeBytes(file)
-    checkTree(analysis.fields, file.length)
-    assert.ok(analysis.fields.length > 0)
-    assert.ok(analysis.regions.length > 0)
+    assert.equal(analysis.formatId, format.id)
+    const kept = checkContract(analysis, file.length)
+    // Well-formed output is passed on whole: analyzeBytes only drops what it must
+    const parsed = parse(format, file)
+    assert.equal(kept, countFields(parsed.fields), `${format.id}: no field dropped`)
+    assert.equal(analysis.regions.length, (parsed.regions || []).length, `${format.id}: no region dropped`)
   }
   // A lone PNG chunk after the signature still forms a tree
   const odd = concat([PNG_SIGNATURE, pngChunk('IHDR', new Uint8Array(13))])
