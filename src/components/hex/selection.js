@@ -60,3 +60,22 @@ export function moveCursor(cursor, action, { bytesPerRow, size, pageRows }) {
   if (next < 0) return action === 'up' || action === 'pageUp' ? c % bytesPerRow : 0
   return Math.min(next, last)
 }
+
+// What the hex view hands out through onSelectionChange before it comes back
+// as the `selection` prop; NOT_HANDED_OUT when the last change came from elsewhere
+export const NOT_HANDED_OUT = Symbol('not handed out')
+
+// Where the cursor and anchor go when the `selection` prop changes. A
+// selection the hex view made itself comes back as the very object it handed
+// out, and changes nothing (null). One set elsewhere (a panel's jumpTo, or
+// setSelection) puts the cursor on its first byte with the anchor on its
+// last, as if it had been made in the hex view: typing then overwrites from
+// the first selected byte, and the arrows and Shift+arrows carry on from
+// there. Clearing it from elsewhere leaves the cursor where it is and drops
+// the anchor, so the next Shift+arrow starts at the cursor.
+export function followSelection(selection, handedOut, { cursor, size }) {
+  if (selection === handedOut) return null
+  const range = normalizeSelection(selection, size)
+  if (!range) return { cursor, anchor: null }
+  return { cursor: range.start, anchor: range.end - 1 }
+}

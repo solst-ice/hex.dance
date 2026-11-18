@@ -1,7 +1,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  rangeBetween, normalizeSelection, sameSelection, clipToRow, anchorFor, moveCursor
+  rangeBetween, normalizeSelection, sameSelection, clipToRow, anchorFor, moveCursor,
+  followSelection, NOT_HANDED_OUT
 } from './selection.js'
 
 test('rangeBetween covers both ends in either direction', () => {
@@ -77,4 +78,36 @@ test('moveCursor survives tiny and empty files and stale cursors', () => {
   assert.equal(moveCursor(1, 'up', tiny), 1)
   assert.equal(moveCursor(0, 'up', { bytesPerRow: 16, size: 0, pageRows: 1 }), 0)
   assert.equal(moveCursor(5000, 'up', tiny), 1)
+})
+
+test('followSelection leaves the hex view alone for its own selections', () => {
+  const own = { start: 4, end: 9 }
+  assert.equal(followSelection(own, own, { cursor: 8, size: 100 }), null)
+  assert.equal(followSelection(null, null, { cursor: 8, size: 100 }), null)
+})
+
+test('followSelection puts the cursor on the first byte of a selection set elsewhere', () => {
+  const handedOut = { start: 4, end: 9 }
+  assert.deepEqual(followSelection({ start: 0x4de, end: 0x4e4 }, handedOut, { cursor: 0, size: 0x2000 }),
+    { cursor: 0x4de, anchor: 0x4e3 })
+  // Equal by value but not the object handed out: someone else chose it
+  assert.deepEqual(followSelection({ start: 4, end: 9 }, handedOut, { cursor: 8, size: 100 }),
+    { cursor: 4, anchor: 8 })
+  assert.deepEqual(followSelection({ start: 7, end: 8 }, NOT_HANDED_OUT, { cursor: 0, size: 100 }),
+    { cursor: 7, anchor: 7 })
+})
+
+test('followSelection clamps to the file and drops the anchor when cleared elsewhere', () => {
+  assert.deepEqual(followSelection({ start: 95, end: 400 }, null, { cursor: 0, size: 100 }), { cursor: 95, anchor: 99 })
+  assert.deepEqual(followSelection(null, NOT_HANDED_OUT, { cursor: 12, size: 100 }), { cursor: 12, anchor: null })
+  assert.deepEqual(followSelection({ start: 200, end: 300 }, null, { cursor: 12, size: 100 }), { cursor: 12, anchor: null })
+})
+
+test('a followed selection is one the hex view would have made from its first byte', () => {
+  const outside = { start: 10, end: 20 }
+  const { cursor, anchor } = followSelection(outside, null, { cursor: 0, size: 100 })
+  assert.deepEqual(rangeBetween(anchor, cursor), outside)
+  assert.equal(anchorFor(outside, cursor, anchor), anchor)
+  // Shift+Right from there trims the selection from the front
+  assert.deepEqual(rangeBetween(anchor, moveCursor(cursor, 'right', ctx)), { start: 11, end: 20 })
 })

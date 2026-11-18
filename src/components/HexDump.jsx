@@ -11,7 +11,7 @@ import {
   chooseBytesPerRow, rowCount, maxTopRow, clampRow, rowOf, ensureVisible, comfortableTop, wheelPixels, GROUP_SIZE
 } from './hex/layout'
 import {
-  rangeBetween, normalizeSelection, sameSelection, clipToRow, anchorFor, moveCursor
+  rangeBetween, normalizeSelection, sameSelection, clipToRow, anchorFor, moveCursor, followSelection, NOT_HANDED_OUT
 } from './hex/selection'
 import { buildHighlightIndex, segmentsIn } from './hex/highlights'
 import { createHoverStore } from './hex/hoverStore'
@@ -117,8 +117,10 @@ function HexView({
 
   const [box, setBox] = useState({ width: 0, height: 0, ch: 0 })
   const [topOffset, setTopOffset] = useState(0)
-  const [cursor, setCursor] = useState(0)
-  const [anchor, setAnchor] = useState(null)
+  // A selection set before the view mounted is followed like any other
+  const [initial] = useState(() => followSelection(selection, null, { cursor: 0, size }))
+  const [cursor, setCursor] = useState(initial ? initial.cursor : 0)
+  const [anchor, setAnchor] = useState(initial ? initial.anchor : null)
   const [ownSelection, setOwnSelection] = useState(null)
   const [column, setColumn] = useState('hex')
   const [nibble, setNibble] = useState(0)
@@ -136,6 +138,23 @@ function HexView({
   const controlled = selection !== undefined
   const sel = normalizeSelection(controlled ? selection : ownSelection, size)
   const highlightIndex = useMemo(() => buildHighlightIndex(highlights), [highlights])
+
+  // A selection set from outside (a panel's jumpTo or setSelection) moves the
+  // cursor to its first byte, so edits and arrows start where the reader is
+  // looking. The view's own selections come back as the object it handed
+  // out and are left alone. Adjusted during render, so the view paints once.
+  const [handedOut, setHandedOut] = useState(NOT_HANDED_OUT)
+  const [seenSelection, setSeenSelection] = useState(selection)
+  if (controlled && selection !== seenSelection) {
+    setSeenSelection(selection)
+    const follow = followSelection(selection, handedOut, { cursor, size })
+    if (follow) {
+      setHandedOut(NOT_HANDED_OUT)
+      setCursor(follow.cursor)
+      setAnchor(follow.anchor)
+      setNibble(0)
+    }
+  }
 
   // Latest values for event handlers that outlive a render. Handlers also
   // write to it so several events between two renders build on each other.
@@ -197,6 +216,7 @@ function HexView({
     if (sameSelection(next, L.sel)) return
     L.sel = next
     if (!L.controlled) setOwnSelection(next)
+    else setHandedOut(next)
     callbacks.current.onSelectionChange?.(next)
   }, [])
 
