@@ -14,7 +14,9 @@ export const SelectionActionsContext = createContext(null)
 // Which section is current, so code outside the sections can open one
 export const WorkspaceContext = createContext(null)
 // The hex view's cursor and visible range: a store whose identity never
-// changes, read through useSyncExternalStore (see hexViewStore.js)
+// changes, read through useSyncExternalStore (see hexViewStore.js). Inside a
+// section it is that section's pausable view of it (gatedHexViewStore.js).
+// Provided by SelectionProvider.
 export const HexViewContext = createContext(null)
 // The section a component renders in: `{ id, title }`, or null outside the
 // sections (the hex view and the docks). Never changes for a given section.

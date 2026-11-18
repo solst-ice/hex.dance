@@ -173,9 +173,11 @@ function useHexViewStore() {
  * Byte offset of the hex view's cursor (the byte a plain click or the arrow
  * keys moved to; the selection is null after a plain click). Null while no
  * hex view is shown, 0 for an empty file. Re-renders the caller on every
- * cursor move, in a task after the hex view has updated, so keep the caller
- * small; event handlers that only need the value when they run should use
- * `useHexViewReader` instead.
+ * cursor move, a microtask after the hex view has committed (moves in
+ * between coalesce), so keep the caller small; event handlers that only need
+ * the value when they run should use `useHexViewReader` instead. Inside a
+ * section that is off screen the value is held and the caller hears nothing
+ * until the section comes back (see gatedHexViewStore.js).
  * @returns {number|null}
  */
 export function useHexCursor() {
@@ -188,7 +190,8 @@ export function useHexCursor() {
  * with `start` = first row × bytesPerRow and `end` exclusive, at most the
  * file size. Null while no hex view is shown. The object keeps its identity
  * until one of its fields changes. Re-renders the caller on every scroll
- * step and layout change, so keep the caller small.
+ * step and layout change (held while its section is off screen, like
+ * `useHexCursor`), so keep the caller small.
  * @returns {import('./hexViewStore.js').HexViewport|null}
  */
 export function useHexViewport() {
@@ -199,7 +202,8 @@ export function useHexViewport() {
 /**
  * Reads the hex view's cursor and viewport without subscribing to them, for
  * event handlers and animation frames that need the value at the moment
- * they run. The returned object never changes.
+ * they run, even inside a section that is off screen. The returned object
+ * never changes.
  * @returns {{ getCursor: () => number|null, getViewport: () => import('./hexViewStore.js').HexViewport|null }}
  */
 export function useHexViewReader() {
