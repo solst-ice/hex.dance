@@ -1,6 +1,7 @@
 import { useContext, useEffect, useSyncExternalStore } from 'react'
 import {
-  FileContext, HexViewContext, SectionContext, SelectionActionsContext, SelectionContext, WorkspaceContext
+  FileContext, HexViewContext, SectionContext, SelectionActionsContext, SelectionContext, UnsavedEditsContext,
+  WorkspaceContext
 } from './contexts.js'
 
 /**
@@ -13,10 +14,26 @@ import {
  * @property {FileStatus} status
  * @property {import('../analysis/types.js').Analysis|null} analysis
  * @property {Error|null} error
- * @property {(file: File) => void} openFile
- * @property {() => void} closeFile
+ * @property {(file: File, options?: { onOpen?: () => void }) => void} openFile   open another file; with
+ *   unsaved edits it first asks the reader (see UnsavedEdits.jsx), and a later call replaces a waiting one.
+ *   `onOpen` runs just before the file is actually opened, and never if the reader keeps editing.
+ * @property {() => void} closeFile           does not ask about unsaved edits; nothing calls it today
  * @property {number} revision                bumps when bytes are edited in place
- * @property {() => void} notifyEdit
+ * @property {(edit?: { modifiedCount?: number }) => void} notifyEdit   for the hex view's `onEdit`:
+ *   the bytes changed; `modifiedCount` is how many now differ from the file as opened
+ * @property {() => void} notifySaved         for the hex view's `onDownload`: the current bytes were downloaded
+ */
+
+/**
+ * @typedef {Object} UnsavedEdits
+ * @property {string|null} fileName           name of the open file
+ * @property {import('./unsavedEdits.js').OpenRequest|null} pending   the request to open a file
+ *   that waits for an answer
+ * @property {(answer: 'keep' | 'discard' | 'download') => void} answerOpen   answer it: keep editing,
+ *   open it and lose the edits, or download the edited bytes and then open it
+ * @property {() => boolean} isUnsaved        whether the bytes hold edits that were not downloaded
+ * @property {() => number} getModifiedCount  bytes that differ from the file as opened
+ * @property {(listener: () => void) => () => void} subscribe   hears when `isUnsaved()` flips
  */
 
 /**
@@ -42,6 +59,28 @@ export function useFile() {
   const value = useContext(FileContext)
   if (!value) throw new Error('useFile must be used inside <FileProvider>')
   return value
+}
+
+/**
+ * The request to open a file that waits for an answer, and the means to ask
+ * whether there are unsaved edits. Re-renders only when a request starts or
+ * ends; use `useHasUnsavedEdits` to follow the edits themselves.
+ * @returns {UnsavedEdits}
+ */
+export function useUnsavedEdits() {
+  const value = useContext(UnsavedEditsContext)
+  if (!value) throw new Error('useUnsavedEdits must be used inside <FileProvider>')
+  return value
+}
+
+/**
+ * Whether the open file has edits that were not downloaded. Re-renders the
+ * caller only when that answer changes, not on every edit.
+ * @returns {boolean}
+ */
+export function useHasUnsavedEdits() {
+  const { subscribe, isUnsaved } = useUnsavedEdits()
+  return useSyncExternalStore(subscribe, isUnsaved)
 }
 
 /** @returns {SelectionState} */

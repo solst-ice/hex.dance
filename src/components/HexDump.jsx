@@ -56,7 +56,9 @@ function cellInfo(el, body) {
 /**
  * Hex view and editor. Only `buffer` is required; the rest is optional:
  * `fileName`, `selection` + `onSelectionChange` (controlled selection),
- * `highlights`, `onEdit`, `apiRef` (receives `{ scrollToOffset }`), and
+ * `highlights`, `onEdit({ type, start, end, modifiedCount })` after every change to the bytes
+ * (`modifiedCount`: bytes that now differ from the buffer as given), `onDownload()` after the
+ * Download button saved them, `apiRef` (receives `{ scrollToOffset }`), and
  * `onCursorChange(offset|null)` and `onViewportChange({ start, end, bytesPerRow, visibleRows }|null)`,
  * which report the cursor and the bytes on screen (`end` exclusive, at most
  * the size) whenever they change, and null when the view goes away.
@@ -98,8 +100,8 @@ function HexDump(props) {
 }
 
 function HexView({
-  buffer, fileName, selection, onSelectionChange, highlights, onEdit, apiRef, onCursorChange, onViewportChange,
-  fullscreen, setFullscreen, editMode, setEditMode
+  buffer, fileName, selection, onSelectionChange, highlights, onEdit, onDownload, apiRef, onCursorChange,
+  onViewportChange, fullscreen, setFullscreen, editMode, setEditMode
 }) {
   const bytes = useMemo(() => toBytes(buffer), [buffer])
   const size = bytes.length
@@ -142,7 +144,7 @@ function HexView({
     editMode, fullscreen, controlled
   }
   const callbacks = useRef(null)
-  callbacks.current = { onSelectionChange, onEdit, onCursorChange, onViewportChange }
+  callbacks.current = { onSelectionChange, onEdit, onDownload, onCursorChange, onViewportChange }
 
   const timers = useRef({})
   const momentum = useRef({})
@@ -302,8 +304,8 @@ function HexView({
 
   const notifyEdit = useCallback((type, span) => {
     setRev(r => r + 1)
-    callbacks.current.onEdit?.({ type, start: span.start, end: span.end })
-  }, [])
+    callbacks.current.onEdit?.({ type, start: span.start, end: span.end, modifiedCount: log.modifiedCount })
+  }, [log])
 
   const nibbleGroup = useRef(null)
 
@@ -355,7 +357,10 @@ function HexView({
     }
   }
 
-  const download = () => downloadBytes(bytes, downloadName(fileName))
+  const download = () => {
+    downloadBytes(bytes, downloadName(fileName))
+    callbacks.current.onDownload?.()
+  }
 
   // ---- copy, go to --------------------------------------------------------
 

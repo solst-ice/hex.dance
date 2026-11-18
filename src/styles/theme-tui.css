@@ -1485,3 +1485,90 @@
   color: var(--tui-frame-strong);
   content: ' ├';
 }
+
+/* ---- unsaved edits dialog ------------------------------------------------- */
+
+/* A text-mode message box: a square frame with its title set into the top
+   border, a shadow of solid cells and the buttons as bracketed text */
+:root[data-theme="tui"] .unsaved-dialog {
+  background: var(--tui-black);
+  border: 1px solid var(--tui-frame-strong);
+  border-radius: 0;
+  box-shadow: 1ch 12px 0 var(--tui-shade);
+  color: var(--tui-white);
+  overflow: visible;
+  padding: 0 2ch 12px;
+}
+
+:root[data-theme="tui"] .unsaved-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.6);
+}
+
+:root[data-theme="tui"] .unsaved-title {
+  background: var(--tui-black);
+  color: var(--tui-bright-yellow);
+  font-size: 1em;
+  letter-spacing: 0;
+  line-height: calc(2 * var(--tui-half));
+  margin: calc(-1 * var(--tui-half) - 1px) auto 8px;
+  text-transform: none;
+  white-space: nowrap;
+  width: fit-content;
+}
+
+:root[data-theme="tui"] .unsaved-title::before {
+  color: var(--tui-frame-strong);
+  content: '┤ ';
+}
+
+:root[data-theme="tui"] .unsaved-title::after {
+  color: var(--tui-frame-strong);
+  content: ' ├';
+}
+
+:root[data-theme="tui"] .unsaved-name {
+  color: var(--tui-bright-white);
+}
+
+:root[data-theme="tui"] .unsaved-hint {
+  color: var(--tui-bright-black);
+}
+
+:root[data-theme="tui"] .unsaved-actions {
+  gap: 0 2ch;
+  justify-content: center;
+  margin-top: 12px;
+}
+
+:root[data-theme="tui"] .unsaved-actions .hd-button {
+  padding: 1px 0;
+}
+
+:root[data-theme="tui"] .unsaved-discard {
+  border-color: transparent;
+  color: var(--tui-bright-red);
+}
+
+:root[data-theme="tui"] .unsaved-discard:hover:not(:disabled) {
+  background: var(--tui-bright-red);
+  border-color: var(--tui-bright-red);
+  color: var(--tui-black);
+}
+
+/* The focused button is the selected one, in inverse video */
+:root[data-theme="tui"] .unsaved-dialog .hd-button:focus-visible {
+  background: var(--tui-select);
+  border-color: var(--tui-select);
+  color: var(--tui-select-text);
+  outline: none;
+}
+
+@media (max-width: 600px) {
+  :root[data-theme="tui"] .unsaved-dialog {
+    padding: 0 1ch 12px;
+  }
+
+  :root[data-theme="tui"] .unsaved-actions {
+    align-items: center;
+  }
+}

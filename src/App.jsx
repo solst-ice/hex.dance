@@ -7,6 +7,7 @@ import PrivacyNote from './components/PrivacyNote'
 import SampleFiles from './components/SampleFiles'
 import ThemeSwitcher from './components/ThemeSwitcher'
 import Title from './components/Title'
+import UnsavedEdits from './components/UnsavedEdits'
 import Workspace from './components/Workspace'
 import useWindowFileDrop from './components/useWindowFileDrop'
 import { FileProvider, SelectionProvider, WorkspaceProvider, useFile } from './state/index.js'
@@ -64,6 +65,10 @@ function Footer() {
   )
 }
 
+// One element for good: the sections column is memoised, and a new footer
+// element on every edit would re-render it for nothing
+const FOOTER = <Footer />
+
 function Shell() {
   const { file, bytes, openFile } = useFile()
   const isDragging = useWindowFileDrop(openFile)
@@ -74,6 +79,7 @@ function Shell() {
   return (
     <>
       <GlitchFavicon />
+      <UnsavedEdits />
       <div className={`container ${compact ? 'has-file' : ''}`}>
         <header ref={headerRef} className={`description site-header ${compact ? 'is-compact' : ''}`}>
           {compact && <HeaderRain file={file} bytes={bytes} dragging={isDragging} />}
@@ -98,7 +104,7 @@ function Shell() {
         </header>
         <main className={compact ? 'site-main' : 'site-main landing'}>
           {compact ? (
-            <Workspace footer={<Footer />} />
+            <Workspace footer={FOOTER} />
           ) : (
             <>
               <FileUploader onFile={openFile} isDragging={isDragging} fileName={null} />

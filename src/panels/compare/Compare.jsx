@@ -337,14 +337,19 @@ export default function Compare() {
   const swap = () => {
     if (!b || !bytes) return
     const next = b.file || new File([b.bytes], b.name)
-    setSecond({
-      name: revision > 0 ? `${file.name} (edited)` : file.name,
-      bytes,
-      file: revision > 0 ? null : file,
-      origin: 'swapped'
+    // A becomes B only once B is really opened: with unsaved edits the
+    // reader may choose to keep editing A, and then nothing changes
+    openFile(next, {
+      onOpen() {
+        setSecond({
+          name: revision > 0 ? `${file.name} (edited)` : file.name,
+          bytes,
+          file: revision > 0 ? null : file,
+          origin: 'swapped'
+        })
+        setActiveOffset(null)
+      }
     })
-    setActiveOffset(null)
-    openFile(next)
   }
 
   const original = () => readSecond(file, 'original', `${file.name} (original)`)

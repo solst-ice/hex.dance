@@ -1,6 +1,6 @@
 /* eslint-disable react/prop-types -- the project does not use prop-types */
 import { memo, useCallback, useMemo, useRef, useState } from 'react'
-import { useFile, useHighlightLayer, useSelectionActions } from '../../state/index.js'
+import { useFile, useHighlightLayer, useSelectionActions, useUnsavedEdits } from '../../state/index.js'
 import { useCarveScan } from './useCarveScan.js'
 import { buildReport, extractName, rangeEnd } from './report.js'
 import { extractedFile, originOf } from './extract.js'
@@ -88,6 +88,7 @@ function ScanDetails({ scan, size }) {
 
 function Carve() {
   const { file, buffer, bytes, revision, analysis, openFile } = useFile()
+  const { isUnsaved } = useUnsavedEdits()
   const [token, setToken] = useState(0)
   const [typeFilter, setTypeFilter] = useState('')
   const [showInternal, setShowInternal] = useState(false)
@@ -241,7 +242,7 @@ function Carve() {
       {report && found > 0 && visible.length === 0 && <p className="hd-empty">No hits of this type.</p>}
 
       {activeHit && (
-        <HitDetails hit={activeHit} hits={report.hits} size={size} onJump={jump} onExtract={extract} onOpen={open} />
+        <HitDetails hit={activeHit} hits={report.hits} size={size} onJump={jump} onExtract={extract} onOpen={open} isUnsaved={isUnsaved} />
       )}
       {!activeHit && visible.length > 0 && <p className="hd-muted carve-hint">Choose a row to select it in the hex view, extract it or open it.</p>}
 
