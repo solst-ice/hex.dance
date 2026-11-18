@@ -60,16 +60,27 @@ export class StringStore {
  * Builds a predicate over store indices.
  * `query` is a case-insensitive substring, or a regular expression written
  * as /pattern/flags.
- * @returns {{ test: ((store: StringStore, i: number) => boolean) | null, error: string | null }}
+ *
+ * A regular expression can take any time on one string, so the panel does
+ * not run `test` for one: it runs `regex` in a worker (regexFilter.js) over
+ * the strings that pass `prefilter`, the class and encoding part.
+ * @returns {{
+ *   test: ((store: StringStore, i: number) => boolean) | null,
+ *   error: string | null,
+ *   regex: { source: string, flags: string } | null,
+ *   prefilter: ((store: StringStore, i: number) => boolean) | null
+ * }}
  *   `test` is null when everything matches
  */
 export function compileFilter({ query = '', classBit = 0, encoding = -1 }) {
   let textTest = null
   let error = null
-  const regex = /^\/(.+)\/([a-z]*)$/s.exec(query)
-  if (regex) {
+  let regex = null
+  const written = /^\/(.+)\/([a-z]*)$/s.exec(query)
+  if (written) {
     try {
-      const re = new RegExp(regex[1], regex[2].replace(/[gy]/g, '') || 'i')
+      const re = new RegExp(written[1], written[2].replace(/[gy]/g, '') || 'i')
+      regex = { source: re.source, flags: re.flags }
       textTest = (store, i) => re.test(store.texts[i])
     } catch (err) {
       error = err.message
@@ -82,12 +93,16 @@ export function compileFilter({ query = '', classBit = 0, encoding = -1 }) {
       textTest = (store, i) => store.texts[i].includes(query)
     }
   }
-  if (!textTest && !classBit && encoding < 0) return { test: null, error }
+  const prefilter = classBit || encoding >= 0
+    ? (store, i) => (!classBit || (store.classes[i] & classBit) !== 0) && (encoding < 0 || store.encodings[i] === encoding)
+    : null
+  if (!textTest && !prefilter) return { test: null, error, regex, prefilter }
   return {
     error,
+    regex,
+    prefilter,
     test(store, i) {
-      if (classBit && !(store.classes[i] & classBit)) return false
-      if (encoding >= 0 && store.encodings[i] !== encoding) return false
+      if (prefilter && !prefilter(store, i)) return false
       return textTest ? textTest(store, i) : true
     }
   }
