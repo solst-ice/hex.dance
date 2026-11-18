@@ -18,6 +18,8 @@
  * @property {SymbolEntry[]} symbols  executables only, else []
  * @property {ArchiveEntry[]} entries archives only, else []
  * @property {string[]} warnings
+ * @property {'timeout'|'crash'} [gaveUp]  set by the page when the analysis did not finish (it timed out, or the
+ *                                  worker failed): the result then holds only generic facts and a note in `warnings`
  */
 
 /**

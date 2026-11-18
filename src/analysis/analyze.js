@@ -1,18 +1,10 @@
 import { detectFormat } from '../formats/index.js'
-import { formatBytes, hexBytes, item } from '../formats/shared.js'
 import { limitsFor, limitWarning, runParse } from '../formats/budget.js'
+import { genericSummary } from './generic.js'
+
+export { genericSummary }
 
 /** @typedef {import('./types.js').Analysis} Analysis */
-
-/** Facts available for any file, used for unknown formats and when a parser fails. */
-export function genericSummary(bytes, meta = {}) {
-  const summary = [
-    item('File Size', formatBytes(bytes.length)),
-    item('File Type', meta.mimeType || 'application/octet-stream')
-  ]
-  if (bytes.length > 0) summary.push(item('First Bytes', `0x${hexBytes(bytes, 0, 4)}`))
-  return summary
-}
 
 // Keeps a byte range inside the file; returns null for ranges that cannot be shown
 function clipRange(range, size) {

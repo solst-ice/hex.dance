@@ -104,8 +104,14 @@ function Overview() {
         <p className="hd-warning overview-note" role="alert">Error analyzing file: {error.message || String(error)}</p>
       )}
 
-      {analysis && analysis.formatId === 'unknown' && (
+      {analysis && analysis.formatId === 'unknown' && !analysis.gaveUp && (
         <p className="hd-warning overview-note">Note: This file format is not specifically supported. Showing basic information.</p>
+      )}
+
+      {analysis && analysis.gaveUp && (
+        <p className="hd-warning overview-note" role="status">
+          Note: The analysis did not finish, so the format was not identified. Showing basic information.
+        </p>
       )}
 
       {warnings.length > 0 && (
