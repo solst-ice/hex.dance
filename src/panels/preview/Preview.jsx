@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { useFile } from '../../state/hooks.js'
 import { formatBytes } from '../../formats/shared.js'
 import { chooseMedia } from './sniff.js'
-import useBlobUrl from './useBlobUrl.js'
+import useMediaSource from './useMediaSource.js'
 import GlitchLab from './GlitchLab.jsx'
 import MediaView from './MediaView.jsx'
 import './preview.css'
@@ -15,7 +15,8 @@ function Preview() {
   const media = useMemo(() => (bytes ? chooseMedia({
     bytes, fileName: file?.name, mimeType: file?.type, formatId: analysis?.formatId
   }) : null), [bytes]) // eslint-disable-line react-hooks/exhaustive-deps
-  const { url, version } = useBlobUrl(bytes, revision, media?.mime, EDIT_DEBOUNCE_MS[media?.kind] || 300)
+  const source = useMediaSource(bytes, revision, media, EDIT_DEBOUNCE_MS[media?.kind] || 300)
+  const { version } = source
 
   if (!bytes) return <section className="hd-panel"><p className="hd-empty">Reading file…</p></section>
   if (!media) {
@@ -32,7 +33,7 @@ function Preview() {
       <div className="hd-panel-header">
         <span className="hd-badge">{media.label}</span>
       </div>
-      <MediaView url={url} media={media} caption={file?.name || 'File'} />
+      <MediaView {...source} media={media} caption={file?.name || 'File'} />
       <p className="pv-note hd-muted" aria-live="polite">
         {formatBytes(bytes.length)}, shown from the bytes in memory.{' '}
         {stale
@@ -41,7 +42,7 @@ function Preview() {
             ? 'Showing your edited bytes.'
             : 'Edit bytes in the hex view and this preview redraws, or fails, to match.'}
       </p>
-      {media.kind === 'image' && <GlitchLab bytes={bytes} revision={revision} media={media} fileName={file?.name} originalUrl={url} />}
+      {media.kind === 'image' && <GlitchLab bytes={bytes} revision={revision} media={media} fileName={file?.name} original={source} />}
     </section>
   )
 }
