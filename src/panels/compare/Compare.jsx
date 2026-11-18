@@ -207,9 +207,9 @@ function Results({ comparison, running, stale, rerun, a, aName, b, revision, gap
     if (index >= 0) onSelect(index)
   }, [stats, ranges, onSelect])
 
-  const step = (by) => {
+  const step = (by, options) => {
     if (!count) return
-    onSelect(Math.min(count - 1, Math.max(0, (activeIndex < 0 ? (by > 0 ? -1 : 0) : activeIndex) + by)))
+    onSelect(Math.min(count - 1, Math.max(0, (activeIndex < 0 ? (by > 0 ? -1 : 0) : activeIndex) + by)), options)
   }
 
   const onKeyDown = (event) => {
@@ -217,7 +217,8 @@ function Results({ comparison, running, stale, rerun, a, aName, b, revision, gap
     if (event.target.closest('input, select, textarea')) return
     if (event.key === 'n' || event.key === 'p') {
       event.preventDefault()
-      step(event.key === 'n' ? 1 : -1)
+      // Keys step through the differences: no flash on every one
+      step(event.key === 'n' ? 1 : -1, { flash: false })
     }
   }
 
@@ -323,13 +324,13 @@ export default function Compare() {
     ? itemNear(comparison.stats, comparison.ranges, activeOffset)
     : -1
 
-  const onSelect = useCallback((index) => {
+  const onSelect = useCallback((index, options) => {
     if (!comparison?.stats) return
     const item = itemAt(comparison.stats, comparison.ranges, index)
     if (!item) return
     setActiveOffset(item.start)
     const inA = Math.min(item.end, comparison.stats.sizeA) - item.start
-    if (inA > 0) jumpTo(item.start, inA)
+    if (inA > 0) jumpTo(item.start, inA, options)
   }, [comparison, jumpTo])
 
   if (!file) return null
@@ -337,14 +338,19 @@ export default function Compare() {
   const swap = () => {
     if (!b || !bytes) return
     const next = b.file || new File([b.bytes], b.name)
-    setSecond({
-      name: revision > 0 ? `${file.name} (edited)` : file.name,
-      bytes,
-      file: revision > 0 ? null : file,
-      origin: 'swapped'
+    // A becomes B only once B is really opened: with unsaved edits the
+    // reader may choose to keep editing A, and then nothing changes
+    openFile(next, {
+      onOpen() {
+        setSecond({
+          name: revision > 0 ? `${file.name} (edited)` : file.name,
+          bytes,
+          file: revision > 0 ? null : file,
+          origin: 'swapped'
+        })
+        setActiveOffset(null)
+      }
     })
-    setActiveOffset(null)
-    openFile(next)
   }
 
   const original = () => readSecond(file, 'original', `${file.name} (original)`)

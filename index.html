@@ -3,9 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- Nothing may connect to other origins. The script hash allows only the
-         React refresh snippet that the dev server inlines (absent from builds). -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-8ZgGo/nOlaDknQkDUYiedLuFRSGJwIz6LAzsOrNxhmU='; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; media-src 'self' blob: data:; font-src 'self'; connect-src 'self' blob: data:; worker-src 'self' blob:; frame-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'" />
+    <!-- Nothing may connect to other origins, and no inline script may run.
+         The dev server inlines one script of its own; vite.config.js adds
+         its hash to script-src there, and only there. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; media-src 'self' blob: data:; font-src 'self'; connect-src 'self' blob: data:; worker-src 'self' blob:; frame-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'" />
     <title>HEX.DANCE: file viewer and hex editor in your browser</title>
     <meta name="description" content="Look inside any file in your browser: hex view and editor with structure, symbols and metadata for executables, archives, images and documents. Files never leave your device." />
     <meta name="theme-color" content="#060714" />

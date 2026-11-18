@@ -56,7 +56,10 @@ function cellInfo(el, body) {
 /**
  * Hex view and editor. Only `buffer` is required; the rest is optional:
  * `fileName`, `selection` + `onSelectionChange` (controlled selection),
- * `highlights`, `onEdit`, `apiRef` (receives `{ scrollToOffset }`), and
+ * `highlights`, `onEdit({ type, start, end, modifiedCount })` after every change to the bytes
+ * (`modifiedCount`: bytes that now differ from the buffer as given), `onDownload()` after the
+ * Download button saved them, `apiRef` (receives `{ scrollToOffset(offset, { flash = true }) }`,
+ * see HexViewApi in state/hooks.js), and
  * `onCursorChange(offset|null)` and `onViewportChange({ start, end, bytesPerRow, visibleRows }|null)`,
  * which report the cursor and the bytes on screen (`end` exclusive, at most
  * the size) whenever they change, and null when the view goes away.
@@ -98,8 +101,8 @@ function HexDump(props) {
 }
 
 function HexView({
-  buffer, fileName, selection, onSelectionChange, highlights, onEdit, apiRef, onCursorChange, onViewportChange,
-  fullscreen, setFullscreen, editMode, setEditMode
+  buffer, fileName, selection, onSelectionChange, highlights, onEdit, onDownload, apiRef, onCursorChange,
+  onViewportChange, fullscreen, setFullscreen, editMode, setEditMode
 }) {
   const bytes = useMemo(() => toBytes(buffer), [buffer])
   const size = bytes.length
@@ -142,7 +145,7 @@ function HexView({
     editMode, fullscreen, controlled
   }
   const callbacks = useRef(null)
-  callbacks.current = { onSelectionChange, onEdit, onCursorChange, onViewportChange }
+  callbacks.current = { onSelectionChange, onEdit, onDownload, onCursorChange, onViewportChange }
 
   const timers = useRef({})
   const momentum = useRef({})
@@ -226,11 +229,14 @@ function HexView({
     setColumn(value)
   }, [])
 
-  const revealOffset = useCallback(offset => {
+  // `flash: false` only scrolls, for callers that step through offsets one
+  // after another, where a flash on every step would only flicker
+  const revealOffset = useCallback((offset, { flash = true } = {}) => {
     const L = live.current
     if (!L.size) return
     const o = Math.min(Math.max(0, Math.floor(Number(offset)) || 0), L.size - 1)
     scrollToRow(comfortableTop(rowOf(o, L.bytesPerRow), L.top, L.visibleRows))
+    if (!flash) return
     setFlash(prev => ({ offset: o, n: (prev?.n ?? 0) + 1 }))
     clearTimeout(timers.current.flash)
     timers.current.flash = setTimeout(() => setFlash(null), FLASH_MS)
@@ -302,8 +308,8 @@ function HexView({
 
   const notifyEdit = useCallback((type, span) => {
     setRev(r => r + 1)
-    callbacks.current.onEdit?.({ type, start: span.start, end: span.end })
-  }, [])
+    callbacks.current.onEdit?.({ type, start: span.start, end: span.end, modifiedCount: log.modifiedCount })
+  }, [log])
 
   const nibbleGroup = useRef(null)
 
@@ -355,7 +361,10 @@ function HexView({
     }
   }
 
-  const download = () => downloadBytes(bytes, downloadName(fileName))
+  const download = () => {
+    downloadBytes(bytes, downloadName(fileName))
+    callbacks.current.onDownload?.()
+  }
 
   // ---- copy, go to --------------------------------------------------------
 

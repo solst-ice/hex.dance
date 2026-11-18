@@ -91,7 +91,7 @@ function StructureView({ analysis }) {
     const { field } = index.nodes[id]
     setActiveId(id)
     if (options.reveal) setRevealToken(token => token + 1)
-    jumpTo(field.offset, field.length)
+    jumpTo(field.offset, field.length, { flash: options.flash !== false })
   }, [index, jumpTo])
 
   const toggle = useCallback(id => {

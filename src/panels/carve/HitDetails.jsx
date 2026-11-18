@@ -11,7 +11,11 @@ const PARSER = {
 }
 
 /** The selected hit: what it is, how sure the scan is, and what to do with it. */
-export default function HitDetails({ hit, hits, size, onJump, onExtract, onOpen }) {
+/**
+ * `isUnsaved()`: whether the open file has unsaved edits. Then opening asks
+ * about them itself (see UnsavedEdits.jsx), so it is not confirmed here too.
+ */
+export default function HitDetails({ hit, hits, size, onJump, onExtract, onOpen, isUnsaved }) {
   const [mode, setMode] = useState('next')
   const [confirming, setConfirming] = useState(false)
   useEffect(() => setConfirming(false), [hit.id])
@@ -76,7 +80,7 @@ export default function HitDetails({ hit, hits, size, onJump, onExtract, onOpen 
           type="button"
           className="hd-button hd-button--small"
           aria-expanded={confirming}
-          onClick={() => setConfirming(c => !c)}
+          onClick={() => (isUnsaved?.() ? onOpen(hit, end) : setConfirming(c => !c))}
           disabled={hit.role === 'main' && end === size}
           title="Load these bytes in place of the current file"
         >
@@ -86,8 +90,7 @@ export default function HitDetails({ hit, hits, size, onJump, onExtract, onOpen 
       {confirming && (
         <div className="carve-confirm" role="alertdialog" aria-label="Open the extracted bytes">
           <p>
-            Opening replaces the current file in the viewer with these {sizeText(length)}. Unsaved edits are lost;
-            use Extract first if you want to keep them.
+            Opening replaces the current file in the viewer with these {sizeText(length)}.
           </p>
           <div className="hd-row">
             <button type="button" className="hd-button hd-button--small hd-button--active" onClick={() => onOpen(hit, end)} autoFocus>

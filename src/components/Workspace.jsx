@@ -10,7 +10,7 @@ import { useFile, useHexViewReporter, useSelection, useWorkspace } from '../stat
 // The only part of the layout that follows the selection, so selecting bytes
 // does not re-render the panels
 function HexArea() {
-  const { file, buffer, status, notifyEdit } = useFile()
+  const { file, buffer, status, notifyEdit, notifySaved } = useFile()
   const { selection, setSelection, highlights, hexApiRef } = useSelection()
   const { activePanelId } = useWorkspace()
   const { setCursor, setViewport } = useHexViewReporter()
@@ -36,6 +36,7 @@ function HexArea() {
       onSelectionChange={setSelection}
       highlights={shown}
       onEdit={notifyEdit}
+      onDownload={notifySaved}
       apiRef={hexApiRef}
       onCursorChange={setCursor}
       onViewportChange={setViewport}

@@ -1,6 +1,6 @@
 /* eslint-disable react/prop-types -- the project does not use prop-types */
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useFile } from '../../state/hooks.js'
+import { useFile, useUnsavedEdits } from '../../state/hooks.js'
 import { CHALLENGES, challengeById } from './challenges.js'
 import { challengeIdForFile, loadSolved, rememberChallengeFile, saveSolved } from './progress.js'
 import ChallengeView from './ChallengeView.jsx'
@@ -46,7 +46,7 @@ function ChallengeList({ solved, activeId, confirmId, loadingId, currentName, on
             </div>
             {confirmId === challenge.id && (
               <div className="ch-confirm" role="alert">
-                <p>This replaces {currentName ? <strong className="hd-mono">{currentName}</strong> : 'the file'} in the hex view. Edits you have not downloaded will be lost.</p>
+                <p>This replaces {currentName ? <strong className="hd-mono">{currentName}</strong> : 'the file'} in the hex view.</p>
                 <div className="hd-row">
                   <button type="button" className="hd-button hd-button--small" onClick={() => onConfirm(challenge)}>Open challenge</button>
                   <button type="button" className="hd-button hd-button--small" onClick={onCancel}>Cancel</button>
@@ -62,6 +62,7 @@ function ChallengeList({ solved, activeId, confirmId, loadingId, currentName, on
 
 export default function Challenges() {
   const { file, bytes, status, revision, openFile } = useFile()
+  const { isUnsaved } = useUnsavedEdits()
   const [solved, setSolved] = useState(loadSolved)
   const [confirmId, setConfirmId] = useState(null)
   const [loadingId, setLoadingId] = useState(null)
@@ -105,8 +106,9 @@ export default function Challenges() {
   }, [openFile])
 
   const requestStart = (challenge) => {
-    // Nothing to lose when the open file is an untouched challenge
-    if (active && revision === 0) open(challenge)
+    // Nothing to lose when the open file is an untouched challenge. Unsaved
+    // edits are asked about by openFile itself, so they are not asked twice.
+    if ((active && revision === 0) || isUnsaved()) open(challenge)
     else setConfirmId(challenge.id)
   }
 

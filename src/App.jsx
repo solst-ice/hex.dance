@@ -1,5 +1,6 @@
 /* eslint-disable react/prop-types -- the project does not use prop-types */
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import CrtScreen from './components/CrtScreen'
 import FileUploader from './components/FileUploader'
 import GlitchFavicon from './components/GlitchFavicon'
 import MatrixRain from './components/MatrixRain'
@@ -7,6 +8,7 @@ import PrivacyNote from './components/PrivacyNote'
 import SampleFiles from './components/SampleFiles'
 import ThemeSwitcher from './components/ThemeSwitcher'
 import Title from './components/Title'
+import UnsavedEdits from './components/UnsavedEdits'
 import Workspace from './components/Workspace'
 import useWindowFileDrop from './components/useWindowFileDrop'
 import { FileProvider, SelectionProvider, WorkspaceProvider, useFile } from './state/index.js'
@@ -17,6 +19,7 @@ import './styles/sections.css'
 import './styles/shell.css'
 import './styles/theme.css'
 import './styles/theme-tui.css'
+import './styles/crt.css'
 
 // How long the header rain falls after a file is opened
 const BURST_MS = 2500
@@ -64,6 +67,10 @@ function Footer() {
   )
 }
 
+// One element for good: the sections column is memoised, and a new footer
+// element on every edit would re-render it for nothing
+const FOOTER = <Footer />
+
 function Shell() {
   const { file, bytes, openFile } = useFile()
   const isDragging = useWindowFileDrop(openFile)
@@ -74,6 +81,8 @@ function Shell() {
   return (
     <>
       <GlitchFavicon />
+      <UnsavedEdits />
+      <CrtScreen />
       <div className={`container ${compact ? 'has-file' : ''}`}>
         <header ref={headerRef} className={`description site-header ${compact ? 'is-compact' : ''}`}>
           {compact && <HeaderRain file={file} bytes={bytes} dragging={isDragging} />}
@@ -98,7 +107,7 @@ function Shell() {
         </header>
         <main className={compact ? 'site-main' : 'site-main landing'}>
           {compact ? (
-            <Workspace footer={<Footer />} />
+            <Workspace footer={FOOTER} />
           ) : (
             <>
               <FileUploader onFile={openFile} isDragging={isDragging} fileName={null} />

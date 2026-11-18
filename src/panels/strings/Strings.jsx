@@ -163,11 +163,13 @@ function Strings() {
 
   const activeIndex = active.buffer === buffer && store && active.index < count ? active.index : -1
 
-  const pick = useCallback((index) => {
+  const pick = useCallback((index, options) => {
     setActive({ buffer, index })
     if (!store) return
-    jumpRef.current?.(store.offsets[index], Math.max(1, store.byteLength(index)))
+    jumpRef.current?.(store.offsets[index], Math.max(1, store.byteLength(index)), options)
   }, [buffer, store])
+  // Arrow keys step through the list: the hex view follows without flashing
+  const move = useCallback((index) => pick(index, { flash: false }), [pick])
 
   const fullText = useCallback((index) => {
     const text = store.texts[index]
@@ -312,7 +314,7 @@ function Strings() {
           version={count}
           activeIndex={activeIndex}
           onPick={pick}
-          onMove={pick}
+          onMove={move}
           resetKey={filterKey + (scan?.startedAt ?? '')}
           label="Strings found in the file"
           digits={digits}

@@ -3,8 +3,10 @@ import { useEffect, useRef, useState } from 'react'
 const carriesFiles = event => Array.from(event.dataTransfer?.types || []).includes('Files')
 
 /**
- * Accepts a file dropped anywhere on the window. Returns whether a file is
- * currently being dragged over the window.
+ * Accepts a file dropped anywhere on the window. A drop that a target on the
+ * page already handled (it called preventDefault) is left to that target,
+ * though the drag still ends here. Returns whether a file is currently being
+ * dragged over the window.
  * @param {(file: File) => void} onFile
  */
 export default function useWindowFileDrop(onFile) {
@@ -37,9 +39,10 @@ export default function useWindowFileDrop(onFile) {
     }
     const handleDrop = (event) => {
       if (!carriesFiles(event)) return
-      event.preventDefault()
       depth = 0
       setIsDragging(false)
+      if (event.defaultPrevented) return
+      event.preventDefault()
       const file = event.dataTransfer.files[0]
       if (file) onFileRef.current(file)
     }

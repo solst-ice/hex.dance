@@ -208,7 +208,8 @@ function Dance() {
             if (view) {
               const top = view.start / view.bytesPerRow
               const row = Math.floor(position / view.bytesPerRow)
-              if (row < top || row > top + view.visibleRows - 3) hexApiRef.current?.scrollToOffset?.(position)
+              // Following the playhead: turning the page, not pointing at a byte
+              if (row < top || row > top + view.visibleRows - 3) hexApiRef.current?.scrollToOffset?.(position, { flash: false })
             }
           }
         }

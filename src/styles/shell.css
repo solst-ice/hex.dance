@@ -251,6 +251,78 @@
   margin-bottom: 0;
 }
 
+/* Asked before another file replaces one with unsaved edits. A modal
+   <dialog> is drawn in the top layer, so it is above the sticky header and
+   the hex view in fullscreen without a z-index. */
+.unsaved-dialog {
+  background: var(--darker-bg);
+  border: 1px solid var(--hd-border-strong);
+  border-radius: 8px;
+  box-shadow: var(--hd-glow), 0 12px 40px rgba(0, 0, 0, 0.6);
+  box-sizing: border-box;
+  color: var(--text);
+  line-height: 1.5;
+  max-height: calc(100dvh - 32px);
+  max-width: calc(100vw - 32px);
+  overflow: auto;
+  padding: 20px 24px;
+  text-shadow: none;
+  width: 34em;
+}
+
+.unsaved-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.7);
+}
+
+.unsaved-title {
+  color: var(--neon-pink);
+  font-family: 'Unifont', monospace;
+  font-size: 1.2em;
+  font-weight: normal;
+  letter-spacing: 1px;
+  line-height: 1.3;
+  margin: 0 0 12px;
+  text-transform: uppercase;
+}
+
+.unsaved-dialog p {
+  margin: 0 0 10px;
+}
+
+.unsaved-name {
+  color: var(--text-bright);
+  font-family: 'Unifont', monospace;
+  font-weight: normal;
+  overflow-wrap: anywhere;
+}
+
+.unsaved-hint {
+  color: var(--text-muted);
+}
+
+.unsaved-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.unsaved-discard {
+  border-color: var(--hd-danger);
+  color: var(--hd-danger);
+}
+
+.unsaved-discard:hover {
+  background: color-mix(in srgb, var(--hd-danger) 14%, transparent);
+  border-color: var(--hd-danger);
+  box-shadow: none;
+}
+
+.unsaved-dialog .hd-button:focus-visible {
+  outline: 2px solid var(--hd-focus);
+  outline-offset: 2px;
+}
+
 /* Theme switcher */
 .theme-switcher {
   align-items: center;
@@ -359,5 +431,18 @@
     right: 0;
     top: 100%;
     width: auto;
+  }
+
+  .unsaved-dialog {
+    padding: 16px;
+  }
+
+  /* One full-width button per line, the default first */
+  .unsaved-actions {
+    flex-direction: column;
+  }
+
+  .unsaved-actions .hd-button {
+    padding: 10px 12px;
   }
 }

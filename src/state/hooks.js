@@ -1,6 +1,7 @@
 import { useContext, useEffect, useSyncExternalStore } from 'react'
 import {
-  FileContext, HexViewContext, SectionContext, SelectionActionsContext, SelectionContext, WorkspaceContext
+  FileContext, HexViewContext, SectionContext, SelectionActionsContext, SelectionContext, UnsavedEditsContext,
+  WorkspaceContext
 } from './contexts.js'
 
 /**
@@ -13,10 +14,26 @@ import {
  * @property {FileStatus} status
  * @property {import('../analysis/types.js').Analysis|null} analysis
  * @property {Error|null} error
- * @property {(file: File) => void} openFile
- * @property {() => void} closeFile
+ * @property {(file: File, options?: { onOpen?: () => void }) => void} openFile   open another file; with
+ *   unsaved edits it first asks the reader (see UnsavedEdits.jsx), and a later call replaces a waiting one.
+ *   `onOpen` runs just before the file is actually opened, and never if the reader keeps editing.
+ * @property {() => void} closeFile           does not ask about unsaved edits; nothing calls it today
  * @property {number} revision                bumps when bytes are edited in place
- * @property {() => void} notifyEdit
+ * @property {(edit?: { modifiedCount?: number }) => void} notifyEdit   for the hex view's `onEdit`:
+ *   the bytes changed; `modifiedCount` is how many now differ from the file as opened
+ * @property {() => void} notifySaved         for the hex view's `onDownload`: the current bytes were downloaded
+ */
+
+/**
+ * @typedef {Object} UnsavedEdits
+ * @property {string|null} fileName           name of the open file
+ * @property {import('./unsavedEdits.js').OpenRequest|null} pending   the request to open a file
+ *   that waits for an answer
+ * @property {(answer: 'keep' | 'discard' | 'download') => void} answerOpen   answer it: keep editing,
+ *   open it and lose the edits, or download the edited bytes and then open it
+ * @property {() => boolean} isUnsaved        whether the bytes hold edits that were not downloaded
+ * @property {() => number} getModifiedCount  bytes that differ from the file as opened
+ * @property {(listener: () => void) => () => void} subscribe   hears when `isUnsaved()` flips
  */
 
 /**
@@ -29,8 +46,15 @@ import {
  * @property {(selection: ByteRange|null | ((previous: ByteRange|null) => ByteRange|null)) => void} setSelection
  * @property {Highlight[]} highlights
  * @property {(highlights: Highlight[] | ((previous: Highlight[]) => Highlight[])) => void} setHighlights
- * @property {(offset: number, length?: number) => void} jumpTo   select the range and scroll the hex view to it
- * @property {{ current: { scrollToOffset?: (offset: number) => void } | null }} hexApiRef   passed to the hex view as `apiRef`
+ * @property {(offset: number, length?: number, options?: ScrollOptions) => void} jumpTo   select the range and
+ *   scroll the hex view to it
+ * @property {{ current: HexViewApi | null }} hexApiRef   passed to the hex view as `apiRef`
+ *
+ * @typedef {{ flash?: boolean }} ScrollOptions   `flash` (default true) briefly lights up the row
+ *   scrolled to. Pass false where the reader steps through offsets one after another (arrow keys
+ *   through a list, following a playhead), so the view follows without flickering.
+ * @typedef {{ scrollToOffset: (offset: number, options?: ScrollOptions) => void }} HexViewApi
+ *   what the hex view puts in `apiRef`: scroll so the offset is comfortably in view
  *
  * @typedef {Pick<SelectionState, 'setSelection' | 'setHighlights' | 'jumpTo' | 'hexApiRef'> & {
  *   subscribeJumps: (listener: (offset: number) => void) => () => void
@@ -42,6 +66,28 @@ export function useFile() {
   const value = useContext(FileContext)
   if (!value) throw new Error('useFile must be used inside <FileProvider>')
   return value
+}
+
+/**
+ * The request to open a file that waits for an answer, and the means to ask
+ * whether there are unsaved edits. Re-renders only when a request starts or
+ * ends; use `useHasUnsavedEdits` to follow the edits themselves.
+ * @returns {UnsavedEdits}
+ */
+export function useUnsavedEdits() {
+  const value = useContext(UnsavedEditsContext)
+  if (!value) throw new Error('useUnsavedEdits must be used inside <FileProvider>')
+  return value
+}
+
+/**
+ * Whether the open file has edits that were not downloaded. Re-renders the
+ * caller only when that answer changes, not on every edit.
+ * @returns {boolean}
+ */
+export function useHasUnsavedEdits() {
+  const { subscribe, isUnsaved } = useUnsavedEdits()
+  return useSyncExternalStore(subscribe, isUnsaved)
 }
 
 /** @returns {SelectionState} */
@@ -127,9 +173,11 @@ function useHexViewStore() {
  * Byte offset of the hex view's cursor (the byte a plain click or the arrow
  * keys moved to; the selection is null after a plain click). Null while no
  * hex view is shown, 0 for an empty file. Re-renders the caller on every
- * cursor move, in a task after the hex view has updated, so keep the caller
- * small; event handlers that only need the value when they run should use
- * `useHexViewReader` instead.
+ * cursor move, a microtask after the hex view has committed (moves in
+ * between coalesce), so keep the caller small; event handlers that only need
+ * the value when they run should use `useHexViewReader` instead. Inside a
+ * section that is off screen the value is held and the caller hears nothing
+ * until the section comes back (see gatedHexViewStore.js).
  * @returns {number|null}
  */
 export function useHexCursor() {
@@ -142,7 +190,8 @@ export function useHexCursor() {
  * with `start` = first row × bytesPerRow and `end` exclusive, at most the
  * file size. Null while no hex view is shown. The object keeps its identity
  * until one of its fields changes. Re-renders the caller on every scroll
- * step and layout change, so keep the caller small.
+ * step and layout change (held while its section is off screen, like
+ * `useHexCursor`), so keep the caller small.
  * @returns {import('./hexViewStore.js').HexViewport|null}
  */
 export function useHexViewport() {
@@ -153,7 +202,8 @@ export function useHexViewport() {
 /**
  * Reads the hex view's cursor and viewport without subscribing to them, for
  * event handlers and animation frames that need the value at the moment
- * they run. The returned object never changes.
+ * they run, even inside a section that is off screen. The returned object
+ * never changes.
  * @returns {{ getCursor: () => number|null, getViewport: () => import('./hexViewStore.js').HexViewport|null }}
  */
 export function useHexViewReader() {

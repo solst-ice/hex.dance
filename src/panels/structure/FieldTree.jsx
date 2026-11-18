@@ -117,7 +117,8 @@ function FieldTree({ index, rows, expanded, activeId, hoverId, revealToken, onPi
         return
     }
     event.preventDefault()
-    if (next !== null && next !== undefined) onPick(next, { reveal: true })
+    // Stepping through the tree: the hex view follows without flashing
+    if (next !== null && next !== undefined) onPick(next, { reveal: true, flash: false })
   }, [rows, activeId, index, expanded, height, onPick, onToggle])
 
   const activePosition = activeId >= 0 ? rows.indexOf(activeId) : -1

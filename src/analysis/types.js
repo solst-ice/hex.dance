@@ -6,9 +6,12 @@
  * property, so consumers never need to check for missing arrays.
  *
  * @typedef {Object} Analysis
- * @property {string} formatId      stable id: 'elf' | 'pe' | 'macho' | 'zip' | 'pdf' | 'png' | 'jpeg' | 'gif' | 'java-class' | 'unknown'
+ * @property {string} formatId      stable id: the `id` of the format module that recognised the file
+ *                                  (e.g. 'elf', 'pe', 'zip', 'png', 'java-class'; see src/formats/index.js), or 'unknown'
  * @property {string} formatName    display name, e.g. 'Linux ELF Executable'
- * @property {string} category      'executable' | 'archive' | 'image' | 'document' | 'data' | 'unknown'
+ * @property {string} category      the format module's `category` ('executable', 'archive', 'compressed', 'image',
+ *                                  'audio', 'video', 'media', 'document', 'text', 'font', 'database', 'disk', 'data'),
+ *                                  or 'unknown'
  * @property {SummaryItem[]} summary  key facts for the Overview panel
  * @property {Field[]} fields         structure tree with exact byte ranges (may be empty)
  * @property {Region[]} regions       coarse map of the file for an anatomy bar, sorted by offset (may be empty)

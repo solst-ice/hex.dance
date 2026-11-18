@@ -16,9 +16,10 @@
  *                                            3 seeing and playing; each group is a column on wide screens
  * @property {'tab'|'dock'} placement        'tab': a collapsible section beside (or below) the hex view;
  *                                            'dock': always visible under the hex view
- * @property {(context: PanelContext) => boolean} isAvailable
+ * @property {(context: PanelContext) => boolean} [isAvailable]   without it, available whenever a file is open
  * @property {(context: { analysis: import('../analysis/types.js').Analysis|null }) => string|number|null} [badge]
- * @property {import('react').ComponentType} Component   takes no props; reads state through useFile/useSelection
+ * @property {import('react').ComponentType} Component   takes no props; reads state through the hooks in
+ *                                            src/state (useFile, useSelectionActions, useHexCursor, ...)
  */
 
 const modules = import.meta.glob('./*/index.jsx', { eager: true })
