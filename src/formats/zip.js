@@ -247,15 +247,35 @@ function readLocalHeaders(view, bytes) {
   return { entries, complete }
 }
 
-// Distinct directories, explicit or implied by a file's path
-function countDirectories(entries) {
-  const directories = new Set()
+// Directories deeper than this are not counted. Real archives stay well
+// under a hundred levels; a crafted name can hold over 30,000
+export const MAX_DIRECTORY_DEPTH = 1024
+
+/**
+ * Distinct directories, explicit or implied by a file's path. Each directory
+ * is known by a number and looked up by its parent's number and its own name,
+ * so the work grows with the length of the names rather than with the square
+ * of their depth, as building every full prefix would.
+ */
+export function countDirectories(entries) {
+  const ids = new Map()
+  let tooDeep = 0
   for (const entry of entries) {
     const parts = entry.name.split('/').filter(part => part !== '' && part !== '.')
     if (!entry.name.endsWith('/')) parts.pop()
-    for (let i = 1; i <= parts.length; i++) directories.add(parts.slice(0, i).join('/'))
+    if (parts.length > MAX_DIRECTORY_DEPTH) tooDeep++
+    let parent = 0
+    for (let i = 0; i < parts.length && i < MAX_DIRECTORY_DEPTH; i++) {
+      const key = `${parent}/${parts[i]}`
+      let id = ids.get(key)
+      if (id === undefined) {
+        id = ids.size + 1
+        ids.set(key, id)
+      }
+      parent = id
+    }
   }
-  return directories.size
+  return { count: ids.size, tooDeep }
 }
 
 function toArchiveEntry(entry) {
@@ -883,7 +903,11 @@ function parseArchive(bytes, meta) {
   const encrypted = files.filter(file => file.encrypted).length
 
   summary.push(item('Total Files', files.length))
-  summary.push(item('Directories', countDirectories(entries)))
+  const directories = countDirectories(entries)
+  summary.push(item('Directories', directories.tooDeep ? `${directories.count} or more` : directories.count))
+  if (directories.tooDeep) {
+    warnings.push(`${plural(directories.tooDeep, 'entry has a path', 'entries have paths')} more than ${MAX_DIRECTORY_DEPTH.toLocaleString('en-US')} folders deep; deeper folders are not counted`)
+  }
   summary.push(item('Uncompressed Size', formatBytes(totalSize)))
   summary.push(item('Compressed Size', formatBytes(totalCompressed)))
   if (methods.length > 0) summary.push(item('Compression', methods.join(', ')))
