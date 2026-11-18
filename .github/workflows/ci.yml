@@ -4,13 +4,17 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Lets the site be published again by hand from the Actions tab
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # A newer push to a pull request replaces its run in progress. Runs on main
+  # queue instead, so a deploy is never cut off half way.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   check:
@@ -26,3 +30,34 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build
+
+  # Publishes main to the gh-pages branch, which GitHub Pages serves as
+  # hex.dance, once the checks have passed. Never runs for pull requests.
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: check
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The publish step below carries its own token
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Publish dist to gh-pages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # Adds a commit to gh-pages, as `npm run deploy` does by hand
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          npx gh-pages --silent --dist dist \
+            --repo "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            --message "Deploy main at ${GITHUB_SHA::7}"
