@@ -2,19 +2,11 @@ import { useCallback, useRef, useState } from 'react'
 
 const carriesFiles = event => Array.from(event.dataTransfer?.types || []).includes('Files')
 
-// The window-level drop handler opens a dropped file as the main file and
-// shows its overlay while a file is dragged. A drop handled here must not
-// reach it, but stopping the drop also stops it from clearing its dragging
-// state, so it is handed a drop that carries no file.
-function releaseWindowDrag() {
-  const event = new Event('drop')
-  Object.defineProperty(event, 'dataTransfer', { value: { types: ['Files'], files: [], dropEffect: 'none' } })
-  window.dispatchEvent(event)
-}
-
 /**
  * Makes an element accept a dropped file without the window treating the
- * drop as "open this file".
+ * drop as "open this file": the window's handler (useWindowFileDrop) leaves
+ * a drop alone once it has been handled here (preventDefault), and still
+ * ends its own drag.
  * @param {(file: File) => void} onFile
  * @returns {{ dragging: boolean, rect: DOMRect|null, handlers: Object, ref: import('react').RefObject<HTMLElement> }}
  */
@@ -52,11 +44,9 @@ export function useDropTarget(onFile) {
     onDrop(event) {
       if (!carriesFiles(event)) return
       event.preventDefault()
-      event.stopPropagation()
       depth.current = 0
       setRect(null)
       const file = event.dataTransfer.files[0]
-      releaseWindowDrag()
       if (file) onFile(file)
     }
   }
