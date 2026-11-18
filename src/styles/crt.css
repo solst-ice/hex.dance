@@ -1,0 +1,297 @@
+/*
+ * CRT mode: a failing cathode-ray monitor. :root[data-crt="on"] is set by
+ * public/theme-init.js before the first paint and by applyCrt; the overlays
+ * and the burst filter come from src/components/CrtScreen.jsx, and the
+ * timing of the glitches from src/lib/crtGlitch.js.
+ *
+ * Cost rules, because the hex view scrolls and repaints all the time:
+ *   - the steady look is fixed, pointer-events: none overlays that are
+ *     painted once and then only moved (transform) or faded (opacity), so the
+ *     compositor animates them without repainting the page;
+ *   - no mix-blend-mode and no filter over the page between bursts; the SVG
+ *     filter is on <html> only while data-crt-burst is set, a few hundred
+ *     milliseconds every few seconds;
+ *   - between bursts nothing that holds content is moved, so clicks land
+ *     where things appear; the tube's curve is only shading.
+ *
+ * Photosensitivity: whole-screen brightness changes by a few percent at
+ * most, and never more than three times a second (crt-flicker); everything
+ * brighter covers a small part of the screen (blip lines, the static band,
+ * the switch-on line).
+ *
+ * Everything is inside one media query, so print and reduced motion get
+ * none of it.
+ */
+
+.crt {
+  display: none;
+}
+
+@media screen and (prefers-reduced-motion: no-preference) {
+  /* During a burst the root is filtered, and a filter result is only as
+     opaque as its source; the page background is therefore painted by the
+     body (inside the filtered picture) instead of the canvas, so the colour
+     split cannot double the alpha of the overlays. isolation keeps the
+     background grid (z-index: -1) above the body's background. */
+  :root[data-crt="on"] {
+    background: var(--dark-bg);
+  }
+
+  :root[data-crt="on"] body {
+    isolation: isolate;
+    /* Colour fringe and a touch of phosphor bloom on all text that does not
+       set its own shadow; offsets without blur are cheap to draw */
+    text-shadow:
+      -1px 0 color-mix(in srgb, var(--neon-pink) 38%, transparent),
+      1px 0 color-mix(in srgb, var(--neon-blue) 38%, transparent),
+      0 0 4px color-mix(in srgb, currentColor 30%, transparent);
+  }
+
+  /* Tube shape: rounded corners, edges falling into shadow and a faint glare
+     on the glass. Static, and pure CSS so it is there before the first paint. */
+  :root[data-crt="on"] body::after {
+    background:
+      radial-gradient(ellipse 120% 90% at 30% 18%, rgba(255, 255, 255, 0.04), transparent 45%),
+      radial-gradient(ellipse 72% 72% at 50% 50%, transparent 52%, rgba(0, 0, 0, 0.4) 84%, rgba(0, 0, 0, 0.78) 100%);
+    border-radius: clamp(14px, 3vmin, 36px);
+    box-shadow:
+      0 0 0 60px #000,
+      inset 0 0 clamp(40px, 9vmin, 140px) rgba(0, 0, 0, 0.6),
+      inset 0 0 clamp(6px, 1.2vmin, 16px) color-mix(in srgb, var(--neon-blue) 16%, transparent),
+      inset 0 0 3px 1px rgba(0, 0, 0, 0.85);
+    content: '';
+    inset: 0;
+    pointer-events: none;
+    position: fixed;
+    z-index: 3002;
+  }
+
+  :root[data-crt="on"] .crt {
+    contain: strict;
+    display: block;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    position: fixed;
+    z-index: 3001;
+  }
+
+  .crt > * {
+    pointer-events: none;
+    position: absolute;
+  }
+
+  .crt-defs {
+    height: 0;
+    overflow: hidden;
+    width: 0;
+  }
+
+  /* Scanlines, one dark line every three pixels, crawling down a pixel at a time */
+  .crt-scanlines {
+    animation: crt-crawl 0.75s steps(3, end) infinite;
+    background: repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent 2px,
+      rgba(0, 0, 0, 0.3) 2px,
+      rgba(0, 0, 0, 0.3) 3px
+    );
+    inset: -3px 0 0;
+    will-change: transform;
+  }
+
+  @keyframes crt-crawl {
+    to { transform: translateY(3px); }
+  }
+
+  /* Hum bar: a soft lighter band, with a thin dark edge, rolling down */
+  .crt-hum {
+    animation: crt-hum 7.3s linear infinite;
+    background: linear-gradient(
+      to bottom,
+      transparent,
+      color-mix(in srgb, var(--text) 5%, transparent) 30%,
+      color-mix(in srgb, var(--text) 10%, transparent) 80%,
+      color-mix(in srgb, var(--text) 4%, transparent) 92%,
+      rgba(0, 0, 0, 0.22) 95%,
+      transparent
+    );
+    height: 28vh;
+    left: 0;
+    right: 0;
+    top: 0;
+    will-change: transform;
+  }
+
+  @keyframes crt-hum {
+    from { transform: translateY(-30vh); }
+    to { transform: translateY(100vh); }
+  }
+
+  /* Grain: a noise tile in the text colour, jumping to a new place about
+     ten times a second. The tile is drawn once; only its position changes. */
+  .crt-grain {
+    animation: crt-grain 0.7s steps(1, end) infinite;
+    background: var(--text);
+    inset: -160px;
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n' x='0' y='0'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  2.4 0 0 0 -0.95'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E") 0 0 / 160px 160px;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n' x='0' y='0'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  2.4 0 0 0 -0.95'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E") 0 0 / 160px 160px;
+    opacity: 0.14;
+    will-change: transform;
+  }
+
+  @keyframes crt-grain {
+    0% { transform: translate(0, 0); }
+    14% { transform: translate(-37px, 61px); }
+    28% { transform: translate(53px, -22px); }
+    42% { transform: translate(-71px, -88px); }
+    57% { transform: translate(18px, 97px); }
+    71% { transform: translate(84px, 31px); }
+    85% { transform: translate(-12px, -49px); }
+  }
+
+  /* Brightness flicker: a dark veil that steps between 0 and 4%, at most
+     about 2.6 changes a second */
+  .crt-flicker {
+    animation: crt-flicker 2.7s steps(1, end) infinite;
+    background: #000;
+    inset: 0;
+    opacity: 0;
+    will-change: opacity;
+  }
+
+  @keyframes crt-flicker {
+    0% { opacity: 0; }
+    14% { opacity: 0.03; }
+    28% { opacity: 0.008; }
+    42% { opacity: 0.04; }
+    57% { opacity: 0.015; }
+    71% { opacity: 0.035; }
+    86% { opacity: 0.005; }
+  }
+
+  /* Blips: thin lines flickering at random heights between bursts. The
+     component sets each line's place, thickness and opacity. */
+  .crt-blips {
+    inset: 0;
+  }
+
+  .crt-blip {
+    background: color-mix(in srgb, var(--text) 70%, #fff);
+    box-shadow: 0 0 3px color-mix(in srgb, var(--neon-blue) 60%, transparent);
+    height: 1px;
+    left: 0;
+    opacity: 0;
+    position: absolute;
+    right: 0;
+    top: 0;
+    transform-origin: top;
+    will-change: transform, opacity;
+  }
+
+  .crt-blip[data-tone="dark"] {
+    background: #000;
+    box-shadow: none;
+  }
+
+  /* Static band during a burst: streaky noise squeezed into a band of rows,
+     sliding a little while it lasts. Its place comes from the component. */
+  .crt-band {
+    background: color-mix(in srgb, var(--text) 85%, #fff);
+    height: 100vh;
+    left: -240px;
+    opacity: 0;
+    right: -240px;
+    top: 0;
+    transform-origin: top;
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='60'%3E%3Cfilter id='n' x='0' y='0'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9 0.08' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  3 0 0 0 -1.1'/%3E%3C/filter%3E%3Crect width='240' height='60' filter='url(%23n)'/%3E%3C/svg%3E") 0 0 / 240px 60px;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='60'%3E%3Cfilter id='n' x='0' y='0'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9 0.08' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  3 0 0 0 -1.1'/%3E%3C/filter%3E%3Crect width='240' height='60' filter='url(%23n)'/%3E%3C/svg%3E") 0 0 / 240px 60px;
+  }
+
+  :root[data-crt="on"][data-crt-burst] .crt-band {
+    animation: crt-band var(--crt-burst-ms, 250ms) steps(4, end) both;
+    opacity: var(--crt-band-opacity, 0.22);
+  }
+
+  @keyframes crt-band {
+    from {
+      transform: translate(0, calc(var(--crt-band-top, 0.4) * 100vh)) scaleY(var(--crt-band-height, 0.08));
+    }
+    to {
+      transform: translate(-150px, calc((var(--crt-band-top, 0.4) + var(--crt-band-drift, 0.04)) * 100vh)) scaleY(var(--crt-band-height, 0.08));
+    }
+  }
+
+  /* The burst itself: the filter defined in CrtScreen.jsx, on the root only */
+  :root[data-crt="on"][data-crt-burst] {
+    filter: url(#hd-crt-burst);
+  }
+
+  /* Switching on: a bright line across the middle, then the picture opens
+     from it as two black halves slide away. Plays once; off simply cuts. */
+  .crt-power {
+    animation: crt-power 650ms linear both;
+    inset: 0;
+  }
+
+  .crt-power::before,
+  .crt-power::after {
+    background: #000;
+    content: '';
+    height: 50%;
+    left: 0;
+    position: absolute;
+    right: 0;
+    will-change: transform;
+  }
+
+  .crt-power::before {
+    animation: crt-shutter-top 650ms cubic-bezier(0.55, 0, 0.75, 0.3) both;
+    top: 0;
+  }
+
+  .crt-power::after {
+    animation: crt-shutter-bottom 650ms cubic-bezier(0.55, 0, 0.75, 0.3) both;
+    bottom: 0;
+  }
+
+  .crt-power-line {
+    animation: crt-power-line 650ms ease-out both;
+    background: color-mix(in srgb, var(--text) 50%, #fff);
+    box-shadow:
+      0 0 6px 1px color-mix(in srgb, var(--neon-blue) 80%, transparent),
+      0 0 22px 4px color-mix(in srgb, var(--neon-blue) 35%, transparent);
+    height: 2px;
+    left: 0;
+    position: absolute;
+    right: 0;
+    top: calc(50% - 1px);
+    z-index: 1;
+    will-change: transform, opacity;
+  }
+
+  /* Only so the component hears when the whole thing has finished */
+  @keyframes crt-power {
+    from { opacity: 1; }
+    to { opacity: 1; }
+  }
+
+  @keyframes crt-shutter-top {
+    0%, 16% { transform: translateY(0); }
+    100% { transform: translateY(-101%); }
+  }
+
+  @keyframes crt-shutter-bottom {
+    0%, 16% { transform: translateY(0); }
+    100% { transform: translateY(101%); }
+  }
+
+  @keyframes crt-power-line {
+    0% { opacity: 1; transform: scaleX(0.01) scaleY(1); }
+    14% { opacity: 1; transform: scaleX(1) scaleY(1); }
+    40% { opacity: 0.8; transform: scaleX(1) scaleY(2); }
+    75% { opacity: 0; transform: scaleX(1) scaleY(0.5); }
+    100% { opacity: 0; transform: scaleX(1) scaleY(0.5); }
+  }
+}

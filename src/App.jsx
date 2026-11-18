@@ -1,5 +1,6 @@
 /* eslint-disable react/prop-types -- the project does not use prop-types */
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import CrtScreen from './components/CrtScreen'
 import FileUploader from './components/FileUploader'
 import GlitchFavicon from './components/GlitchFavicon'
 import MatrixRain from './components/MatrixRain'
@@ -18,6 +19,7 @@ import './styles/sections.css'
 import './styles/shell.css'
 import './styles/theme.css'
 import './styles/theme-tui.css'
+import './styles/crt.css'
 
 // How long the header rain falls after a file is opened
 const BURST_MS = 2500
@@ -80,6 +82,7 @@ function Shell() {
     <>
       <GlitchFavicon />
       <UnsavedEdits />
+      <CrtScreen />
       <div className={`container ${compact ? 'has-file' : ''}`}>
         <header ref={headerRef} className={`description site-header ${compact ? 'is-compact' : ''}`}>
           {compact && <HeaderRain file={file} bytes={bytes} dragging={isDragging} />}

@@ -42,8 +42,17 @@ export function applyTheme(id) {
   write(THEME_KEY, theme.id)
 }
 
+// Whoever draws the CRT mode or shows its button follows it through here
+const crtListeners = new Set()
+
+export function subscribeCrt(listener) {
+  crtListeners.add(listener)
+  return () => crtListeners.delete(listener)
+}
+
 export function applyCrt(on) {
   if (on) document.documentElement.dataset.crt = 'on'
   else delete document.documentElement.dataset.crt
   write(CRT_KEY, on ? 'on' : 'off')
+  crtListeners.forEach(listener => listener())
 }

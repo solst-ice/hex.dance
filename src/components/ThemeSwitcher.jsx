@@ -1,11 +1,11 @@
-import { useState } from 'react'
-import { THEMES, applyCrt, applyTheme, currentCrt, currentTheme } from './themes'
+import { useState, useSyncExternalStore } from 'react'
+import { THEMES, applyCrt, applyTheme, currentCrt, currentTheme, subscribeCrt } from './themes'
 import useReducedMotion from './useReducedMotion'
 
-/** Colour theme buttons and the CRT scanline toggle. */
+/** Colour theme buttons and the CRT mode toggle. */
 function ThemeSwitcher() {
   const [theme, setTheme] = useState(currentTheme)
-  const [crt, setCrt] = useState(currentCrt)
+  const crt = useSyncExternalStore(subscribeCrt, currentCrt, () => false)
   const reducedMotion = useReducedMotion()
 
   return (
@@ -29,11 +29,12 @@ function ThemeSwitcher() {
         className="theme-crt hd-button hd-button--small"
         aria-pressed={crt && !reducedMotion}
         disabled={reducedMotion}
-        title={reducedMotion ? 'Scanlines are off because reduced motion is on' : 'CRT scanlines'}
-        onClick={() => {
-          applyCrt(!crt)
-          setCrt(!crt)
-        }}
+        title={
+          reducedMotion
+            ? 'CRT mode is off because reduced motion is on'
+            : 'CRT mode: a failing tube monitor, with crawling scanlines, static and bursts of tearing and colour split'
+        }
+        onClick={() => applyCrt(!crt)}
       >
         CRT
       </button>
