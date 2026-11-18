@@ -1,13 +1,13 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { parseHex, parseText, parseNumberQuery, parseNumber, encodeInteger } from './pattern.js'
-import { findAll, startSearch, stepMatch, firstAfter, chooseAnchor } from './scanner.js'
+import { findAll, startSearch, stepMatch, firstAfter, chooseAnchor, byteWeights, planPattern, chunkPositions, CHUNK_WORK } from './scanner.js'
 
 const enc = (s) => new TextEncoder().encode(s)
 const offsetsOf = (list) => Array.from(list.offsets.subarray(0, list.count))
 
 // Brute-force reference: every start where a pattern matches
-function naive(bytes, patterns) {
+function naive(bytes, patterns, kinds = null) {
   const out = []
   for (let i = 0; i < bytes.length; i++) {
     for (let p = 0; p < patterns.length; p++) {
@@ -17,7 +17,7 @@ function naive(bytes, patterns) {
       for (let j = 0; j < values.length && ok; j++) {
         ok = !mask[j] || bytes[i + j] === values[j] || bytes[i + j] === alt[j]
       }
-      if (ok) { out.push(i); break }
+      if (ok) { out.push(i); kinds?.push(p); break }
     }
   }
   return out
@@ -204,4 +204,88 @@ test('stepping wraps around', () => {
   assert.equal(stepMatch(offsets, 0, 5, 1), -1)
   assert.equal(firstAfter(offsets, 3, 20, true), 1)
   assert.equal(firstAfter(offsets, 3, 20), 2)
+})
+
+test('anchor is the rarest fixed byte in the file, not the first', () => {
+  // Mostly zeros with a few 0xff: a long run of zeros ending in ff anchors on the ff
+  const bytes = new Uint8Array(100000)
+  for (let i = 500; i < bytes.length; i += 9000) bytes[i] = 0xff
+  const weights = byteWeights(bytes)
+  const pattern = parseHex('00'.repeat(1023) + 'ff').patterns[0]
+  assert.equal(chooseAnchor(pattern, weights).index, 1023)
+  // Text full of 'e': a case pair of rarer letters wins over a common fixed byte
+  const text = enc('e'.repeat(5000) + 'Qz')
+  const word = parseText('eqz', { utf16: false }).patterns[0]
+  assert.equal(chooseAnchor(word, byteWeights(text)).index, 1)
+  // The other fixed bytes are checked rarest first
+  const plan = planPattern(parseHex('00 ff 41 ?? 00').patterns[0], weights)
+  assert.equal(plan.anchor.index, 2)
+  assert.deepEqual(Array.from(plan.order), [1, 0, 4])
+})
+
+test('rarest-first scanning gives the same matches, kinds and order as brute force', () => {
+  const sparse = new Uint8Array(40000)
+  for (let i = 1023; i < sparse.length; i += 3001) sparse[i] = 0xff
+  sparse.fill(0x41, 20000, 20100)
+  const mixed = random(30000, 11)
+  mixed.fill(0, 1000, 5000)
+  mixed.set(enc('Hello hELLO h\0e\0l\0l\0o\0'), 7000)
+  const cases = [
+    [sparse, parseHex('00'.repeat(1023) + 'ff').patterns],
+    [sparse, parseHex('00'.repeat(1024)).patterns],
+    [sparse, parseHex('00 ?? 00 ff').patterns],
+    [sparse, parseHex('41'.repeat(50) + ' ?? 00').patterns],
+    [mixed, parseHex('00'.repeat(300) + ' ?? ' + '00'.repeat(20)).patterns],
+    [mixed, parseText('hello', { ignoreCase: true }).patterns],
+    [mixed, parseText('hello').patterns],
+    [mixed, parseNumberQuery('0').patterns],
+    [mixed, parseNumberQuery('-1', { widths: [8, 16, 32] }).patterns]
+  ]
+  for (const [bytes, patterns] of cases) {
+    const kinds = []
+    const expected = naive(bytes, patterns, kinds)
+    for (const chunkSize of [13, 4096, 1 << 20]) {
+      const list = findAll(bytes, patterns, { chunkSize })
+      assert.deepEqual(offsetsOf(list), expected)
+      assert.deepEqual(Array.from(list.kinds.subarray(0, list.count)), kinds)
+    }
+  }
+})
+
+test('chunks shrink with the pattern so one slice stays bounded', async () => {
+  assert.equal(chunkPositions(parseHex('00').patterns, 256 * 1024), 256 * 1024)
+  const long = parseHex('00'.repeat(1023) + 'ff').patterns
+  assert.ok(chunkPositions(long, 256 * 1024) * 1024 <= CHUNK_WORK)
+  // Worst case: every offset of a zero file is a candidate for a 1024-byte
+  // run of zeros. A clock that moves on every reading makes each slice scan
+  // exactly one chunk, so the progress steps show the work per slice.
+  const bytes = new Uint8Array(1 << 19)
+  const patterns = parseHex('00'.repeat(1024)).patterns
+  let clock = 0
+  const steps = []
+  let last = 0
+  const done = await new Promise(resolve => {
+    startSearch(bytes, patterns, {
+      sliceMs: 1,
+      cap: bytes.length,
+      now: () => (clock += 1),
+      schedule: fn => setTimeout(fn, 0),
+      onProgress: (list, scanned) => { steps.push(scanned - last); last = scanned },
+      onDone: list => resolve(list)
+    })
+  })
+  assert.ok(steps.length > 100)
+  for (const positions of steps) assert.ok(positions * 1024 <= CHUNK_WORK)
+  assert.equal(done.count, bytes.length - 1023)
+})
+
+test('a time-sliced search finds what findAll finds', async () => {
+  const bytes = random(200000, 9)
+  bytes.fill(0, 50000, 60000)
+  for (const patterns of [parseHex('00'.repeat(200) + '??').patterns, parseText('ab', { ignoreCase: true }).patterns]) {
+    const list = await new Promise(resolve => startSearch(bytes, patterns, { schedule: fn => setTimeout(fn, 0), onDone: resolve }))
+    const reference = findAll(bytes, patterns)
+    assert.deepEqual(offsetsOf(list), offsetsOf(reference))
+    assert.deepEqual(Array.from(list.kinds.subarray(0, list.count)), Array.from(reference.kinds.subarray(0, reference.count)))
+  }
 })

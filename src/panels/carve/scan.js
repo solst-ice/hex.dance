@@ -6,6 +6,8 @@
 import { createPrefilter, prefilterRange } from './prefilter.js'
 import { SIGNATURES, SIGNATURE_BY_ID } from './signatures.js'
 import { VALIDATORS } from './validate/index.js'
+import { runParse } from '../../formats/budget.js'
+import { visibleText } from '../../lib/visibleText.js'
 
 export const LIMITS = {
   /** the scan stops after this many confirmed hits */
@@ -113,10 +115,21 @@ export async function scanFile({ source, formats = [], limits: overrides, onHit,
     hit.parser = 'detected'
     if (!parseable || (moduleTime[moduleId] || 0) > limits.parseBudgetMs) return
     const t0 = now()
+    // The same budget the analysis uses, so a hit built to overload a parser
+    // stops it here too instead of taking the worker (and the tab) down
+    const run = runParse(mod.parse, bytes, {}, { ms: limits.parseBudgetMs })
+    if (run.limit) {
+      hit.parser = 'parse-error'
+      if (known && hit.confidence === 'high') hit.confidence = 'medium'
+      hit.note += '; the app\'s parser was stopped because this data asks for far more work than its size allows'
+      moduleTime[moduleId] = (moduleTime[moduleId] || 0) + (now() - t0)
+      return
+    }
     try {
-      const analysis = mod.parse(bytes, {}) || {}
+      if (run.error) throw run.error
+      const analysis = run.result || {}
       hit.parser = 'parsed'
-      if (analysis.formatName) hit.parserName = analysis.formatName
+      if (analysis.formatName) hit.parserName = visibleText(analysis.formatName)
       if (!known) {
         const end = parserExtent(analysis)
         if (end > 0 && end < bytes.length) {
@@ -166,10 +179,12 @@ export async function scanFile({ source, formats = [], limits: overrides, onHit,
       end: result.end,
       endKind: result.end === null ? 'exact' : result.endKind || 'exact',
       type: result.type,
-      name: result.name || signature.name,
+      // Names and notes can quote an embedded file's entry names, which do not
+      // pass through analyzeBytes; hidden characters in them are shown as markers
+      name: visibleText(result.name || signature.name),
       ext: result.ext || signature.ext,
       confidence: result.confidence,
-      note: result.note,
+      note: visibleText(result.note),
       signature: id,
       parser: null
     }

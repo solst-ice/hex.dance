@@ -11,6 +11,7 @@ import { svgBlob, svgToPng, pngSize } from './exporter.js'
 import { canCopyImage, copyImage } from '../../lib/clipboard.js'
 import { downloadBlob } from '../../lib/download.js'
 import './poster.css'
+import { visibleText } from '../../lib/visibleText.js'
 
 const STYLES = [['dark', 'Dark'], ['print', 'Print']]
 const PROPORTIONS = [['landscape', 'Landscape'], ['portrait', 'Portrait'], ['square', 'Square']]
@@ -240,7 +241,7 @@ export default function Poster() {
         <div className={`poster-preview poster-preview--${zoom}`} data-style={options.style}>
           <img
             src={previewUrl}
-            alt={`Poster of ${file.name}`}
+            alt={`Poster of ${visibleText(file.name)}`}
             width={zoom === 'full' ? poster.width : undefined}
             height={zoom === 'full' ? poster.height : undefined}
             draggable="false"

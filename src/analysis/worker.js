@@ -1,6 +1,8 @@
 import { analyzeBytes } from './analyze.js'
 
 // Message in: { id, file }. Message out: { id, analysis } or { id, error }.
+// { ready: true } is posted once the worker has loaded, so the page can tell
+// a worker that cannot run at all from one that failed on a file.
 self.onmessage = async (event) => {
   const { id, file } = event.data || {}
   try {
@@ -11,3 +13,5 @@ self.onmessage = async (event) => {
     self.postMessage({ id, error: err && err.message ? err.message : String(err) })
   }
 }
+
+self.postMessage({ ready: true })

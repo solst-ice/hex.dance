@@ -1,11 +1,12 @@
 /* eslint-disable react/prop-types -- the project does not use prop-types */
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFile, useSelectionActions } from '../../state/hooks.js'
 import { streamToWorker } from '../../lib/chunkStream.js'
 import CopyButton from '../../components/CopyButton.jsx'
 import { CLASSES } from './classify.js'
 import { ASCII, UTF16LE, readString } from './scan.js'
 import { StringStore, collectMatches, compileFilter } from './store.js'
+import { SLOW_MESSAGE, regexShown, startRegexFilter } from './regexFilter.js'
 import StringList from './StringList.jsx'
 import './strings.css'
 
@@ -123,6 +124,39 @@ function MinLengthInput({ value, onChange }) {
   )
 }
 
+const createFilterWorker = () => new Worker(new URL('./filter.worker.js', import.meta.url), { type: 'module' })
+
+// Runs a /regex/ filter in a worker. Returns the job's latest state, tagged
+// with the filter key and store it belongs to; a newer filter cancels the
+// older job, which then reports nothing more.
+function useRegexFilter({ store, count, filter, filterKey }) {
+  const [current, setCurrent] = useState(null)
+  const jobRef = useRef(null)
+  useEffect(() => {
+    if (!store || !filter.regex) return undefined
+    let result = null
+    setCurrent({ key: filterKey, store, status: 'running', result: null, scanned: 0 })
+    const job = startRegexFilter({
+      store,
+      regex: filter.regex,
+      prefilter: filter.prefilter,
+      createWorker: createFilterWorker,
+      onUpdate({ status, list, count: listed, scanned, error }) {
+        if (status === 'done') result = { key: filterKey, store, list, count: listed }
+        setCurrent({ key: filterKey, store, status, result, scanned, error })
+      }
+    })
+    jobRef.current = job
+    return () => {
+      job.cancel()
+      if (jobRef.current === job) jobRef.current = null
+    }
+  }, [store, filter, filterKey])
+  // Strings still arriving from the scan are tested as they come
+  useEffect(() => { jobRef.current?.update() }, [count])
+  return current
+}
+
 function useDebounced(value, ms) {
   const [debounced, setDebounced] = useState(value)
   useEffect(() => {
@@ -147,19 +181,36 @@ function Strings() {
   const store = scan?.store || null
   const count = store ? store.count : 0
 
-  // Matches grow with the store, so they are extended rather than recomputed
-  const matchRef = useRef({ key: null, store: null, list: null, scanned: 0, error: null })
   const filterKey = `${debouncedQuery}\u0000${classBit}\u0000${encoding}`
+  const filter = useMemo(() => compileFilter({ query: debouncedQuery, classBit, encoding }), [debouncedQuery, classBit, encoding])
+  const regexState = useRegexFilter({ store, count, filter, filterKey })
+  const regexCurrent = filter.regex && regexState && regexState.key === filterKey && regexState.store === store ? regexState : null
+
+  // Plain-text, class and encoding filters run here; they are linear and fast.
+  // Matches grow with the store, so they are extended rather than recomputed
+  const matchRef = useRef({ key: null, store: null, list: null, scanned: 0, test: null })
   const matches = matchRef.current
-  if (matches.key !== filterKey || matches.store !== store) {
-    const { test, error } = compileFilter({ query: debouncedQuery, classBit, encoding })
-    Object.assign(matches, { key: filterKey, store, test, list: test ? [] : null, scanned: 0, error })
+  if (!filter.regex) {
+    if (matches.key !== filterKey || matches.store !== store) {
+      Object.assign(matches, { key: filterKey, store, test: filter.test, list: filter.test ? [] : null, scanned: 0 })
+    }
+    if (store && matches.test && matches.scanned < store.count) {
+      collectMatches(store, matches.test, matches.scanned, matches.list)
+      matches.scanned = store.count
+    }
   }
-  if (store && matches.test && matches.scanned < store.count) {
-    collectMatches(store, matches.test, matches.scanned, matches.list)
-    matches.scanned = store.count
-  }
-  const matchCount = matches.list ? matches.list.length : count
+
+  // What the list shows: a regular expression keeps the previous list until
+  // its own result is ready, and keeps it if the pattern is stopped
+  const shownRef = useRef(null)
+  const shown = filter.regex
+    ? regexShown({ key: filterKey, store, current: regexState, previous: shownRef.current })
+    : { key: filterKey, store, list: matches.list, count: matches.list ? matches.list.length : 0 }
+  if (shown) shownRef.current = shown
+  const shownList = shown ? shown.list : null
+  const matchCount = !shown ? 0 : shownList ? shown.count : count
+  const filtering = Boolean(regexCurrent && regexCurrent.status === 'running' && !regexCurrent.result)
+  const filterStatus = !filter.regex ? 'sync' : regexCurrent ? regexCurrent.status : 'running'
 
   const activeIndex = active.buffer === buffer && store && active.index < count ? active.index : -1
 
@@ -180,8 +231,8 @@ function Strings() {
   const allMatchesText = () => {
     if (!store) return ''
     const out = []
-    if (matches.list) for (const index of matches.list) out.push(fullText(index))
-    else for (let index = 0; index < count; index++) out.push(fullText(index))
+    if (shownList) for (let k = 0; k < matchCount; k++) out.push(fullText(shownList[k]))
+    else for (let index = 0; index < matchCount; index++) out.push(fullText(index))
     return out.join('\n')
   }
 
@@ -202,6 +253,8 @@ function Strings() {
       data-total={scan?.total ?? 0}
       data-first-ms={scan?.firstAt ? Math.round(scan.firstAt - scan.startedAt) : ''}
       data-done-ms={scan?.doneAt ? Math.round(scan.doneAt - scan.startedAt) : ''}
+      data-filter={filterStatus}
+      data-filter-query={debouncedQuery}
     >
       <JumpBridge jumpRef={jumpRef} />
       <div className="hd-panel-header">
@@ -284,11 +337,17 @@ function Strings() {
 
       <div className="hd-row strings-summary">
         <span className="strings-match-count" aria-live="polite">
-          {matches.error
-            ? <span className="hd-warning">Invalid pattern: {matches.error}</span>
-            : matches.list
-              ? `${matchCount.toLocaleString()} of ${count.toLocaleString()} match`
-              : `${count.toLocaleString()} strings`}
+          {filter.error
+            ? <span className="hd-warning">Invalid pattern: {filter.error}</span>
+            : regexCurrent?.status === 'slow'
+              ? <span className="hd-warning" role="alert">{SLOW_MESSAGE}</span>
+              : regexCurrent?.status === 'error'
+                ? <span className="hd-warning" role="alert">The filter could not run: {regexCurrent.error}</span>
+                : filtering
+                  ? `Filtering… ${count ? Math.floor((regexCurrent.scanned / count) * 100) : 0}%`
+                  : shownList
+                    ? `${matchCount.toLocaleString()} of ${count.toLocaleString()} match`
+                    : `${count.toLocaleString()} strings`}
         </span>
         <span className="strings-actions hd-row">
           <CopyButton
@@ -298,8 +357,8 @@ function Strings() {
             getText={() => (activeIndex >= 0 ? fullText(activeIndex) : null)}
           />
           <CopyButton
-            label={matches.list ? 'Copy matches' : 'Copy all'}
-            ariaLabel={matches.list ? `Copy all ${matchCount} matching strings` : `Copy all ${count} strings`}
+            label={shownList ? 'Copy matches' : 'Copy all'}
+            ariaLabel={shownList ? `Copy all ${matchCount} matching strings` : `Copy all ${count} strings`}
             disabled={matchCount === 0}
             getText={allMatchesText}
           />
@@ -309,20 +368,21 @@ function Strings() {
       {store && matchCount > 0 && (
         <StringList
           store={store}
-          list={matches.list}
+          list={shownList}
           count={matchCount}
           version={count}
           activeIndex={activeIndex}
           onPick={pick}
           onMove={move}
-          resetKey={filterKey + (scan?.startedAt ?? '')}
+          resetKey={shown.key + (scan?.startedAt ?? '')}
           label="Strings found in the file"
           digits={digits}
         />
       )}
-      {store && matchCount === 0 && !scanning && (
+      {store && shown && matchCount === 0 && !scanning && (
         <p className="hd-empty">{count === 0 ? 'No strings found.' : 'No strings match.'}</p>
       )}
+      {store && !shown && !scanning && <p className="hd-empty">Filtering…</p>}
       {(!store || (matchCount === 0 && scanning)) && <p className="hd-empty">Scanning…</p>}
     </section>
   )

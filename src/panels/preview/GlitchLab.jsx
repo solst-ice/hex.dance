@@ -3,7 +3,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { useHighlightLayer, useSelectionActions } from '../../state/hooks.js'
 import { HEX, formatOffset } from '../../components/hex/bytes.js'
 import { glitchCopy, pickOffsets, suggestSkip } from './glitch.js'
-import useBlobUrl from './useBlobUrl.js'
+import { downloadBytes } from '../../lib/download.js'
+import useMediaSource from './useMediaSource.js'
 import MediaView from './MediaView.jsx'
 
 // Each run copies the whole file, so very large images are left out
@@ -25,7 +26,7 @@ function glitchedName(name) {
   return dot > 0 ? `${base.slice(0, dot)}-glitched${base.slice(dot)}` : `${base}-glitched`
 }
 
-function Bench({ bytes, revision, media, fileName, originalUrl }) {
+function Bench({ bytes, revision, media, fileName, original }) {
   const { jumpTo } = useSelectionActions()
   const size = bytes.length
   const [count, setCount] = useState(8)
@@ -45,7 +46,7 @@ function Bench({ bytes, revision, media, fileName, originalUrl }) {
     return () => clearTimeout(timer)
   }, [bytes, revision, size, effectiveCount, skip, seed])
 
-  const { url } = useBlobUrl(result?.bytes, result, media.mime, 0)
+  const glitched = useMediaSource(result?.bytes, result, media, 0)
 
   const ranges = useMemo(() => (mark && result
     ? result.changes.map(c => ({ id: c.offset, start: c.offset, end: c.offset + 1, label: 'Changed in the glitched copy', color: 'var(--pv-glitch)' }))
@@ -79,13 +80,15 @@ function Bench({ bytes, revision, media, fileName, originalUrl }) {
       </p>
 
       <div className="pv-pair">
-        <MediaView url={originalUrl} media={media} caption="Original" />
-        <MediaView url={url} media={media} caption="Glitched copy" />
+        <MediaView {...original} media={media} caption="Original" />
+        <MediaView {...glitched} media={media} caption="Glitched copy" />
       </div>
 
       <div className="hd-row">
-        {url && (
-          <a className="hd-button pv-download" href={url} download={glitchedName(fileName)}>Download glitched file</a>
+        {result && (
+          // Saved as plain bytes made at the click, so no address of the file's own type is left lying around
+          <button type="button" className="hd-button pv-download"
+            onClick={() => downloadBytes(result.bytes, glitchedName(fileName))}>Download glitched file</button>
         )}
         <label className="pv-check">
           <input type="checkbox" checked={mark} onChange={e => setMark(e.target.checked)} />

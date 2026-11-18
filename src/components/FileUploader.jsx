@@ -1,6 +1,7 @@
 /* eslint-disable react/prop-types -- the project does not use prop-types */
 import { useEffect, useState } from 'react'
 import MatrixRain from './MatrixRain'
+import { visibleText } from '../lib/visibleText.js'
 
 // How long the landing rain falls after the page loads before it waits for the pointer
 const INTRO_MS = 6000
@@ -28,9 +29,11 @@ function FileUploader({ onFile, isDragging = false, fileName = null }) {
   }
 
   if (fileName !== null) {
+    // A name can hide characters or reverse its own ending ('…fdp.exe' shown as '…exe.pdf')
+    const shownName = visibleText(fileName)
     return (
       <div className={`file-bar ${isDragging ? 'dragging' : ''}`}>
-        <span className="file-bar-name" title={fileName}>{fileName}</span>
+        <span className="file-bar-name" title={shownName}>{shownName}</span>
         <label className="file-bar-choose hd-button hd-button--small">
           <input type="file" id="file-input" onChange={handleChange} />
           {isDragging ? 'Drop to open' : 'Open file'}

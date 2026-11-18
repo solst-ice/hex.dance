@@ -2,6 +2,7 @@
 import { memo, useEffect, useId, useLayoutEffect, useRef } from 'react'
 import { useHasUnsavedEdits, useUnsavedEdits } from '../state/hooks.js'
 import { downloadName } from './hex/bytes.js'
+import { visibleText } from '../lib/visibleText.js'
 
 // Asks the browser to confirm leaving the page while there are edits to lose.
 // The listener only exists while it is needed: a page with a beforeunload
@@ -88,12 +89,12 @@ function OpenQuestion({ request, fileName, modifiedCount, onAnswer }) {
       <h2 className="unsaved-title" id={titleId}>Unsaved edits</h2>
       <div id={textId}>
         <p>
-          <strong className="unsaved-name">{fileName}</strong> has {plural(modifiedCount, 'modified byte')} that
-          you have not downloaded. Opening <strong className="unsaved-name">{request.file.name}</strong> replaces
+          <strong className="unsaved-name">{visibleText(fileName)}</strong> has {plural(modifiedCount, 'modified byte')} that
+          you have not downloaded. Opening <strong className="unsaved-name">{visibleText(request.file.name)}</strong> replaces
           it, and the edits will be lost.
         </p>
         <p className="unsaved-hint">
-          Downloading saves the edited copy as <span className="unsaved-name">{downloadName(fileName)}</span> first.
+          Downloading saves the edited copy as <span className="unsaved-name">{visibleText(downloadName(fileName))}</span> first.
         </p>
       </div>
       <div className="unsaved-actions">

@@ -3,6 +3,8 @@
 // member that does not fit in the file, so truncated input yields a shorter
 // tree instead of an exception.
 
+import { chargeRows, chargeText } from './budget.js'
+
 /** Total field nodes one parse may produce, so the result stays cheap to post from a worker */
 export const MAX_FIELD_NODES = 20000
 /** Entries of one table (sections, load commands, …) decoded in full before the rest is summarised */
@@ -17,6 +19,7 @@ export function createBudget(max = MAX_FIELD_NODES) {
  * @returns {import('../analysis/types.js').Field}
  */
 export function field(name, offset, length, value, kind, description, children) {
+  chargeRows()
   const result = { name, offset, length }
   if (value !== undefined && value !== null && value !== '') result.value = String(value)
   if (description) result.description = description
@@ -167,6 +170,7 @@ function isZeroFilled(bytes, from, to) {
 export function hexString(view, offset, length) {
   let out = ''
   const end = Math.min(offset + length, view.byteLength)
+  chargeText(Math.max(0, end - offset) * 2)
   for (let i = offset; i < end; i++) out += view.getUint8(i).toString(16).padStart(2, '0')
   return out
 }

@@ -44,10 +44,11 @@ import {
  * @typedef {Object} SelectionState
  * @property {ByteRange|null} selection
  * @property {(selection: ByteRange|null | ((previous: ByteRange|null) => ByteRange|null)) => void} setSelection
+ *   set from anywhere but the hex view, it also moves the hex view's cursor to the first selected byte
  * @property {Highlight[]} highlights
  * @property {(highlights: Highlight[] | ((previous: Highlight[]) => Highlight[])) => void} setHighlights
- * @property {(offset: number, length?: number, options?: ScrollOptions) => void} jumpTo   select the range and
- *   scroll the hex view to it
+ * @property {(offset: number, length?: number, options?: ScrollOptions) => void} jumpTo   select the range, put
+ *   the hex view's cursor on its first byte and scroll the hex view to it
  * @property {{ current: HexViewApi | null }} hexApiRef   passed to the hex view as `apiRef`
  *
  * @typedef {{ flash?: boolean }} ScrollOptions   `flash` (default true) briefly lights up the row

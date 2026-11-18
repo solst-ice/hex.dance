@@ -1,5 +1,7 @@
 import { capFields, field, fitted, formatNumber, latin1, plural, printable, unixDate } from './reader.js'
 import { formatBytes, item } from './shared.js'
+import { chargeText } from './budget.js'
+import { pathWarnings } from './archivePaths.js'
 
 const BLOCK = 512
 const MAX_ENTRIES = 100000
@@ -18,6 +20,7 @@ const utf8 = new TextDecoder('utf-8')
 function cString(bytes, offset, length) {
   let end = offset
   while (end < offset + length && bytes[end] !== 0) end++
+  chargeText(end - offset)
   return utf8.decode(bytes.subarray(offset, end))
 }
 
@@ -134,6 +137,7 @@ function parseTar(bytes) {
   const regions = []
   const entryFields = []
   const entries = []
+  const names = []
   const variants = new Set()
   let offset = 0
   let pending = {}
@@ -192,6 +196,7 @@ function parseTar(bytes) {
       const mtime = merged.mtime ? Number(merged.mtime) : readNumber(bytes, offset + 136, 12)
       if (Number.isFinite(mtime) && mtime > latest) latest = mtime
       pending = {}
+      names.push(name)
       const isDirectory = type === '5' || name.endsWith('/')
       if (isDirectory) directories++
       else if (type === '1' || type === '2') links++
@@ -239,6 +244,7 @@ function parseTar(bytes) {
       regions.push({ name: 'Trailing data', offset, length: bytes.length - offset, kind: 'other' })
     }
   }
+  warnings.push(...pathWarnings(names))
   if (hiddenCount > 0) warnings.push(`Listed the first ${formatNumber(MAX_ENTRIES)} entries; ${formatNumber(hiddenCount)} more not listed`)
 
   // Keep the end marker and padding visible even when entries are folded

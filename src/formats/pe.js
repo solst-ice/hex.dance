@@ -6,6 +6,9 @@ import { createBudget, field, hexBig, MAX_TABLE_ENTRIES, readStruct, tableNodes,
 const MAX_PE_SECTIONS = 96
 const MAX_IMPORT_DLLS = 4096
 const MAX_IMPORTS_PER_DLL = 65536
+// Characters of imported names read in all; real programs use a few hundred
+// thousand, while a crafted file can point every entry at one long name
+const MAX_IMPORT_NAME_TEXT = 4 << 20
 const MAX_DEBUG_ENTRIES = 64
 const MAX_SUMMARY_LIBRARIES = 500
 const MAX_SUMMARY_LINES = 300
@@ -113,6 +116,12 @@ const CLR_FLAGS = [
 
 const sectionFlagsText = (value) => decodeFlags(value, PE_SECTION_FLAGS).join(', ') || 'None'
 const isCodeSection = section => (section.characteristics & 0x20000020) !== 0
+
+// A DLL name as the loader takes it: a plain file name of printable ASCII,
+// without the characters Windows forbids in file names
+function isDllName(name) {
+  return name.length > 0 && name.length <= 255 && /^[\x20-\x7E]+$/.test(name) && !/[<>:"/\\|?*]/.test(name)
+}
 
 function peHeaderOffset(view) {
   if (view.byteLength < 0x40 || view.getUint16(0, true) !== 0x5A4D) return null
@@ -549,12 +558,26 @@ function parsePE(view, bytes) {
   const pointerSize = isPE32Plus ? 8 : 4
   const libraries = [] // { name, functions: [], delay }
   let importCount = 0
+  let importNameText = 0
+  // A crafted file can point every descriptor at one huge table; each table is listed once
+  const walkedTables = new Set()
+  let sharedTables = 0
+  let namesCapped = false
 
   // Walks an import lookup table; `toRva` converts entries (RVAs, or VAs in old delay-load tables)
   const readThunks = (tableRva, library, toRva) => {
     const tableOffset = rvaToFileOffset(tableRva)
     if (tableOffset === null) return
+    if (walkedTables.has(tableOffset)) {
+      sharedTables++
+      return
+    }
+    walkedTables.add(tableOffset)
     for (let i = 0; i < MAX_IMPORTS_PER_DLL && importCount < MAX_SYMBOLS; i++) {
+      if (importNameText > MAX_IMPORT_NAME_TEXT) {
+        namesCapped = true
+        break
+      }
       const at = tableOffset + i * pointerSize
       if (!inBounds(view, at, pointerSize)) break
       const raw = isPE32Plus ? view.getBigUint64(at, true) : BigInt(view.getUint32(at, true))
@@ -572,6 +595,7 @@ function parsePE(view, bytes) {
         const hintOffset = rvaToFileOffset(toRva(Number(raw & 0x7fffffffn)))
         const name = hintOffset === null || !inBounds(view, hintOffset, 3) ? '' : readCString(view, hintOffset + 2)
         if (!name) continue
+        importNameText += name.length
         symbol.name = name
         symbol.note = `${library.name}${suffix}`
         // The hint/name entry: a 2-byte hint into the DLL's export names, then the name
@@ -598,7 +622,18 @@ function parsePE(view, bytes) {
       // Version 1 delay descriptors hold RVAs; older ones hold virtual addresses
       const base = Number(opt.ImageBase ?? 0)
       const toRva = !delay || values.Attributes & 1 ? v => v : v => v - base
-      const library = { name: stringAt(toRva(nameRva)) || '(unnamed)', functions: [], delay }
+      const name = stringAt(toRva(nameRva))
+      // Garbage read as descriptors (a damaged header, a wrong directory
+      // entry) would otherwise list thousands of made-up DLLs
+      const problem = !isDllName(name) ? 'its DLL name is missing or is not a file name'
+        : table && rvaToFileOffset(toRva(table)) === null ? 'its import table is outside every section'
+          : ''
+      if (problem) {
+        warnings.push(`${delay ? 'Delay-load descriptor' : 'Import descriptor'} ${i + 1} does not look like one (${problem}), so the ${delay ? 'delay-load ' : ''}import list stops there`)
+        at -= entrySize
+        break
+      }
+      const library = { name, functions: [], delay }
       libraries.push(library)
       readThunks(toRva(table), library, toRva)
       if (nodes.length < MAX_TABLE_ENTRIES && budget.left > spec.length) {
@@ -616,6 +651,12 @@ function parsePE(view, bytes) {
   if (importDir && importDir.rva) readDescriptors(importDir, 20, IMPORT_DESCRIPTOR_SPEC, false)
   const delayDir = directory(13)
   if (delayDir && delayDir.rva) readDescriptors(delayDir, 32, DELAY_DESCRIPTOR_SPEC, true)
+  if (sharedTables) {
+    warnings.push(`${sharedTables === 1 ? '1 import descriptor reuses' : `${sharedTables.toLocaleString('en-US')} import descriptors reuse`} an import table that is already listed, so its imports are shown only once (real programs give each DLL its own table)`)
+  }
+  if (namesCapped) {
+    warnings.push(`Imported names add up to more than ${(MAX_IMPORT_NAME_TEXT / (1 << 20)).toFixed(0)} million characters, far more than real programs use; the import list stops there`)
+  }
 
   for (const library of libraries.slice(0, MAX_SUMMARY_LIBRARIES)) {
     const count = library.functions.length
