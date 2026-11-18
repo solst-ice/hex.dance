@@ -7,6 +7,7 @@ import { createPrefilter, prefilterRange } from './prefilter.js'
 import { SIGNATURES, SIGNATURE_BY_ID } from './signatures.js'
 import { VALIDATORS } from './validate/index.js'
 import { runParse } from '../../formats/budget.js'
+import { visibleText } from '../../lib/visibleText.js'
 
 export const LIMITS = {
   /** the scan stops after this many confirmed hits */
@@ -128,7 +129,7 @@ export async function scanFile({ source, formats = [], limits: overrides, onHit,
       if (run.error) throw run.error
       const analysis = run.result || {}
       hit.parser = 'parsed'
-      if (analysis.formatName) hit.parserName = analysis.formatName
+      if (analysis.formatName) hit.parserName = visibleText(analysis.formatName)
       if (!known) {
         const end = parserExtent(analysis)
         if (end > 0 && end < bytes.length) {
@@ -178,10 +179,12 @@ export async function scanFile({ source, formats = [], limits: overrides, onHit,
       end: result.end,
       endKind: result.end === null ? 'exact' : result.endKind || 'exact',
       type: result.type,
-      name: result.name || signature.name,
+      // Names and notes can quote an embedded file's entry names, which do not
+      // pass through analyzeBytes; hidden characters in them are shown as markers
+      name: visibleText(result.name || signature.name),
       ext: result.ext || signature.ext,
       confidence: result.confidence,
-      note: result.note,
+      note: visibleText(result.note),
       signature: id,
       parser: null
     }

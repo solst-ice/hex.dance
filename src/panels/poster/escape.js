@@ -1,19 +1,19 @@
 // Making untrusted strings (file names, decoded values, descriptions) safe to
 // put into SVG text and attributes, and short enough to fit a layout.
 
-// Characters XML 1.0 cannot carry at all, plus C1 controls, bidi overrides
-// and lone surrogates, which would either break parsing or mislead a reader
-// eslint-disable-next-line no-control-regex
-const UNSAFE = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069\ufeff\ufffe\uffff]|[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g
+import { visibleText } from '../../lib/visibleText.js'
 
 /**
- * Replaces control and otherwise unsafe characters with U+FFFD and turns tabs
- * and line breaks into single spaces, so the result is one printable line.
+ * Turns tabs and line breaks into single spaces, so the result is one line,
+ * and shows control, invisible and direction-changing characters as markers
+ * such as ⟨U+202E⟩ (the same as everywhere else in the app). That also keeps
+ * out every character XML 1.0 cannot carry. The layout measures text it has
+ * already cleaned, so markers already there are left as they are.
  * @param {unknown} value
  */
 export function cleanText(value) {
   if (value === null || value === undefined) return ''
-  return String(value).replace(/[\t\n\r]+/g, ' ').replace(UNSAFE, '�')
+  return visibleText(String(value).replace(/[\t\n\r]+/g, ' '), { keepMarkers: true })
 }
 
 /**
@@ -41,7 +41,11 @@ export function truncate(value, max) {
   const chars = Array.from(text)
   if (chars.length <= max) return text
   if (max === 1) return '…'
-  return chars.slice(0, max - 1).join('').trimEnd() + '…'
+  let kept = chars.slice(0, max - 1).join('')
+  // Half a marker such as '⟨U+20' would read as file text; leave all of it out
+  const open = kept.lastIndexOf('\u27E8')
+  if (open > kept.lastIndexOf('\u27E9')) kept = kept.slice(0, open)
+  return kept.trimEnd() + '…'
 }
 
 /** Number of code points, which is what the monospace layout measures. */

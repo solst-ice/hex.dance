@@ -2,6 +2,7 @@
 import { useMemo, useState } from 'react'
 import { useFile } from '../../state/hooks.js'
 import { formatBytes, hexBytes } from '../../formats/shared.js'
+import { visibleText } from '../../lib/visibleText.js'
 import './overview.css'
 
 function leadingBytes(bytes) {
@@ -87,7 +88,7 @@ function Overview() {
       <section className="hd-panel">
         <h3 className="hd-panel-title overview-title">File Information</h3>
         <div className="metadata-grid">
-          <Card label="File Name" value={file.name} />
+          <Card label="File Name" value={visibleText(file.name)} />
           <Card label="File Size" value={formatBytes(file.size)} />
           <Card label="File Type" value={typeName(file, analysis, status)} />
           {file.type && analysis && analysis.formatId !== 'unknown' && <Card label="MIME Type" value={file.type} />}

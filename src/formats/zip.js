@@ -1,6 +1,7 @@
 import { dataView, formatBytes, item } from './shared.js'
 import { FieldList, MAX_CHILDREN, field, plural } from './fieldTree.js'
 import { chargeText } from './budget.js'
+import { pathWarnings } from './archivePaths.js'
 
 const EOCD_SIGNATURE = 0x06054b50
 const EOCD_SIZE = 22
@@ -916,6 +917,8 @@ function parseArchive(bytes, meta) {
   if (encrypted > 0) summary.push(item('Encrypted Files', encrypted))
   if (zip64) summary.push(item('ZIP64', 'Yes'))
   if (comment) summary.push(item('Comment', comment))
+
+  warnings.push(...pathWarnings(entries.map(entry => entry.name)))
 
   markSignatureRecord(fields)
   const result = { summary, fields, regions, entries: entries.map(toArchiveEntry), warnings }

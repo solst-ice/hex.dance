@@ -1,6 +1,7 @@
 import { detectFormat } from '../formats/index.js'
 import { limitsFor, limitWarning, runParse } from '../formats/budget.js'
 import { genericSummary } from './generic.js'
+import { revealAnalysis } from './reveal.js'
 
 export { genericSummary }
 
@@ -52,6 +53,10 @@ const asArray = value => (Array.isArray(value) ? value : [])
  * @returns {Analysis}
  */
 export function analyzeBytes(input, meta = {}, options = {}) {
+  return revealAnalysis(analyzeRaw(input, meta, options))
+}
+
+function analyzeRaw(input, meta, options) {
   const bytes = input instanceof Uint8Array ? input : new Uint8Array(input || new ArrayBuffer(0))
   /** @type {Analysis} */
   const analysis = {
