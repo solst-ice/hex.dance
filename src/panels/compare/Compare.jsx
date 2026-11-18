@@ -15,6 +15,7 @@ import HighlightLayer from './HighlightLayer.jsx'
 import RangeList from './RangeList.jsx'
 import SideBySide from './SideBySide.jsx'
 import './compare.css'
+import { visibleText } from '../../lib/visibleText.js'
 
 // Below this share of matching bytes, with no shift found, an equal-offset
 // comparison says little
@@ -50,16 +51,16 @@ function Files({ file, size, revision, state, onChoose, onSwap, onOriginal }) {
     <div className="compare-files">
       <div className="compare-file">
         <span className="hd-badge compare-file-tag">A</span>
-        <span className="compare-file-name" title={file.name}>{file.name}</span>
+        <span className="compare-file-name" title={visibleText(file.name)}>{visibleText(file.name)}</span>
         <span className="hd-muted compare-file-size">{sizeText(size)}{revision > 0 ? ', edited' : ''}</span>
       </div>
       <div className="compare-file">
         <span className="hd-badge hd-badge--pink compare-file-tag">B</span>
         {loading ? (
-          <span className="hd-muted" role="status">Reading {loading.name}…</span>
+          <span className="hd-muted" role="status">Reading {visibleText(loading.name)}…</span>
         ) : b ? (
           <>
-            <span className="compare-file-name" title={b.name}>{b.name}</span>
+            <span className="compare-file-name" title={visibleText(b.name)}>{visibleText(b.name)}</span>
             <span className="hd-muted compare-file-size">{sizeText(b.bytes.length)}</span>
           </>
         ) : (
