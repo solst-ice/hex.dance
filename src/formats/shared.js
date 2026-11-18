@@ -2,6 +2,8 @@
 // be a view into a larger buffer, so DataViews are always built from its
 // buffer, byteOffset and byteLength.
 
+import { chargeRows, chargeText } from './budget.js'
+
 const MAX_STRING_LENGTH = 4096
 
 export const MAX_SYMBOLS = 2000000
@@ -30,7 +32,9 @@ export function readCString(view, offset, end = view.byteLength) {
   if (offset >= limit) return ''
   const bytes = new Uint8Array(view.buffer, view.byteOffset + offset, limit - offset)
   const terminator = bytes.indexOf(0)
-  return utf8.decode(terminator === -1 ? bytes : bytes.subarray(0, terminator))
+  const text = utf8.decode(terminator === -1 ? bytes : bytes.subarray(0, terminator))
+  chargeText(text.length)
+  return text
 }
 
 export function readFixedString(view, offset, length) {
@@ -38,6 +42,7 @@ export function readFixedString(view, offset, length) {
 }
 
 export function ascii(bytes, start, length) {
+  chargeText(Math.max(0, Math.min(length, bytes.length - start)))
   let out = ''
   for (let i = start; i < start + length && i < bytes.length; i++) {
     out += String.fromCharCode(bytes[i])
@@ -50,6 +55,7 @@ export function hex(value) {
 }
 
 export function hexBytes(bytes, start, length) {
+  chargeText(Math.max(0, Math.min(length, bytes.length - start)) * 2)
   let out = ''
   for (let i = start; i < start + length && i < bytes.length; i++) {
     out += bytes[i].toString(16).toUpperCase().padStart(2, '0')
@@ -72,6 +78,7 @@ export function formatBytes(bytes) {
 export function item(label, value, details, group) {
   const result = { label, value: String(value) }
   const lines = details ? details.filter(Boolean) : []
+  chargeRows(1 + lines.length)
   if (lines.length) result.details = lines
   if (group) result.group = group
   return result

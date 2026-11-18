@@ -1,6 +1,7 @@
 import { ByteReader, capFields, field, fitted, formatNumber, latin1, plural, printable, readULEB, unixDate, utf8 } from './reader.js'
 import { crc32 } from '../lib/crc32.js'
 import { formatBytes, item } from './shared.js'
+import { chargeText } from './budget.js'
 
 const RAR4 = [0x52, 0x61, 0x72, 0x21, 0x1A, 0x07, 0x00]
 const RAR5 = [0x52, 0x61, 0x72, 0x21, 0x1A, 0x07, 0x01, 0x00]
@@ -193,6 +194,7 @@ const strictUtf8 = new TextDecoder('utf-8', { fatal: true })
 // RAR 4 names are UTF-8 or a legacy code page; with the Unicode flag an
 // 8-bit name is followed by a NUL and a compact UTF-16 encoding of it
 export function decodeRar4Name(raw, unicode) {
+  chargeText(raw.length)
   const zero = raw.indexOf(0)
   const std = zero >= 0 ? raw.subarray(0, zero) : raw
   if (unicode && zero >= 0 && zero + 1 < raw.length) {

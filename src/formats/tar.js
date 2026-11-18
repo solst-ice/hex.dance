@@ -1,5 +1,6 @@
 import { capFields, field, fitted, formatNumber, latin1, plural, printable, unixDate } from './reader.js'
 import { formatBytes, item } from './shared.js'
+import { chargeText } from './budget.js'
 
 const BLOCK = 512
 const MAX_ENTRIES = 100000
@@ -18,6 +19,7 @@ const utf8 = new TextDecoder('utf-8')
 function cString(bytes, offset, length) {
   let end = offset
   while (end < offset + length && bytes[end] !== 0) end++
+  chargeText(end - offset)
   return utf8.decode(bytes.subarray(offset, end))
 }
 

@@ -6,6 +6,7 @@
 import { createPrefilter, prefilterRange } from './prefilter.js'
 import { SIGNATURES, SIGNATURE_BY_ID } from './signatures.js'
 import { VALIDATORS } from './validate/index.js'
+import { runParse } from '../../formats/budget.js'
 
 export const LIMITS = {
   /** the scan stops after this many confirmed hits */
@@ -113,8 +114,19 @@ export async function scanFile({ source, formats = [], limits: overrides, onHit,
     hit.parser = 'detected'
     if (!parseable || (moduleTime[moduleId] || 0) > limits.parseBudgetMs) return
     const t0 = now()
+    // The same budget the analysis uses, so a hit built to overload a parser
+    // stops it here too instead of taking the worker (and the tab) down
+    const run = runParse(mod.parse, bytes, {}, { ms: limits.parseBudgetMs })
+    if (run.limit) {
+      hit.parser = 'parse-error'
+      if (known && hit.confidence === 'high') hit.confidence = 'medium'
+      hit.note += '; the app\'s parser was stopped because this data asks for far more work than its size allows'
+      moduleTime[moduleId] = (moduleTime[moduleId] || 0) + (now() - t0)
+      return
+    }
     try {
-      const analysis = mod.parse(bytes, {}) || {}
+      if (run.error) throw run.error
+      const analysis = run.result || {}
       hit.parser = 'parsed'
       if (analysis.formatName) hit.parserName = analysis.formatName
       if (!known) {

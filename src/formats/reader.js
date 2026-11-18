@@ -3,6 +3,7 @@
 // formatting helpers. Everything here is pure and works on any length.
 
 import { dataView } from './shared.js'
+import { chargeRows, chargeText, refundRows, tick } from './budget.js'
 
 /**
  * Bounds-safe reads over a Uint8Array. Reads past the end return 0, so
@@ -17,6 +18,7 @@ export class ByteReader {
   }
 
   has(offset, length = 1) {
+    tick()
     return Number.isSafeInteger(offset) && offset >= 0 && length >= 0 && offset + length <= this.length
   }
 
@@ -66,6 +68,7 @@ export class ByteReader {
 
 /** Builds a field, leaving out empty optional keys. */
 export function field(name, offset, length, value, description, kind, children) {
+  chargeRows()
   const result = { name, offset, length }
   if (value !== undefined && value !== null && value !== '') result.value = String(value)
   if (description) result.description = description
@@ -77,6 +80,13 @@ export function field(name, offset, length, value, description, kind, children) 
 /** A placeholder covering items that were left out, so the tree says so. */
 export function moreField(count, offset, end, what = 'more') {
   return field(`… ${count.toLocaleString('en-US')} ${what} not shown`, offset, Math.max(1, end - offset), undefined, 'Left out to keep the tree readable', 'data')
+}
+
+// A field and its descendants
+function countRows(entry) {
+  let count = 1
+  if (entry && entry.children) for (const child of entry.children) count += countRows(child)
+  return count
 }
 
 /**
@@ -91,6 +101,7 @@ export function capFields(fields, max, what = 'more', extraCount = 0, extraEnd =
   let start = Infinity
   let end = 0
   for (const hiddenField of hidden) {
+    refundRows(countRows(hiddenField))
     start = Math.min(start, hiddenField.offset)
     end = Math.max(end, hiddenField.offset + hiddenField.length)
   }
@@ -139,18 +150,21 @@ export function printable(text, max = 200) {
     if (clean.length > max) break
   }
   clean = clean.replace(/ {2,}/g, ' ')
+  chargeText(clean.length)
   return clean.length > max ? clean.slice(0, max) + '…' : clean
 }
 
 export function latin1(bytes, offset, length) {
   let out = ''
   const end = Math.min(bytes.length, offset + length)
+  chargeText(Math.max(0, end - Math.max(0, offset)))
   for (let i = Math.max(0, offset); i < end; i++) out += String.fromCharCode(bytes[i])
   return out
 }
 
 /** Four-character code as printable text, e.g. 'ftyp' */
 export function fourcc(bytes, offset) {
+  chargeText(4)
   let out = ''
   for (let i = offset; i < offset + 4 && i < bytes.length; i++) {
     const c = bytes[i]
@@ -164,12 +178,14 @@ const utf8Decoder = new TextDecoder('utf-8')
 export function utf8(bytes, offset, length) {
   const start = Math.max(0, offset)
   const end = Math.min(bytes.length, offset + length)
+  chargeText(Math.max(0, end - start))
   return end > start ? utf8Decoder.decode(bytes.subarray(start, end)) : ''
 }
 
 export function utf16(bytes, offset, length, little) {
   let out = ''
   const end = Math.min(bytes.length, offset + length) - 1
+  chargeText(Math.max(0, (end + 1 - Math.max(0, offset)) >> 1))
   for (let i = Math.max(0, offset); i < end; i += 2) {
     out += String.fromCharCode(little ? bytes[i] | (bytes[i + 1] << 8) : (bytes[i] << 8) | bytes[i + 1])
   }
@@ -187,6 +203,7 @@ export function hex32(value) {
 
 /** Unsigned LEB128 (WebAssembly, DWARF). Returns null when malformed or truncated. */
 export function readULEB(bytes, offset, end = bytes.length, maxBytes = 10) {
+  tick()
   let value = 0
   let scale = 1
   for (let i = 0; i < maxBytes; i++) {

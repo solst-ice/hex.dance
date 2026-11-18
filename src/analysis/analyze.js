@@ -1,5 +1,6 @@
 import { detectFormat } from '../formats/index.js'
 import { formatBytes, hexBytes, item } from '../formats/shared.js'
+import { limitsFor, limitWarning, runParse } from '../formats/budget.js'
 
 /** @typedef {import('./types.js').Analysis} Analysis */
 
@@ -43,15 +44,22 @@ function cleanRegions(regions, size) {
     .sort((a, b) => a.offset - b.offset)
 }
 
+function countFields(fields) {
+  let count = fields.length
+  for (const entry of fields) if (entry.children) count += countFields(entry.children)
+  return count
+}
+
 const asArray = value => (Array.isArray(value) ? value : [])
 
 /**
  * Identifies and parses a file. Pure and synchronous; never throws.
  * @param {Uint8Array | ArrayBuffer} input
  * @param {import('./types.js').FileMeta} [meta]
+ * @param {{ limits?: Partial<{ rows: number, text: number, ms: number }> }} [options]  tighter limits, for tests
  * @returns {Analysis}
  */
-export function analyzeBytes(input, meta = {}) {
+export function analyzeBytes(input, meta = {}, options = {}) {
   const bytes = input instanceof Uint8Array ? input : new Uint8Array(input || new ArrayBuffer(0))
   /** @type {Analysis} */
   const analysis = {
@@ -81,14 +89,19 @@ export function analyzeBytes(input, meta = {}) {
   analysis.formatName = format.name
   analysis.category = format.category
 
-  let partial
-  try {
-    partial = format.parse(bytes, meta) || {}
-  } catch (err) {
+  const run = runParse(format.parse, bytes, meta, options.limits)
+  if (run.limit) {
+    analysis.summary = genericSummary(bytes, meta)
+    analysis.warnings.push(limitWarning(run.limit))
+    return analysis
+  }
+  if (run.error) {
+    const err = run.error
     analysis.summary = genericSummary(bytes, meta)
     analysis.warnings.push(`Error analyzing file: ${err && err.message ? err.message : String(err)}`)
     return analysis
   }
+  const partial = run.result || {}
 
   if (typeof partial.formatName === 'string' && partial.formatName) analysis.formatName = partial.formatName
   analysis.summary = asArray(partial.summary)
@@ -97,5 +110,12 @@ export function analyzeBytes(input, meta = {}) {
   analysis.symbols = asArray(partial.symbols)
   analysis.entries = asArray(partial.entries)
   analysis.warnings.push(...asArray(partial.warnings))
+
+  // Rows a parser built without the shared helpers were not charged as it
+  // went; count them here so the page is never handed more than the budget
+  const rows = countFields(analysis.fields) + analysis.regions.length + analysis.symbols.length + analysis.entries.length + analysis.summary.length
+  if (rows > { ...limitsFor(bytes.length), ...options.limits }.rows) {
+    return { ...analysis, summary: genericSummary(bytes, meta), fields: [], regions: [], symbols: [], entries: [], warnings: [limitWarning('rows')] }
+  }
   return analysis
 }

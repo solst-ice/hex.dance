@@ -2,6 +2,7 @@ import { walkDeflate } from './deflate.js'
 import { ByteReader, capFields, field, fitted, formatNumber, hex32, latin1, plural, printable, unixDate } from './reader.js'
 import { crc32 } from '../lib/crc32.js'
 import { formatBytes, item } from './shared.js'
+import { refundRows } from './budget.js'
 
 const FTEXT = 1
 const FHCRC = 2
@@ -125,6 +126,11 @@ function parseGzip(bytes) {
     const walk = walkDeflate(bytes, header.end, budget)
     const member = { header, start: pos, dataStart: header.end, size: walk.size, blocks: walk.blocks, status: walk.status }
     members.push(member)
+    // Only the first members get a tree, so the others' header fields are let go
+    if (members.length > MAX_MEMBER_FIELDS) {
+      refundRows(header.children.length)
+      header.children = []
+    }
     if (walk.status === 'limit') {
       // Not scanned to the end: assume the trailer is the last 8 bytes
       scannedAll = false

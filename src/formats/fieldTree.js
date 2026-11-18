@@ -2,6 +2,8 @@
 // is posted to the page, so lists are capped: past the cap, items are only
 // counted and one placeholder field covers the bytes they occupy.
 
+import { chargeRows, chargeText, refundRows, tick } from './budget.js'
+
 export const MAX_CHILDREN = 1000
 
 /**
@@ -12,6 +14,7 @@ export const MAX_CHILDREN = 1000
  * @returns {import('../analysis/types.js').Field}
  */
 export function field(name, offset, length, rest) {
+  chargeRows()
   const out = { name, offset, length }
   if (rest) {
     for (const key of Object.keys(rest)) {
@@ -22,6 +25,13 @@ export function field(name, offset, length, rest) {
     }
   }
   return out
+}
+
+// A field and its descendants
+function countRows(item) {
+  let count = 1
+  if (item && item.children) for (const child of item.children) count += countRows(child)
+  return count
 }
 
 /** Children of one node, kept in file order, with at most `limit` entries. */
@@ -46,11 +56,15 @@ export class FieldList {
 
   push(item) {
     if (!this.full) this.items.push(item)
-    else this.skip(item.offset, item.length)
+    else {
+      refundRows(countRows(item))
+      this.skip(item.offset, item.length)
+    }
   }
 
   /** Counts an item that will not be shown. */
   skip(offset, length) {
+    tick()
     if (this.hidden === 0) {
       this.hiddenStart = offset
       this.hiddenEnd = offset + length
@@ -74,6 +88,7 @@ export class FieldList {
 export function printable(bytes, start, length, max = 64) {
   let out = ''
   const end = Math.min(bytes.length, start + Math.min(length, max))
+  chargeText(Math.max(0, end - start))
   for (let i = start; i < end; i++) {
     const b = bytes[i]
     out += b >= 0x20 && b < 0x7F ? String.fromCharCode(b) : '.'
@@ -83,6 +98,7 @@ export function printable(bytes, start, length, max = 64) {
 
 /** Text for display: control characters removed, length capped. */
 export function clip(text, max = 120) {
+  chargeText(Math.min(text.length, max))
   let out = ''
   for (const ch of text) {
     const code = ch.codePointAt(0)

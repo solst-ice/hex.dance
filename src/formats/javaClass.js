@@ -1,4 +1,5 @@
 import { item } from './shared.js'
+import { chargeText } from './budget.js'
 import { FieldList, clip, field, hexOffset, plural } from './fieldTree.js'
 
 function javaRelease(major) {
@@ -90,6 +91,7 @@ function walk(bytes, top, state) {
       let value
       if (tag === 1) {
         const text = decoder.decode(bytes.subarray(p + 3, p + 1 + size))
+        chargeText(text.length)
         strings.set(index, text.length > 512 ? text.slice(0, 512) : text)
         value = `"${clip(text, 80)}"`
       } else if (tag === 7) {

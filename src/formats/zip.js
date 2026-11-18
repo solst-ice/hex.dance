@@ -1,5 +1,6 @@
 import { dataView, formatBytes, item } from './shared.js'
 import { FieldList, MAX_CHILDREN, field, plural } from './fieldTree.js'
+import { chargeText } from './budget.js'
 
 const EOCD_SIGNATURE = 0x06054b50
 const EOCD_SIZE = 22
@@ -49,6 +50,7 @@ function decodeCP437(bytes) {
 // UTF-8 when they are valid UTF-8 (pure ASCII always is, and many archivers
 // write UTF-8 without setting the flag), and as CP437 otherwise.
 export function decodeEntryName(bytes, flags) {
+  chargeText(bytes.length)
   if (flags & FLAG_UTF8) return utf8Decoder.decode(bytes)
   try {
     return strictUtf8Decoder.decode(bytes)
