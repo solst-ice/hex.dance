@@ -26,6 +26,8 @@ export const BIG_CHANCE = 0.14
 export const BIG_BURST_MS = [380, 650]
 // How long the picture holds one distortion before the next replaces it
 export const STEP_MS = [40, 110]
+// A burst waits until nobody has scrolled, clicked or typed for this long
+export const INPUT_QUIET_MS = 900
 
 export const BLIP_GAP_MS = [250, 1600]
 export const BLIP_MS = [50, 160]

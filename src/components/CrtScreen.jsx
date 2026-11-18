@@ -2,7 +2,9 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { currentCrt, subscribeCrt } from './themes'
 import useReducedMotion from './useReducedMotion'
-import { filterAttributes, nextBlipDelay, nextBurstDelay, planBlip, planBurst, seededRandom } from '../lib/crtGlitch.js'
+import {
+  INPUT_QUIET_MS, filterAttributes, nextBlipDelay, nextBurstDelay, planBlip, planBurst, seededRandom
+} from '../lib/crtGlitch.js'
 
 // The filter's attributes before the first burst, so that setting
 // data-crt-burst on <html> by hand shows a real burst
@@ -10,7 +12,7 @@ const FIRST_STEP = planBurst(seededRandom(7)).steps[0]
 const FIRST = filterAttributes({ ...FIRST_STEP, scale: 120, split: 8 })
 
 // How long the picture takes to open when the mode is switched on; the
-// first burst lands as it settles. Keep in sync with crt-power in crt.css.
+// first burst lands just after it opens. Keep in sync with crt-shutter in crt.css.
 const POWER_ON_MS = 650
 
 /**
@@ -51,7 +53,14 @@ function BurstFilter({ svgRef }) {
   )
 }
 
-// Runs the bursts and blips while the tube is on and the tab is visible
+// Input that means someone is scrolling, selecting or typing
+const INPUT_EVENTS = ['wheel', 'scroll', 'pointerdown', 'pointermove', 'keydown']
+
+// Runs the bursts and blips while the tube is on and the tab is visible.
+// Bursts hold off while someone is scrolling, selecting or typing, and an
+// input cuts a running burst short: the picture is never filtered while it
+// has to follow the hand, and on a machine that draws the filter slowly the
+// cost lands only on a still screen.
 function useGlitches(screenRef, svgRef, firstDelay) {
   useEffect(() => {
     const root = document.documentElement
@@ -72,6 +81,7 @@ function useGlitches(screenRef, svgRef, firstDelay) {
         fn()
       }, ms)
       timers.add(id)
+      return id
     }
 
     const applyStep = step => {
@@ -80,7 +90,14 @@ function useGlitches(screenRef, svgRef, firstDelay) {
       }
     }
 
+    let burstTimers = []
+    let lastInput = -Infinity
     const endBurst = () => {
+      burstTimers.forEach(id => {
+        clearTimeout(id)
+        timers.delete(id)
+      })
+      burstTimers = []
       delete root.dataset.crtBurst
     }
 
@@ -92,6 +109,8 @@ function useGlitches(screenRef, svgRef, firstDelay) {
 
     const scheduleBurst = delay => later(burst, delay)
     const burst = () => {
+      const quiet = performance.now() - lastInput
+      if (quiet < INPUT_QUIET_MS) return scheduleBurst(INPUT_QUIET_MS - quiet + 100)
       const plan = planBurst(random)
       // The band of static and its drift are on the overlay, not on <html>:
       // custom properties on the root would restyle the whole page
@@ -104,17 +123,27 @@ function useGlitches(screenRef, svgRef, firstDelay) {
       }
       screen.style.setProperty('--crt-burst-ms', `${plan.duration}ms`)
       let at = 0
-      plan.steps.forEach((step, index) => {
-        later(() => {
+      burstTimers = plan.steps.map((step, index) => {
+        const id = later(() => {
           applyStep(step)
           if (index === 0) root.dataset.crtBurst = plan.kind
         }, at)
         at += step.ms
+        return id
       })
-      later(() => {
+      burstTimers.push(later(() => {
         endBurst()
         scheduleBurst(nextBurstDelay(random))
-      }, plan.duration)
+      }, plan.duration))
+    }
+
+    const handleInput = event => {
+      if (event.type === 'pointermove' && !event.buttons) return
+      lastInput = performance.now()
+      if (burstTimers.length) {
+        endBurst()
+        scheduleBurst(nextBurstDelay(random))
+      }
     }
 
     const scheduleBlip = delay => later(blip, delay)
@@ -152,8 +181,11 @@ function useGlitches(screenRef, svgRef, firstDelay) {
 
     if (!document.hidden) start(firstDelay ?? nextBurstDelay(random))
     document.addEventListener('visibilitychange', handleVisibility)
+    const options = { capture: true, passive: true }
+    INPUT_EVENTS.forEach(type => window.addEventListener(type, handleInput, options))
     return () => {
       document.removeEventListener('visibilitychange', handleVisibility)
+      INPUT_EVENTS.forEach(type => window.removeEventListener(type, handleInput, options))
       stop()
     }
   }, [screenRef, svgRef, firstDelay])
@@ -164,7 +196,7 @@ function Tube({ powerOn }) {
   const screenRef = useRef(null)
   const svgRef = useRef(null)
   const [powering, setPowering] = useState(powerOn)
-  useGlitches(screenRef, svgRef, powerOn ? POWER_ON_MS - 120 : null)
+  useGlitches(screenRef, svgRef, powerOn ? POWER_ON_MS + 60 : null)
 
   return (
     <div ref={screenRef} className="crt" aria-hidden="true">
@@ -179,7 +211,9 @@ function Tube({ powerOn }) {
       </div>
       <div className="crt-flicker" />
       {powering && (
-        <div className="crt-power" onAnimationEnd={event => event.target === event.currentTarget && setPowering(false)}>
+        <div className="crt-power">
+          <i className="crt-shutter crt-shutter--top" />
+          <i className="crt-shutter crt-shutter--bottom" onAnimationEnd={() => setPowering(false)} />
           <i className="crt-power-line" />
         </div>
       )}
