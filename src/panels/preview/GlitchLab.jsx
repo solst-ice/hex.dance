@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useHighlightLayer, useSelectionActions } from '../../state/hooks.js'
 import { HEX, formatOffset } from '../../components/hex/bytes.js'
 import { glitchCopy, pickOffsets, suggestSkip } from './glitch.js'
+import { downloadBytes } from '../../lib/download.js'
 import useBlobUrl from './useBlobUrl.js'
 import MediaView from './MediaView.jsx'
 
@@ -84,8 +85,10 @@ function Bench({ bytes, revision, media, fileName, originalUrl }) {
       </div>
 
       <div className="hd-row">
-        {url && (
-          <a className="hd-button pv-download" href={url} download={glitchedName(fileName)}>Download glitched file</a>
+        {result && (
+          // Saved as plain bytes made at the click, so no address of the file's own type is left lying around
+          <button type="button" className="hd-button pv-download"
+            onClick={() => downloadBytes(result.bytes, glitchedName(fileName))}>Download glitched file</button>
         )}
         <label className="pv-check">
           <input type="checkbox" checked={mark} onChange={e => setMark(e.target.checked)} />
