@@ -21,7 +21,8 @@ npm run dev      # local server
 npm test         # unit tests
 npm run lint
 npm run build
-npm run deploy   # publish dist/ to GitHub Pages
 ```
+
+Merging into `main` deploys: CI runs the lint, the tests and the build, then publishes `dist/` to GitHub Pages. `npm run deploy` does the same by hand.
 
 React and Vite, plain JavaScript, no runtime dependencies beyond React. A format is one module in `src/formats/`; a panel is one folder in `src/panels/`.
