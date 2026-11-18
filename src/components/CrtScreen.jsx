@@ -85,7 +85,7 @@ function useGlitches(screenRef, svgRef, firstDelay) {
     }
 
     const applyStep = step => {
-      for (const [role, attributes] of Object.entries(filterAttributes(step))) {
+      for (const [role, attributes] of Object.entries(filterAttributes(step, window.innerWidth))) {
         for (const [name, value] of Object.entries(attributes)) parts[role]?.setAttribute(name, value)
       }
     }

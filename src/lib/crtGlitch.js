@@ -168,17 +168,23 @@ export function planBlip(rand) {
 
 const list = values => values.join(' ')
 
+// Tearing is planned for a screen this wide and scaled to the real one, so
+// it reads the same on a phone and on an ultrawide monitor
+const PLANNED_WIDTH = 1440
+const scaleFor = width => Math.min(2, Math.max(0.6, width / PLANNED_WIDTH))
+
 /**
  * Attributes for the burst filter's primitives, keyed by their role (the
- * component gives each primitive a matching data-role).
+ * component gives each primitive a matching data-role). `width` is the
+ * screen's width in CSS pixels.
  */
-export function filterAttributes(step) {
+export function filterAttributes(step, width = PLANNED_WIDTH) {
   const half = step.split / 2
   return {
     noise: { seed: String(step.seed), baseFrequency: `0 ${step.frequency}` },
     tearX: { tableValues: list(step.table) },
     tearY: { tableValues: list(step.rows) },
-    tear: { scale: String(step.scale) },
+    tear: { scale: String(Math.round(step.scale * scaleFor(width))) },
     red: { dx: String(-half) },
     rest: { dx: String(half) },
     jump: { dy: String(step.jump) }

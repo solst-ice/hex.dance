@@ -126,3 +126,12 @@ test('filter attributes spell out a step for the SVG primitives', () => {
     jump: { dy: '14' }
   })
 })
+
+test('tearing follows the width of the screen, within limits', () => {
+  const step = { ms: 60, seed: 1, frequency: 0.01, table: [0.5], rows: [0.5], scale: 100, split: 4, jump: 0 }
+  assert.equal(filterAttributes(step, 1440).tear.scale, '100')
+  assert.equal(filterAttributes(step, 2880).tear.scale, '200')
+  assert.equal(filterAttributes(step, 3440).tear.scale, '200')
+  assert.equal(filterAttributes(step, 390).tear.scale, '60')
+  assert.equal(filterAttributes(step, 390).red.dx, '-2')
+})
