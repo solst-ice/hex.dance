@@ -18,6 +18,9 @@
  * @property {SymbolEntry[]} symbols  executables only, else []
  * @property {ArchiveEntry[]} entries archives only, else []
  * @property {string[]} warnings
+ * @property {UnusualNote[]} unusual  things about this file that a typical file of its format does not do (may be empty)
+ * @property {ImageLayout|null} image how the file's parts are placed in memory when it is loaded; null for formats
+ *                                  that are not loaded that way, or when the parser does not provide it
  * @property {'timeout'|'crash'} [gaveUp]  set by the page when the analysis did not finish (it timed out, or the
  *                                  worker failed): the result then holds only generic facts and a note in `warnings`
  */
@@ -39,6 +42,38 @@
  * @property {string} [description] one-line explanation
  * @property {string} [kind]        'magic' | 'size' | 'offset' | 'count' | 'flags' | 'string' | 'checksum' | 'data' | 'padding' | 'header'
  * @property {Field[]} [children]
+ * @property {number} [target]      for a field that points somewhere: the absolute file offset it points at, already
+ *                                  converted from an address when needed. Only set when the target is inside the file.
+ */
+
+/**
+ * Something a typical file of this format does not do. A fact the parser has checked, in plain words.
+ *
+ * @typedef {Object} UnusualNote
+ * @property {string} text          one sentence, e.g. 'The entry point is in the last section, not the first.'
+ * @property {number} [offset]      file offset of the bytes that show it, when there is one place
+ * @property {number} [length]
+ */
+
+/**
+ * What the loader maps into memory: PE sections, ELF PT_LOAD segments, Mach-O segments.
+ *
+ * @typedef {Object} ImageLayout
+ * @property {string} addressLabel  how addresses are named for this format: 'RVA' or 'address'
+ * @property {{ address: number, offset: number|null }|null} entry  where execution starts; `offset` is the file
+ *                                  offset of that address, or null when it is not backed by the file
+ * @property {ImageSection[]} sections  in table order, at most 1,024
+ * @property {number} total         number of sections before the cap
+ */
+
+/**
+ * @typedef {Object} ImageSection
+ * @property {string} name          '' when the file gives none
+ * @property {number} offset        file offset of its data
+ * @property {number} size          bytes in the file (0 when it has none)
+ * @property {number} address       where it is placed in memory, in the units of `addressLabel`
+ * @property {number} memSize       bytes in memory
+ * @property {string} flags         short, e.g. 'r-x', 'rw-', '-wx'
  */
 
 /**
