@@ -177,8 +177,8 @@ export function memoryBand({ analysis, colors, fileSize }) {
       }
       put(above, bx, '0x0', colors.faint, diskY - 6, 0)
       put(above, bx + bw, `${hex(fileSize)} · ${bytesText(fileSize)}`, colors.faint, diskY - 6, 0, 'end')
-      put(below, bx, `${label}${hex(info.low)}`, colors.faint, memY + BAR_H + 14, 14)
-      put(below, bx + bw, `${label}${hex(info.high)}`, colors.faint, memY + BAR_H + 14, 14, 'end')
+      put(below, bx, `${label}${hex(info.low)}`, colors.faint, memY + BAR_H + 18, 14)
+      put(below, bx + bw, `${label}${hex(info.high)}`, colors.faint, memY + BAR_H + 18, 14, 'end')
       if (entryAddress !== null && entryAddress >= info.low && entryAddress <= info.high) {
         const ex = mx(entryAddress)
         const where = entryIndex >= 0 ? ` (section ${entryIndex + 1})` : ''
