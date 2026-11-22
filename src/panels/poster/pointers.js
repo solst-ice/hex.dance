@@ -133,6 +133,36 @@ function railGeometry(model) {
   return { endW, lanes, lanesW, tagChars, tagX: RAIL_GAP + lanesW + (lanes ? TAG_GAP : 0), width: RAIL_GAP + lanesW + (tagChars ? (lanes ? TAG_GAP : 0) + tagW : 0) + 4 }
 }
 
+// Connectors: same column, not a same-row hop, and each row end holds one
+// badge or one arrowhead; in rank order, at most MAX_CONNECTORS
+function chooseConnectors(model, columnOf) {
+  const ends = new Map()
+  const chosen = []
+  for (const p of model) {
+    if (chosen.length >= MAX_CONNECTORS) break
+    if (p.targetIndex < 0 || p.targetIndex === p.sourceIndex) continue
+    const ci = columnOf(p.sourceIndex)
+    if (ci < 0 || ci !== columnOf(p.targetIndex)) continue
+    if (ends.has(p.sourceIndex) || ends.has(p.targetIndex)) continue
+    ends.set(p.sourceIndex, p)
+    ends.set(p.targetIndex, p)
+    chosen.push({ p, ci })
+  }
+  return chosen
+}
+
+/**
+ * How many of the connectors that tell the story (the entry point, and
+ * pointers from one structure to another labelled one) a split of the dump
+ * into columns would still draw.
+ * @param {Array<[number, number]>} split  item ranges, one per column
+ */
+export function storyConnectors(plan, entryOffset, split) {
+  const model = pointerModel(plan, entryOffset)
+  const columnOf = index => split.findIndex(([a, b]) => index >= a && index < b)
+  return chooseConnectors(model, columnOf).filter(c => c.p.rank <= 1).length
+}
+
 /** Room to reserve to the right of the dump for the rail and tags (0 when there are no pointers). */
 export function railWidth(plan, entryOffset = null) {
   const model = pointerModel(plan, entryOffset)
@@ -156,20 +186,7 @@ export function drawDumpPointers({ plan, columns, entryOffset, shadeOf, colors, 
   const rail = railGeometry(model)
   const columnOf = index => columns.findIndex(c => index >= c.start && index < c.end)
 
-  // Choose connectors: same column, not a same-row hop, and each row end
-  // holds one badge or one arrowhead
-  const ends = new Map()
-  const chosen = []
-  for (const p of model) {
-    if (chosen.length >= MAX_CONNECTORS) break
-    if (p.targetIndex < 0 || p.targetIndex === p.sourceIndex) continue
-    const ci = columnOf(p.sourceIndex)
-    if (ci < 0 || ci !== columnOf(p.targetIndex)) continue
-    if (ends.has(p.sourceIndex) || ends.has(p.targetIndex)) continue
-    ends.set(p.sourceIndex, p)
-    ends.set(p.targetIndex, p)
-    chosen.push({ p, ci })
-  }
+  const chosen = chooseConnectors(model, columnOf)
 
   // Lanes: shortest spans nearest the rows, so connectors nest
   const tops = []

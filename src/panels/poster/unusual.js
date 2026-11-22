@@ -37,13 +37,39 @@ export function unusualNotes(analysis, facts = []) {
 
 function layout(notes, w) {
   const columns = w >= TWO_COLUMNS_AT && notes.length >= 2 ? 2 : 1
-  const maxLines = columns === 2 ? 5 : 8
+  const maxLines = columns === 2 ? 7 : 10
   const colW = (w - 2 * PAD_X - (columns - 1) * COLUMN_GAP) / columns
   const offW = notes.some(n => n.offset !== null) ? Math.max(...notes.map(n => (n.offset !== null ? textWidth(hex(n.offset), 11) : 0))) + 10 : 0
   const textChars = charsFor(colW - offW - 12, F)
   const cols = Array.from({ length: columns }, () => ({ items: [], lines: 0 }))
   let shown = 0
-  // Fill columns in reading order: the first column, then the second
+  // Two columns: the split in reading order that shows every note in the
+  // fewest lines, when there is one
+  if (columns === 2) {
+    const wrapped = notes.map(note => ({ note, lines: wrapLines(note.text, textChars, 3) }))
+    const total = wrapped.reduce((n, x) => n + x.lines.length, 0)
+    let bestSplit = -1
+    let bestH = Infinity
+    let first = 0
+    for (let i = 1; i < wrapped.length; i++) {
+      first += wrapped[i - 1].lines.length
+      const h = Math.max(first, total - first)
+      if (first <= maxLines && total - first <= maxLines && h < bestH) {
+        bestH = h
+        bestSplit = i
+      }
+    }
+    if (bestSplit > 0) {
+      wrapped.forEach((x, i) => {
+        const col = cols[i < bestSplit ? 0 : 1]
+        col.items.push({ note: x.note, lines: x.lines, y: col.lines })
+        col.lines += x.lines.length
+      })
+      const lineCount = Math.max(...cols.map(col => col.lines + col.items.length * (NOTE_GAP / LINE)))
+      return { columns, colW, offW, cols, more: 0, height: PAD_TOP + lineCount * LINE + PAD_BOTTOM }
+    }
+  }
+  // Otherwise fill columns in reading order: the first column, then the second
   let c = 0
   for (const note of notes) {
     let col = cols[c]
@@ -95,6 +121,8 @@ export function unusualBand({ analysis, colors, facts = [] }) {
     id: 'unusual',
     notes,
     measure: w => layout(notes, w).height,
+    /** Notes that do not fit at width `w` */
+    hidden: w => layout(notes, w).more,
     draw(x, y, w, out) {
       const L = layout(notes, w)
       const el = out.elements

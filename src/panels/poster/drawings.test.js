@@ -45,7 +45,7 @@ function assertNoExternalRefs(svg) {
 }
 
 // Roles whose boxes must not overlap one another, within a role or across roles
-const SOLID = ['head', 'strip', 'arcs', 'unusual', 'tiles', 'memory', 'legend', 'ptag', 'rail', 'pend']
+const SOLID = ['head', 'strip', 'arcs', 'unusual', 'tiles', 'memory', 'legend', 'ptag', 'rail', 'pend', 'dumptext']
 const SELF = ['legend', 'tab', 'break', 'unusual', 'ptag', 'rail', 'pend', 'strip', 'head']
 
 function assertTidy(scene) {
@@ -211,7 +211,10 @@ test('the 96-section file reads as one odd section and 95 copies', () => {
   const plan = corkamiPlan(file)
   const { svg, scene } = check({ plan, bytes: file.bytes, analysis: file.analysis })
   assert.ok(svg.includes('96 sections. 2 different contents: 95 are identical.'))
-  assert.ok(svg.includes('95 of the 96 sections have identical contents.'))
+  // The tiles' caption says it; the unusual box repeats it only without the tiles
+  assert.ok(!svg.includes('95 of the 96 sections have identical contents.'))
+  const noTiles = check({ plan, bytes: file.bytes, analysis: file.analysis, show: { tiles: false } })
+  assert.ok(noTiles.svg.includes('95 of the 96 sections have identical contents.'))
   assert.ok(svg.includes('Execution starts in the last section'))
   assert.equal((svg.match(/data-id="tile:\d+"/g) || []).length, 96)
   assert.ok(svg.includes('entry point RVA 0x61000 (section 96)'))
@@ -387,4 +390,24 @@ test('available ignores the show flags', () => {
   const { scene } = check({ plan, bytes: file.bytes, analysis: file.analysis, show: off })
   assert.deepEqual(scene.available, { pointers: true, unusual: true, tiles: true, memory: true })
   assert.deepEqual(scene.arrangement.bands, ['title', 'map'])
+})
+
+test('landscape pages put the bands beside the dump and keep the story connectors', () => {
+  const file = sectionsFile()
+  const plan = corkamiPlan(file, { maxRows: 60 })
+  const entryLabel = plan.labels.find(l => l.name === 'AddressOfEntryPoint')
+  for (const style of STYLES) {
+    const side = check({ plan, bytes: file.bytes, analysis: file.analysis, style })
+    assert.notEqual(side.scene.arrangement.layout, 'stack')
+    if (entryLabel) assert.ok(side.scene.boxes.some(b => b.role === 'rail' && b.id === entryLabel.number), 'entry point connector kept')
+    // Every drawing is still there
+    for (const role of ['strip', 'unusual', 'tiles', 'memory']) assert.ok(side.scene.boxes.some(b => b.role === role), role)
+  }
+  // Long dumps: a split into dump columns never costs the entry connector unless it saves a lot
+  const long = corkamiPlan(file, { maxRows: 200, bytesPerRow: 8 })
+  const entry = long.labels.find(l => l.name === 'AddressOfEntryPoint')
+  for (const proportion of SHAPES) {
+    const { scene } = check({ plan: long, bytes: file.bytes, analysis: file.analysis, proportion })
+    if (entry && scene.arrangement.dumpColumns === 1) assert.ok(scene.boxes.some(b => b.role === 'rail' && b.id === entry.number))
+  }
 })
