@@ -1,10 +1,12 @@
 import { dataView, decodeFlags, hex, inBounds, item, MAX_SYMBOLS, readCString, readFixedString, sortSymbols } from './shared.js'
 import { createBudget, field, hexBig, hexString, MAX_TABLE_ENTRIES, readStruct, tileRegions, toNumber } from './binfields.js'
+import { hexText, isAddress, MAX_IMAGE_SECTIONS, pointAt, pointNamed, unusualNote } from './pointers.js'
 
 const MAX_LOAD_COMMANDS = 65536
 const MAX_FAT_ARCHS = 32
 const MAX_SECTIONS = 4096
 const MAX_SUMMARY_LINES = 200
+const MAX_NOTES = 8
 
 const MH_MAGIC = 0xfeedface
 const MH_CIGAM = 0xcefaedfe
@@ -236,6 +238,12 @@ function parseMachOImage(view, base, end, budget) {
   }
 
   const textSegment = () => image.segments.find(s => s.segname === '__TEXT')
+  // Offsets inside the image count from its start; 0 means "none" in every load command
+  const fileSize = view.byteLength
+  const local = value => {
+    const n = toNumber(value ?? 0)
+    return n && base + n < end ? base + n : null
+  }
   let cmdOffset = base + headerSize
   const cmdLimit = Math.min(end, base + headerSize + sizeofcmds)
   let commandsRead = 0
@@ -259,11 +267,14 @@ function parseMachOImage(view, base, end, budget) {
       children.push(...r.children)
       return r
     }
+    const point = (targets) => pointNamed(children, targets, fileSize)
+    let commandTarget = null
     const cmdString = (offsetField, label, description) => {
       const offset = u32(at + 8 + offsetField)
       if (offset < 8 || offset >= cmdsize) return ''
       const text = readCString(view, at + offset, cmdEnd)
       if (nodeBudget) children.push(field(label, at + offset, cmdEnd - at - offset, text, 'string', description))
+      point({ [`${label}.offset`]: at + offset })
       return text
     }
 
@@ -288,9 +299,13 @@ function parseMachOImage(view, base, end, budget) {
         vmsize: toNumber(r.values.vmsize ?? 0),
         fileoff: toNumber(r.values.fileoff ?? 0),
         filesize: toNumber(r.values.filesize ?? 0),
-        initprot: r.values.initprot ?? 0
+        initprot: r.values.initprot ?? 0,
+        maxprot: r.values.maxprot ?? 0,
+        at
       }
       image.segments.push(segment)
+      commandTarget = segment.filesize ? local(segment.fileoff) ?? (segment.fileoff === 0 ? base : null) : null
+      point({ fileoff: commandTarget })
       value = `${segname || '(unnamed)'} ${VM_PROT(segment.initprot)}`
       const headerLength = seg64 ? 72 : 56
       const sectionLength = seg64 ? 80 : 68
@@ -322,7 +337,9 @@ function parseMachOImage(view, base, end, budget) {
         }
         image.sections.push(section)
         if (sr.children.length) {
-          children.push(field(`${section.segname},${section.sectname}`, sectAt, sectionLength, `${hex(section.size)} bytes`, 'header', 'Section header', sr.children))
+          const data = section.size && !isZerofill(section) ? local(section.offset) : null
+          pointNamed(sr.children, { offset: data, reloff: sr.values.nreloc ? local(sr.values.reloff) : null }, fileSize)
+          children.push(pointAt(field(`${section.segname},${section.sectname}`, sectAt, sectionLength, `${hex(section.size)} bytes`, 'header', 'Section header', sr.children), data, fileSize))
         }
         if (section.offset && section.size && !isZerofill(section)) {
           image.regions.push({ name: `${section.segname},${section.sectname}`, offset: base + section.offset, length: section.size, kind: sectionKind(section) })
@@ -336,12 +353,14 @@ function parseMachOImage(view, base, end, budget) {
         ['strsize', 4, 'size', 'Size of the string table', v => hex(v)]
       ])
       image.symtabs.push(r.values)
+      point({ symoff: r.values.nsyms ? local(r.values.symoff) : null, stroff: r.values.strsize ? local(r.values.stroff) : null })
       value = `${r.values.nsyms} symbols`
     } else if (cmd === LC.DYSYMTAB && cmdsize >= 80) {
       const names = ['ilocalsym', 'nlocalsym', 'iextdefsym', 'nextdefsym', 'iundefsym', 'nundefsym', 'tocoff', 'ntoc',
         'modtaboff', 'nmodtab', 'extrefsymoff', 'nextrefsyms', 'indirectsymoff', 'nindirectsyms', 'extreloff', 'nextrel', 'locreloff', 'nlocrel']
       const r = struct(names.map(n => [n, 4, n.includes('off') ? 'offset' : 'count', '', n.includes('off') ? v => hex(v) : undefined]))
       value = `${r.values.nlocalsym ?? 0} local, ${r.values.nextdefsym ?? 0} exported, ${r.values.nundefsym ?? 0} undefined`
+      point(Object.fromEntries(names.filter(n => n.endsWith('off')).map(n => [n, local(r.values[n])])))
       if (r.values.nindirectsyms && r.values.indirectsymoff) {
         image.regions.push({ name: 'Indirect symbol table', offset: base + r.values.indirectsymoff, length: r.values.nindirectsyms * 4, kind: 'table' })
       }
@@ -409,6 +428,7 @@ function parseMachOImage(view, base, end, budget) {
       const entryoff = toNumber(r.values.entryoff)
       const text = textSegment()
       image.entry = { fileOffset: entryoff, address: text ? text.vmaddr - text.fileoff + entryoff : null }
+      point({ entryoff: base + entryoff < end ? base + entryoff : null })
       value = `offset ${hex(entryoff)}`
     } else if ((cmd === LC.UNIXTHREAD || cmd === LC.THREAD) && cmdsize >= 16) {
       const r = struct([
@@ -426,6 +446,7 @@ function parseMachOImage(view, base, end, budget) {
         ['datasize', 4, 'size', 'Size of the data', v => hex(v)]
       ])
       const { dataoff, datasize } = r.values
+      point({ dataoff: datasize ? local(dataoff) : null })
       value = `${hex(datasize ?? 0)} bytes at ${hex(dataoff ?? 0)}`
       if (dataoff && datasize) {
         const label = name.replace(/^LC_/, '').toLowerCase().replace(/_/g, ' ')
@@ -439,6 +460,7 @@ function parseMachOImage(view, base, end, budget) {
         ['cryptid', 4, 'data', 'Encryption system; 0 means not encrypted']
       ])
       image.encryption = r.values
+      point({ cryptoff: r.values.cryptsize ? local(r.values.cryptoff) : null })
       value = r.values.cryptid ? 'encrypted' : 'not encrypted'
     } else if ((cmd === LC.DYLD_INFO || cmd === LC.DYLD_INFO_ONLY) && cmdsize >= 48) {
       const parts = ['rebase', 'bind', 'weak_bind', 'lazy_bind', 'export']
@@ -446,6 +468,7 @@ function parseMachOImage(view, base, end, budget) {
         [`${p}_off`, 4, 'offset', `Offset of the ${p.replace('_', ' ')} information`, v => hex(v)],
         [`${p}_size`, 4, 'size', `Size of the ${p.replace('_', ' ')} information`, v => hex(v)]
       ]))
+      point(Object.fromEntries(parts.map(p => [`${p}_off`, r.values[`${p}_size`] ? local(r.values[`${p}_off`]) : null])))
       for (const p of parts) {
         const off = r.values[`${p}_off`]
         const size = r.values[`${p}_size`]
@@ -459,7 +482,7 @@ function parseMachOImage(view, base, end, budget) {
 
     if (wantNode) {
       budget.left--
-      image.commandNodes.push(field(name, at, cmdsize, value, 'header', LC_DESCRIPTIONS[cmd] || 'Load command', children))
+      image.commandNodes.push(pointAt(field(name, at, cmdsize, value, 'header', LC_DESCRIPTIONS[cmd] || 'Load command', children), commandTarget, fileSize))
     }
     commandsRead++
     cmdOffset += cmdsize
@@ -474,7 +497,66 @@ function parseMachOImage(view, base, end, budget) {
   }
 
   readSymbols(view, base, end, image)
+  image.layout = machOLayout(image, base, end)
+  image.unusual = machOUnusual(image, base)
   return image
+}
+
+// The segments the loader maps, with addresses as the file gives them
+function machOLayout(image, base, end) {
+  const segments = image.segments
+  const toFile = (address) => {
+    for (const g of segments) {
+      if (g.filesize && address >= g.vmaddr && address < g.vmaddr + g.filesize && base + g.fileoff + (address - g.vmaddr) < end) return base + g.fileoff + (address - g.vmaddr)
+    }
+    return null
+  }
+  let entry = null
+  if (image.entry) {
+    const address = image.entry.address === null ? null : toNumber(image.entry.address)
+    const offset = image.entry.fileOffset !== null ? (base + image.entry.fileOffset < end ? base + image.entry.fileOffset : null) : address === null ? null : toFile(address)
+    if (isAddress(address)) entry = { address, offset }
+  }
+  if (!segments.length && !entry) return null
+  const kept = segments.filter(g => [g.vmaddr, g.vmsize, g.fileoff, g.filesize].every(isAddress)).slice(0, MAX_IMAGE_SECTIONS)
+  return {
+    addressLabel: 'address',
+    entry,
+    sections: kept.map(g => ({
+      name: g.segname,
+      offset: base + g.fileoff,
+      size: g.filesize && base + g.fileoff < end ? Math.min(g.filesize, end - base - g.fileoff) : 0,
+      address: g.vmaddr,
+      memSize: g.vmsize,
+      flags: VM_PROT(g.initprot)
+    })),
+    total: segments.length
+  }
+}
+
+const segmentLabel = g => (g.segname ? `"${g.segname}"` : 'without a name')
+
+function machOUnusual(image, base) {
+  const notes = []
+  const segments = image.segments
+  // Old 32-bit programs put their jump tables in a writable, executable __IMPORT segment
+  const writableCode = segments.filter(g => (g.initprot & 6) === 6 && g.segname !== '__IMPORT')
+  for (const g of writableCode.slice(0, 2)) {
+    notes.push(unusualNote(`Segment ${segmentLabel(g)} is both writable and executable when loaded; linkers keep code and writable data in separate segments.`, g.at, 8))
+  }
+  const entry = image.layout && image.layout.entry
+  if (entry && segments.length && !segments.some(g => entry.address >= g.vmaddr && entry.address < g.vmaddr + g.vmsize)) {
+    notes.push(unusualNote(`The entry point (${hexText(entry.address)}) is outside every segment.`))
+  }
+  const ranges = segments.filter(g => g.filesize > 0 && isAddress(g.fileoff)).map(g => ({ g, start: g.fileoff, end: g.fileoff + g.filesize }))
+    .sort((a, b) => a.start - b.start)
+  for (let i = 1; i < ranges.length; i++) {
+    if (ranges[i].start < ranges[i - 1].end) {
+      notes.push(unusualNote(`Segments ${segmentLabel(ranges[i - 1].g)} and ${segmentLabel(ranges[i].g)} overlap in the file; each segment normally has bytes of its own.`, base + ranges[i].start, Math.min(ranges[i].end, ranges[i - 1].end) - ranges[i].start))
+      break
+    }
+  }
+  return notes.slice(0, MAX_NOTES)
 }
 
 function formatUuid(raw) {
@@ -733,7 +815,9 @@ function parseMachO(view, bytes) {
       summary: imageSummary(image),
       fields,
       regions: sliceRegions(image, 0, view.byteLength, 'Other data', bytes),
-      symbols: sortSymbols(image.symbols)
+      symbols: sortSymbols(image.symbols),
+      image: image.layout,
+      unusual: image.unusual
     }
   }
 
@@ -749,13 +833,14 @@ function parseMachO(view, bytes) {
     const align = view.getUint32(entry + 16, fat.littleEndian)
     const arch = cpuName(cputype, cpusubtype)
     slices.push({ arch, offset, size })
-    archNodes.push(field(`[${i}] ${arch}`, entry, 20, `offset ${hex(offset)}, ${size} bytes`, 'header', 'Where one architecture\'s image lives in the file', [
+    const target = size ? offset : null
+    archNodes.push(pointAt(field(`[${i}] ${arch}`, entry, 20, `offset ${hex(offset)}, ${size} bytes`, 'header', 'Where one architecture\'s image lives in the file', [
       field('cputype', entry, 4, arch, 'header', 'CPU type'),
       field('cpusubtype', entry + 4, 4, hex(cpusubtype >>> 0), 'header', 'CPU subtype'),
-      field('offset', entry + 8, 4, hex(offset), 'offset', 'File offset of the slice'),
+      pointAt(field('offset', entry + 8, 4, hex(offset), 'offset', 'File offset of the slice'), target, view.byteLength),
       field('size', entry + 12, 4, String(size), 'size', 'Size of the slice'),
       field('align', entry + 16, 4, `2^${align}`, 'size', 'Alignment of the slice as a power of two')
-    ]))
+    ]), target, view.byteLength))
   }
   fields.push(field('Fat header', 4, 4 + fat.nfat * 20, `${fat.nfat} architectures`, 'header', 'Universal binary: one Mach-O image per architecture', [
     field('nfat_arch', 4, 4, String(fat.nfat), 'count', 'Number of architecture slices'),
@@ -796,7 +881,10 @@ function parseMachO(view, bytes) {
     summary: [...summary, ...imageSummary(shown)],
     fields,
     regions: tiled,
-    symbols: sortSymbols(shown.symbols)
+    symbols: sortSymbols(shown.symbols),
+    // The memory layout and notes of the image whose symbols are shown
+    image: shown.layout,
+    unusual: shown.unusual
   }
 }
 

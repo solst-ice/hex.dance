@@ -1,5 +1,6 @@
 import { dataView, decodeFlags, hex, inBounds, item, MAX_SYMBOLS, readCString, readFixedString, sortSymbols } from './shared.js'
 import { createBudget, field, hexBig, MAX_TABLE_ENTRIES, readStruct, tableNodes, tileRegions } from './binfields.js'
+import { hexText, MAX_IMAGE_SECTIONS, pointAt, pointNamed, rwx, unusualNote } from './pointers.js'
 
 // The Windows loader rejects images with more sections; every RVA lookup
 // walks the section list, so an unbounded count makes parsing quadratic
@@ -12,6 +13,8 @@ const MAX_IMPORT_NAME_TEXT = 4 << 20
 const MAX_DEBUG_ENTRIES = 64
 const MAX_SUMMARY_LIBRARIES = 500
 const MAX_SUMMARY_LINES = 300
+const MAX_TLS_CALLBACKS = 64
+const MAX_NOTES = 8
 
 const PE_MACHINES = {
   0x14c: 'x86',
@@ -288,6 +291,8 @@ function parsePE(view, bytes) {
     item('Characteristics', hex(characteristics), decodeFlags(characteristics, PE_FILE_FLAGS))
   ]
   const dos = readStruct(view, 2, dosHeaderSpec(), true, budget)
+  pointNamed(dos.children, { e_lfanew: peOffset }, fileSize)
+  pointNamed(coff.children, { PointerToSymbolTable: symbolTableOffset || null }, fileSize)
   const fields = [
     field('DOS signature', 0, 2, 'MZ', 'magic', 'MS-DOS executable header magic (e_magic)'),
     field('DOS header', 2, 0x3E, `PE header at ${hex(peOffset)}`, 'header', 'Legacy MS-DOS header; only e_lfanew matters today', dos.children),
@@ -329,6 +334,7 @@ function parsePE(view, bytes) {
   const win = readStruct(view, std.end, specs.windows, true, budget, optEnd)
   const opt = { ...std.values, ...win.values }
   const directories = []
+  const directoryNodes = [] // [index, entry node, address child], given targets once sections are known
   const dirCount = Math.min(opt.NumberOfRvaAndSizes ?? 0, 16)
   const dirChildren = []
   for (let i = 0; i < dirCount; i++) {
@@ -340,10 +346,13 @@ function parsePE(view, bytes) {
     if (budget.left > 2) {
       budget.left -= 3
       const [name, description] = DATA_DIRECTORIES[i]
-      dirChildren.push(field(`[${i}] ${name}`, at, 8, rva || size ? `${i === 4 ? 'offset' : 'RVA'} ${hex(rva)}, ${hex(size)} bytes` : 'empty', 'header', description, [
-        field(i === 4 ? 'FileOffset' : 'VirtualAddress', at, 4, hex(rva), 'offset', i === 4 ? 'File offset of the certificate table' : 'RVA of the table'),
+      const address = field(i === 4 ? 'FileOffset' : 'VirtualAddress', at, 4, hex(rva), 'offset', i === 4 ? 'File offset of the certificate table' : 'RVA of the table')
+      const node = field(`[${i}] ${name}`, at, 8, rva || size ? `${i === 4 ? 'offset' : 'RVA'} ${hex(rva)}, ${hex(size)} bytes` : 'empty', 'header', description, [
+        address,
         field('Size', at + 4, 4, hex(size), 'size', 'Size of the table in bytes')
-      ]))
+      ])
+      dirChildren.push(node)
+      if (rva) directoryNodes.push([i, node, address, rva])
     }
   }
   const optChildren = []
@@ -397,10 +406,16 @@ function parsePE(view, bytes) {
   if (sections.length) {
     const nodes = tableNodes(view, sectionHeadersOffset, sections.length, 40, budget, (i, at) => {
       const s = sections[i]
-      const { children } = readStruct(view, at + 8, SECTION_HEADER_SPEC, true, budget)
+      const { children, values } = readStruct(view, at + 8, SECTION_HEADER_SPEC, true, budget)
       budget.left -= 2
-      return field(`[${i}] ${s.name || '(unnamed)'}`, at, 40, `RVA ${hex(s.virtualAddress)}, raw ${hex(s.rawAddress)}, ${hex(s.rawSize)} bytes`, 'header',
-        sectionFlagsText(s.characteristics), [field('Name', at, 8, s.name, 'string', 'Section name, or "/n": offset n into the COFF string table'), ...children])
+      const data = s.rawSize ? s.rawAddress : null
+      pointNamed(children, {
+        PointerToRawData: data,
+        PointerToRelocations: values.PointerToRelocations || null,
+        PointerToLinenumbers: values.PointerToLinenumbers || null
+      }, fileSize)
+      return pointAt(field(`[${i}] ${s.name || '(unnamed)'}`, at, 40, `RVA ${hex(s.virtualAddress)}, raw ${hex(s.rawAddress)}, ${hex(s.rawSize)} bytes`, 'header',
+        sectionFlagsText(s.characteristics), [field('Name', at, 8, s.name, 'string', 'Section name, or "/n": offset n into the COFF string table'), ...children]), data, fileSize)
     }, 'section headers')
     fields.push(field('Section table', sectionHeadersOffset, sections.length * 40, `${sections.length} sections`, 'header', 'Where each section lives in the file and in memory', nodes))
   }
@@ -431,6 +446,20 @@ function parsePE(view, bytes) {
     return offset === null ? '' : readCString(view, offset)
   }
   const directory = index => (directories[index] && (directories[index].rva || directories[index].size) ? directories[index] : null)
+  const fileOffsetOf = rva => (rva ? rvaToFileOffset(rva) : null)
+
+  // ---------------------------------------------------------------- pointer targets of the headers
+  pointNamed(std.children, {
+    AddressOfEntryPoint: fileOffsetOf(opt.AddressOfEntryPoint),
+    BaseOfCode: fileOffsetOf(opt.BaseOfCode),
+    BaseOfData: fileOffsetOf(opt.BaseOfData)
+  }, fileSize)
+  for (const [index, node, address, rva] of directoryNodes) {
+    // The certificate table's entry is a file offset; every other entry is an RVA
+    const target = index === 4 ? rva : rvaToFileOffset(rva)
+    pointAt(node, target, fileSize)
+    pointAt(address, target, fileSize)
+  }
 
   // ---------------------------------------------------------------- first-look facts
   if (opt.Subsystem !== undefined) summary.push(item('Subsystem', SUBSYSTEMS[opt.Subsystem] || `Unknown (${opt.Subsystem})`))
@@ -498,6 +527,12 @@ function parsePE(view, bytes) {
       const functionsOffset = rvaToFileOffset(ev.AddressOfFunctions)
       const namesOffset = rvaToFileOffset(ev.AddressOfNames)
       const ordinalsOffset = rvaToFileOffset(ev.AddressOfNameOrdinals)
+      pointNamed(exportStruct.children, {
+        Name: fileOffsetOf(ev.Name),
+        AddressOfFunctions: fileOffsetOf(ev.AddressOfFunctions),
+        AddressOfNames: fileOffsetOf(ev.AddressOfNames),
+        AddressOfNameOrdinals: fileOffsetOf(ev.AddressOfNameOrdinals)
+      }, fileSize)
       contentFields.push(field('Export directory', exportOffset, 40, dllName || '(unnamed)', 'table', 'Header of the export tables', exportStruct.children))
 
       const namedOrdinals = new Set()
@@ -638,6 +673,17 @@ function parsePE(view, bytes) {
       readThunks(toRva(table), library, toRva)
       if (nodes.length < MAX_TABLE_ENTRIES && budget.left > spec.length) {
         const { children } = readStruct(view, at - entrySize, spec, true, budget)
+        const target = v => (v ? rvaToFileOffset(toRva(v)) : null)
+        pointNamed(children, delay
+          ? {
+              DllNameRVA: target(values.DllNameRVA),
+              ModuleHandleRVA: target(values.ModuleHandleRVA),
+              ImportAddressTableRVA: target(values.ImportAddressTableRVA),
+              ImportNameTableRVA: target(values.ImportNameTableRVA),
+              BoundImportAddressTableRVA: target(values.BoundImportAddressTableRVA),
+              UnloadInformationTableRVA: target(values.UnloadInformationTableRVA)
+            }
+          : { OriginalFirstThunk: target(values.OriginalFirstThunk), Name: target(values.Name), FirstThunk: target(values.FirstThunk) }, fileSize)
         budget.left--
         nodes.push(field(library.name, at - entrySize, entrySize, `${library.functions.length} imports`, 'header', delay ? 'Delay-load descriptor' : 'Import descriptor', children))
       }
@@ -671,6 +717,8 @@ function parsePE(view, bytes) {
   }
 
   // ---------------------------------------------------------------- debug directory
+  // A Repro entry means the timestamp is a hash of the contents, not a time
+  let reproducible = false
   const debugDir = directory(6)
   if (debugDir && debugDir.rva && debugDir.size) {
     const start = rvaToFileOffset(debugDir.rva)
@@ -682,6 +730,11 @@ function parsePE(view, bytes) {
         const { children, values } = readStruct(view, at, DEBUG_ENTRY_SPEC, true, budget)
         const { Type: type, SizeOfData: sizeOfData, PointerToRawData: pointer } = values
         types.push(DEBUG_TYPES[type] || `type ${type}`)
+        if (type === 16) reproducible = true
+        pointNamed(children, {
+          AddressOfRawData: sizeOfData ? fileOffsetOf(values.AddressOfRawData) : null,
+          PointerToRawData: sizeOfData ? pointer || null : null
+        }, fileSize)
         let path = ''
         if (type === 2 && sizeOfData >= 24 && inBounds(view, pointer, 24)) {
           const end = Math.min(pointer + sizeOfData, fileSize)
@@ -723,6 +776,7 @@ function parsePE(view, bytes) {
         ['Flags', 4, 'flags', 'Runtime flags', v => `${hex(v)} (${decodeFlags(v, CLR_FLAGS).join(', ') || 'none'})`],
         ['EntryPointToken', 4, 'data', 'Metadata token or RVA of the managed entry point', v => hex(v)]
       ], true, budget)
+      pointNamed(clr.children, { MetaDataRVA: fileOffsetOf(clr.values.MetaDataRVA) }, fileSize)
       contentFields.push(field('CLR header', at, clr.end - at, '.NET', 'header', 'Marks a .NET assembly and locates its metadata', clr.children))
       let runtime = ''
       const metadata = clr.values.MetaDataRVA !== undefined ? rvaToFileOffset(clr.values.MetaDataRVA) : null
@@ -734,6 +788,52 @@ function parsePE(view, bytes) {
         'Contains managed code: a .NET decompiler shows more than a disassembler',
         ...decodeFlags(clr.values.Flags || 0, CLR_FLAGS)
       ]))
+    }
+  }
+
+  // ---------------------------------------------------------------- thread-local storage
+  // The TLS directory holds virtual addresses, not RVAs
+  const tls = { callbacks: [], arrayOffset: null }
+  const tlsDir = directory(9)
+  const imageBase = opt.ImageBase !== undefined ? BigInt(opt.ImageBase) : null
+  const vaToRva = va => {
+    if (imageBase === null) return null
+    const rva = BigInt(va) - imageBase
+    return rva > 0n && rva < 0x100000000n ? Number(rva) : null
+  }
+  const vaToOffset = va => {
+    const rva = va ? vaToRva(va) : null
+    return rva === null ? null : rvaToFileOffset(rva)
+  }
+  if (tlsDir && tlsDir.rva) {
+    const at = rvaToFileOffset(tlsDir.rva)
+    if (at !== null && inBounds(view, at, isPE32Plus ? 40 : 24)) {
+      const P = isPE32Plus ? 8 : 4
+      const tlsStruct = readStruct(view, at, [
+        ['StartAddressOfRawData', P, 'offset', 'Virtual address of the initial thread-local data', v => hexBig(v)],
+        ['EndAddressOfRawData', P, 'offset', 'Virtual address of the end of that data', v => hexBig(v)],
+        ['AddressOfIndex', P, 'offset', 'Virtual address where the loader stores the TLS slot index', v => hexBig(v)],
+        ['AddressOfCallBacks', P, 'offset', 'Virtual address of a zero-terminated list of callbacks, run before the entry point', v => hexBig(v)],
+        ['SizeOfZeroFill', 4, 'size', 'Bytes of zeros after the initial data', v => hex(v)],
+        ['Characteristics', 4, 'flags', 'Alignment of the TLS data', v => hex(v)]
+      ], true, budget)
+      const tv = tlsStruct.values
+      tls.arrayOffset = vaToOffset(tv.AddressOfCallBacks)
+      pointNamed(tlsStruct.children, {
+        StartAddressOfRawData: vaToOffset(tv.StartAddressOfRawData),
+        EndAddressOfRawData: vaToOffset(tv.EndAddressOfRawData),
+        AddressOfIndex: vaToOffset(tv.AddressOfIndex),
+        AddressOfCallBacks: tls.arrayOffset
+      }, fileSize)
+      for (let i = 0; tls.arrayOffset !== null && i < MAX_TLS_CALLBACKS; i++) {
+        const entryAt = tls.arrayOffset + i * P
+        if (!inBounds(view, entryAt, P)) break
+        const va = isPE32Plus ? view.getBigUint64(entryAt, true) : view.getUint32(entryAt, true)
+        if (!va) break
+        tls.callbacks.push({ at: entryAt, rva: vaToRva(va) })
+      }
+      contentFields.push(field('TLS directory', at, tlsStruct.end - at, tls.callbacks.length ? `${tls.callbacks.length} callback${tls.callbacks.length === 1 ? '' : 's'}` : 'no callbacks', 'header',
+        'Thread-local storage: the initial data for each thread and callbacks run when a thread starts', tlsStruct.children))
     }
   }
 
@@ -804,7 +904,191 @@ function parsePE(view, bytes) {
 
   fields.push(...contentFields)
   fields.sort((a, b) => a.offset - b.offset)
-  return { summary, fields, regions: tiled, symbols: sortSymbols(symbols), warnings }
+
+  const entryRva = opt.AddressOfEntryPoint || 0
+  const image = sectionLayout(sections, declaredSections, sectionHeadersOffset, fileSize, entryRva, fileOffsetOf(entryRva))
+  const goBuildId = sections.length > 0 && startsWithText(bytes, sections[0].rawAddress, '\xFF Go build ID: "')
+  const unusual = peUnusual({
+    view, peOffset, fileHeader, optionalHeaderOffset, optionalHeaderSize, sectionHeadersOffset, magic, isPE32Plus,
+    declaredSections, sections, opt, timeDateStamp, reproducible, goBuildId, tls, sectionForRva
+  })
+  return { summary, fields, regions: tiled, symbols: sortSymbols(symbols), warnings, image, unusual }
+}
+
+function startsWithText(bytes, offset, text) {
+  if (!Number.isSafeInteger(offset) || offset < 0 || offset + text.length > bytes.length) return false
+  for (let i = 0; i < text.length; i++) if (bytes[offset + i] !== text.charCodeAt(i)) return false
+  return true
+}
+
+const sectionFlags = s => rwx(s.characteristics & 0x40000000, s.characteristics & 0x80000000, s.characteristics & 0x20000000)
+const isWritable = s => (s.characteristics & 0x80000000) !== 0
+const isWritableCode = s => ((s.characteristics & 0xA0000000) >>> 0) === 0xA0000000
+
+// What the loader maps: each section at its RVA, with the bytes the file holds for it
+function sectionLayout(sections, declared, tableOffset, fileSize, entryRva, entryOffset) {
+  const fits = Math.max(0, Math.floor((fileSize - tableOffset) / 40))
+  return {
+    addressLabel: 'RVA',
+    entry: entryRva ? { address: entryRva, offset: entryOffset } : null,
+    sections: sections.slice(0, MAX_IMAGE_SECTIONS).map(s => ({
+      name: s.name,
+      offset: s.rawAddress,
+      size: s.rawSize && s.rawAddress < fileSize ? Math.min(s.rawSize, fileSize - s.rawAddress) : 0,
+      address: s.virtualAddress,
+      memSize: s.virtualSize || s.rawSize,
+      flags: sectionFlags(s)
+    })),
+    total: Math.max(sections.length, Math.min(declared, fits))
+  }
+}
+
+const sectionLabel = (s, index) => (s.name ? `"${s.name}"` : `number ${index + 1}`)
+
+// The first pair of ranges that overlap, among [start, end) ranges; sorting keeps it n log n
+function firstOverlap(ranges) {
+  const sorted = ranges.filter(r => r.end > r.start).sort((a, b) => a.start - b.start || a.index - b.index)
+  let widest = null
+  for (const range of sorted) {
+    if (widest && range.start < widest.end) return [widest.index, range.index].sort((a, b) => a - b)
+    if (!widest || range.end > widest.end) widest = range
+  }
+  return null
+}
+
+// Things about the headers that compilers and linkers do not produce. Each
+// note is a fact read from the bytes; the thresholds are chosen so that
+// output of MSVC, MinGW, Go, Rust, .NET and Delphi gets none.
+function peUnusual(p) {
+  const { sections, opt, declaredSections: count } = p
+  const notes = []
+  const tableLength = sections.length * 40
+  const s0 = sections.length
+
+  // Section count
+  if (count >= 96) {
+    notes.push(unusualNote(count === 96
+      ? 'The file has 96 sections, the most the Windows XP loader accepts; programs built by common compilers have far fewer.'
+      : `The file has ${count.toLocaleString('en-US')} sections; the Windows XP loader accepts at most 96, and programs built by common compilers have far fewer.`,
+    p.fileHeader + 2, 2))
+  } else if (count === 0 && p.optionalHeaderSize > 0) {
+    notes.push(unusualNote('The section table is empty; programs normally have at least one section.', p.fileHeader + 2, 2))
+  }
+
+  // Entry point
+  const entry = opt.AddressOfEntryPoint || 0
+  const entryField = p.optionalHeaderOffset + 16
+  const writableCode = sections.filter(isWritableCode)
+  if (entry && s0) {
+    const section = p.sectionForRva(entry)
+    const index = section ? sections.indexOf(section) : -1
+    if (!section) {
+      notes.push(unusualNote(`The entry point (RVA ${hexText(entry)}) is outside every section; it is normally in a code section.`, entryField, 4))
+    } else {
+      if (s0 >= 2 && index === s0 - 1) {
+        notes.push(unusualNote(`The entry point is in the last of the ${s0} sections; it is usually in the first.`, entryField, 4))
+      }
+      // Writable code is reported below, which covers this case
+      if (isWritable(section) && !isWritableCode(section)) {
+        notes.push(unusualNote(`The entry point is in section ${sectionLabel(section, index)}, which is writable; code sections are normally read-only.`, entryField, 4))
+      }
+    }
+  }
+
+  // Writable and executable sections
+  if (writableCode.length) {
+    const flags = writableCode[0].characteristics
+    const same = writableCode.every(s => s.characteristics === flags)
+    const which = writableCode.length === 1
+      ? `Section ${sectionLabel(writableCode[0], sections.indexOf(writableCode[0]))} is`
+      : `${writableCode.length === s0 ? 'All ' : ''}${writableCode.length} sections are`
+    const one = writableCode.length === 1 ? sections.indexOf(writableCode[0]) : -1
+    notes.push(unusualNote(`${which} both writable and executable${same ? ` (flags ${hexText(flags >>> 0)})` : ''}; compilers keep code and writable data in separate sections.`,
+      one >= 0 ? p.sectionHeadersOffset + one * 40 + 36 : p.sectionHeadersOffset, one >= 0 ? 4 : tableLength))
+  }
+
+  // Many sections that look alike
+  if (s0 >= 8) {
+    const groups = new Map()
+    for (const s of sections) {
+      const key = `${s.rawSize}/${s.virtualSize}/${s.characteristics}`
+      groups.set(key, (groups.get(key) || 0) + 1)
+    }
+    let best = ''
+    let most = 0
+    for (const [key, n] of groups) if (n > most) [best, most] = [key, n]
+    if (most >= 8) {
+      const [raw, virtual, flags] = best.split('/').map(Number)
+      const size = raw === virtual ? `${hexText(raw)} bytes` : `${hexText(raw)} bytes in the file, ${hexText(virtual)} in memory`
+      notes.push(unusualNote(`${most === s0 ? 'All ' : ''}${most} sections have the same size (${size}) and flags (${hexText(flags >>> 0)}).`, p.sectionHeadersOffset, tableLength))
+    }
+  }
+
+  // Names
+  if (s0 && sections.every(s => s.name === '')) {
+    notes.push(unusualNote(s0 === 1
+      ? 'The only section has no name; linkers name sections, for example .text and .data.'
+      : `None of the ${s0} sections has a name; linkers name sections, for example .text and .data.`, p.sectionHeadersOffset, tableLength))
+  }
+
+  // Overlaps
+  const onDisk = firstOverlap(sections.map((s, index) => ({ index, start: s.rawAddress, end: s.rawSize ? s.rawAddress + s.rawSize : s.rawAddress })))
+  if (onDisk) {
+    notes.push(unusualNote(`Sections ${sectionLabel(sections[onDisk[0]], onDisk[0])} and ${sectionLabel(sections[onDisk[1]], onDisk[1])} overlap in the file; each section normally has bytes of its own.`, p.sectionHeadersOffset, tableLength))
+  }
+  const inMemory = firstOverlap(sections.map((s, index) => ({ index, start: s.virtualAddress, end: s.virtualAddress + (s.virtualSize || s.rawSize) })))
+  if (inMemory) {
+    notes.push(unusualNote(`Sections ${sectionLabel(sections[inMemory[0]], inMemory[0])} and ${sectionLabel(sections[inMemory[1]], inMemory[1])} overlap in memory; each section normally has addresses of its own.`, p.sectionHeadersOffset, tableLength))
+  }
+
+  // Timestamp: reproducible builds store a hash instead (and say so in a Repro
+  // debug entry), and Go's linker always writes zero
+  if (!p.reproducible) {
+    const stamp = p.timeDateStamp
+    if (stamp === 0 && !p.goBuildId) {
+      notes.push(unusualNote('The link timestamp is zero; linkers normally record when the file was built.', p.fileHeader + 4, 4))
+    } else if (stamp * 1000 > Date.now() + 365 * 24 * 3600 * 1000) {
+      notes.push(unusualNote(`The link timestamp is ${new Date(stamp * 1000).toISOString().slice(0, 10)}, in the future; linkers normally record when the file was built.`, p.fileHeader + 4, 4))
+    }
+  }
+
+  // Header placement and sizes
+  if (p.peOffset < 0x40) {
+    notes.push(unusualNote(`The PE header starts at ${hexText(p.peOffset)}, inside the 64-byte DOS header.`, 0x3C, 4))
+  } else if (p.peOffset > 0x1000) {
+    notes.push(unusualNote(`The PE header starts at ${hexText(p.peOffset)}, far into the file; it usually starts within the first 0x400 bytes.`, 0x3C, 4))
+  }
+  const directories = opt.NumberOfRvaAndSizes
+  const directoriesAt = p.optionalHeaderOffset + (p.isPE32Plus ? 108 : 92)
+  if (directories !== undefined && directories !== 16) {
+    notes.push(unusualNote(`The optional header lists ${directories.toLocaleString('en-US')} data directories instead of the usual 16.`, directoriesAt, 4))
+  } else if (directories === 16 && (p.magic === 0x10B || p.magic === 0x20B)) {
+    const expected = p.isPE32Plus ? 0xF0 : 0xE0
+    if (p.optionalHeaderSize !== expected) {
+      notes.push(unusualNote(`The optional header is declared as ${p.optionalHeaderSize} bytes long; in a ${p.isPE32Plus ? '64' : '32'}-bit program it is normally ${expected}.`, p.fileHeader + 16, 2))
+    }
+  }
+  const fileAlign = opt.FileAlignment
+  const sectionAlign = opt.SectionAlignment
+  // EFI images are often aligned to 32 bytes; zero means the field was never filled in
+  const efi = opt.Subsystem >= 10 && opt.Subsystem <= 13
+  if (!efi && fileAlign && sectionAlign && (fileAlign < 0x200 || sectionAlign < 0x1000)) {
+    notes.push(unusualNote(`Sections are aligned to ${hexText(fileAlign)} bytes in the file and ${hexText(sectionAlign)} in memory; programs normally use 0x200 and 0x1000.`, p.optionalHeaderOffset + 32, 8))
+  }
+
+  // TLS callbacks run before the entry point; the C runtimes of MinGW, MSVC
+  // and Rust register them in a code section, so only others are noted
+  const stray = p.tls.callbacks.find(c => {
+    const section = c.rva === null ? null : p.sectionForRva(c.rva)
+    return !section || !(section.characteristics & 0x20000020)
+  })
+  if (stray) {
+    notes.push(unusualNote(stray.rva === null
+      ? 'A TLS callback, which runs before the entry point, points outside the image.'
+      : `A TLS callback, which runs before the entry point, is at RVA ${hexText(stray.rva)}, outside every code section.`, stray.at, p.isPE32Plus ? 8 : 4))
+  }
+
+  return notes.slice(0, MAX_NOTES)
 }
 
 /** @type {import('../analysis/types.js').FormatModule} */

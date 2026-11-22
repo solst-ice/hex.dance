@@ -5,7 +5,7 @@ import { FORMATS } from '../formats/index.js'
 import { buildELF, buildPE } from '../formats/__fixtures__/executables.js'
 import { buildPNG, buildZip, toArrayBuffer } from '../formats/__fixtures__/fileFormats.js'
 
-const KEYS = ['formatId', 'formatName', 'category', 'summary', 'fields', 'regions', 'symbols', 'entries', 'warnings']
+const KEYS = ['formatId', 'formatName', 'category', 'summary', 'fields', 'regions', 'symbols', 'entries', 'warnings', 'unusual', 'image']
 const lines = analysis => analysis.summary.map(entry => `${entry.label}: ${entry.value}`)
 
 test('fills every property for recognised formats', () => {
