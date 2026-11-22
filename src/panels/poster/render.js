@@ -22,6 +22,7 @@ function paint(el) {
   if (el.fillOpacity !== undefined && el.fillOpacity !== 1) out += attr('fill-opacity', n(el.fillOpacity))
   if (el.stroke) out += attr('stroke', el.stroke) + attr('stroke-width', n(el.sw ?? 1))
   if (el.dash) out += attr('stroke-dasharray', el.dash)
+  if (typeof el.opacity === 'number' && el.opacity >= 0 && el.opacity < 1) out += attr('opacity', n(el.opacity))
   return out
 }
 
@@ -58,7 +59,7 @@ function element(el) {
     case 'line':
       return `<line x1="${n(el.x1)}" y1="${n(el.y1)}" x2="${n(el.x2)}" y2="${n(el.y2)}"${paint(el)}/>`
     case 'path':
-      return `<path d="${escapeXml(el.d)}" fill="none" stroke-linecap="round"${paint({ ...el, fill: undefined })}/>`
+      return `<path d="${escapeXml(el.d)}" fill="none" stroke-linecap="round" stroke-linejoin="round"${paint({ ...el, fill: undefined })}/>`
     case 'text':
       return textElement(el)
     default:
@@ -103,9 +104,9 @@ export function sceneToSvg(scene, meta) {
  */
 export function buildPoster({ bytes, analysis, fileName, options = {}, theme, date = '' }) {
   const data = bytes || new Uint8Array(0)
-  const plan = planPoster({ ...options, analysis, size: data.length })
+  const plan = planPoster({ ...options, analysis, bytes: data, size: data.length })
   const colors = posterColors(options.style === 'print' ? 'print' : 'dark', theme)
-  const scene = layoutPoster({ plan, bytes: data, analysis, fileName, colors, proportion: options.proportion, date })
+  const scene = layoutPoster({ plan, bytes: data, analysis, fileName, colors, proportion: options.proportion, show: options.show, date })
   const svg = sceneToSvg(scene, {
     title: `${fileName || 'untitled'}: ${analysis?.formatName || 'file'} poster`,
     description: `Annotated hex dump of ${fileName || 'a file'} made with hex.dance${date ? ` on ${date}` : ''}.`

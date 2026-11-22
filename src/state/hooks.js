@@ -1,6 +1,6 @@
-import { useContext, useEffect, useSyncExternalStore } from 'react'
+import { useContext, useEffect, useMemo, useSyncExternalStore } from 'react'
 import {
-  FileContext, HexViewContext, SectionContext, SelectionActionsContext, SelectionContext, UnsavedEditsContext,
+  FileContext, HexViewContext, PosterPinsContext, SectionContext, SelectionActionsContext, SelectionContext, UnsavedEditsContext,
   WorkspaceContext
 } from './contexts.js'
 
@@ -89,6 +89,33 @@ export function useUnsavedEdits() {
 export function useHasUnsavedEdits() {
   const { subscribe, isUnsaved } = useUnsavedEdits()
   return useSyncExternalStore(subscribe, isUnsaved)
+}
+
+/**
+ * Fields pinned to the poster for the open file (see posterPins.js): at most
+ * `limit`, in file order, emptied when another file is opened. Re-renders
+ * the caller when the list changes.
+ * @returns {{
+ *   pins: import('./posterPins.js').PosterPin[],
+ *   isPinned: (offset: number, length: number) => boolean,
+ *   toggle: (field: { offset: number, length: number, name?: string }) => 'pinned'|'unpinned'|'full'|'invalid',
+ *   remove: (offset: number, length: number) => void,
+ *   clear: () => void,
+ *   limit: number
+ * }}
+ */
+export function usePosterPins() {
+  const store = useContext(PosterPinsContext)
+  if (!store) throw new Error('usePosterPins must be used inside <FileProvider>')
+  const pins = useSyncExternalStore(store.subscribe, store.getPins)
+  return useMemo(() => ({
+    pins,
+    isPinned: (offset, length) => pins.some(pin => pin.offset === offset && pin.length === length),
+    toggle: store.toggle,
+    remove: store.remove,
+    clear: store.clear,
+    limit: store.limit
+  }), [pins, store])
 }
 
 /** @returns {SelectionState} */

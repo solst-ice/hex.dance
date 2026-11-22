@@ -7,6 +7,10 @@ export const FileContext = createContext(null)
 // open another file that waits for an answer. Its value changes only when a
 // request starts or ends, never on an edit.
 export const UnsavedEditsContext = createContext(null)
+// Fields pinned to the poster from the Structure section: a store whose
+// identity never changes (see posterPins.js), emptied when another file is
+// opened. Provided by FileProvider.
+export const PosterPinsContext = createContext(null)
 export const SelectionContext = createContext(null)
 // The selection's setters and jumpTo, which never change: components that
 // only act on the selection read these and do not re-render when it changes

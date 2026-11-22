@@ -36,6 +36,8 @@ export function gaveUpAnalysis(head, size, meta, note, reason) {
     symbols: [],
     entries: [],
     warnings: [note],
+    unusual: [],
+    image: null,
     gaveUp: reason
   }
 }

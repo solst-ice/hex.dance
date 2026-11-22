@@ -2,6 +2,7 @@ import { dataView, formatBytes, item } from './shared.js'
 import { FieldList, MAX_CHILDREN, field, plural } from './fieldTree.js'
 import { chargeText } from './budget.js'
 import { pathWarnings } from './archivePaths.js'
+import { pointAt, pointNamed, unusualNote } from './pointers.js'
 
 const EOCD_SIGNATURE = 0x06054b50
 const EOCD_SIZE = 22
@@ -469,7 +470,7 @@ function localEntry(view, bytes, offset, central, light = false) {
   }
 }
 
-function centralEntry(view, bytes, entry) {
+function centralEntry(view, bytes, entry, localAt) {
   const offset = entry.centralOffset
   const flags = view.getUint16(offset + 8, true)
   const madeBy = view.getUint16(offset + 4, true)
@@ -499,19 +500,19 @@ function centralEntry(view, bytes, entry) {
     field('Disk number start', offset + 34, 2, { value: view.getUint16(offset + 34, true), kind: 'header', description: 'For archives split over several disks' }),
     field('Internal attributes', offset + 36, 2, { value: view.getUint16(offset + 36, true) & 1 ? '0x1 (text file)' : hex(view.getUint16(offset + 36, true)), kind: 'flags' }),
     field('External attributes', offset + 38, 4, { value: host === 3 && mode ? `${hex(external)} (Unix mode 0${mode.toString(8)})` : hex(external), kind: 'flags', description: 'Host-specific: Unix permissions in the high 16 bits, or MS-DOS attributes in the low byte' }),
-    field('Local header offset', offset + 42, 4, { value: view.getUint32(offset + 42, true) === 0xFFFFFFFF ? '0xFFFFFFFF (in ZIP64 extra field)' : hex(view.getUint32(offset + 42, true)), kind: 'offset', description: 'Where this file\'s local header starts' }),
+    pointAt(field('Local header offset', offset + 42, 4, { value: view.getUint32(offset + 42, true) === 0xFFFFFFFF ? '0xFFFFFFFF (in ZIP64 extra field)' : hex(view.getUint32(offset + 42, true)), kind: 'offset', description: 'Where this file\'s local header starts' }), localAt, bytes.length),
     nameField(bytes, 'File name', nameStart, nameLength, flags)
   ]
   if (extraLength > 0) children.push(field('Extra field', extraStart, extraLength, { kind: 'header', children: extraFields(view, extraStart, commentStart) }))
   if (commentLength > 0 && commentStart < entry.centralEnd) {
     children.push(field('File comment', commentStart, entry.centralEnd - commentStart, { value: sanitizeName(decodeEntryName(bytes.subarray(commentStart, Math.min(entry.centralEnd, commentStart + 200)), flags)), kind: 'string' }))
   }
-  return field(entry.name || '(no name)', offset, entry.centralEnd - offset, {
+  return pointAt(field(entry.name || '(no name)', offset, entry.centralEnd - offset, {
     value: `${entry.size === Infinity ? '?' : formatBytes(entry.size)}, ${methodName(entry.method)}`,
     kind: 'header',
     description: 'Central directory entry: the authoritative record of one file',
     children: children.filter(Boolean)
-  })
+  }), localAt, bytes.length)
 }
 
 function endRecord(view, bytes, offset) {
@@ -581,7 +582,7 @@ function zip64Locator(view, offset) {
  * the central directory when there is one (it is authoritative), else from
  * walking local headers from the start.
  */
-function buildStructure(view, bytes, entries, eocd, central, warnings) {
+function buildStructure(view, bytes, entries, eocd, central, warnings, unusual) {
   const top = []
   const regions = []
   const locals = new FieldList(MAX_CHILDREN, 'local files')
@@ -597,6 +598,7 @@ function buildStructure(view, bytes, entries, eocd, central, warnings) {
     }
     starts.push({ at, entry })
   }
+  const localAt = new Map(starts.map(({ at, entry }) => [entry, at]))
   starts.sort((a, b) => a.at - b.at)
 
   let cursor = 0
@@ -624,6 +626,7 @@ function buildStructure(view, bytes, entries, eocd, central, warnings) {
         }))
         regions.push({ name: 'Prefix data', offset: 0, length: at, kind: 'other' })
         warnings.push(`${plural(at, 'byte')} of data before the first local header`)
+        unusual.push(unusualNote(`The archive starts ${plural(at, 'byte')} into the file, after other data; ZIP readers start from the end, so they still work.`, 0, at))
       } else {
         gap(cursor, at, 'Unreferenced data', 'Bytes between entries that no central directory entry points to')
       }
@@ -663,7 +666,7 @@ function buildStructure(view, bytes, entries, eocd, central, warnings) {
     const list = new FieldList(MAX_CHILDREN, 'entries')
     for (const entry of entries) {
       if (list.full) list.skip(entry.centralOffset, entry.centralEnd - entry.centralOffset)
-      else list.push(centralEntry(view, bytes, entry))
+      else list.push(centralEntry(view, bytes, entry, localAt.get(entry)))
     }
     top.push(field('Central directory', central.start, central.end - central.start, {
       value: plural(entries.length, 'entry', 'entries'),
@@ -677,6 +680,7 @@ function buildStructure(view, bytes, entries, eocd, central, warnings) {
   if (eocd.zip64Offset >= after) {
     if (eocd.zip64Offset > after) top.push(field('Unreferenced data', after, eocd.zip64Offset - after, { kind: 'data' }))
     const record = zip64Record(view, eocd.zip64Offset)
+    pointNamed(record.children, { 'Central directory offset': central.end > central.start ? central.start : null }, bytes.length)
     if (record.offset + record.length <= eocd.locatorOffset) {
       top.push(record)
       after = record.offset + record.length
@@ -684,12 +688,19 @@ function buildStructure(view, bytes, entries, eocd, central, warnings) {
   }
   if (eocd.locatorOffset >= after) {
     if (eocd.locatorOffset > after) top.push(field('Unreferenced data', after, eocd.locatorOffset - after, { kind: 'data' }))
-    top.push(zip64Locator(view, eocd.locatorOffset))
+    const locator = zip64Locator(view, eocd.locatorOffset)
+    pointNamed(locator.children, { 'ZIP64 record offset': eocd.zip64Offset >= 0 ? eocd.zip64Offset : null }, bytes.length)
+    top.push(locator)
     after = eocd.locatorOffset + 20
   }
   if (eocd.eocdOffset > after) top.push(field('Unreferenced data', after, eocd.eocdOffset - after, { kind: 'data' }))
   const record = endRecord(view, bytes, eocd.eocdOffset)
+  pointNamed(record.children, { 'Central directory offset': central.end > central.start && view.getUint32(eocd.eocdOffset + 16, true) !== 0xFFFFFFFF ? central.start : null }, bytes.length)
   top.push(record)
+  const endCount = view.getUint16(eocd.eocdOffset + 10, true)
+  if (eocd.zip64Offset >= 0 && endCount !== 0xFFFF && Number.isFinite(eocd.entryCount) && endCount !== eocd.entryCount) {
+    unusual.push(unusualNote(`The end record counts ${plural(endCount, 'entry', 'entries')} and the ZIP64 end record ${plural(eocd.entryCount, 'entry', 'entries')}; normally they agree.`, eocd.eocdOffset + 10, 2))
+  }
   const recordsStart = eocd.zip64Offset >= 0 ? eocd.zip64Offset : eocd.locatorOffset >= 0 ? eocd.locatorOffset : eocd.eocdOffset
   regions.push({ name: 'End records', offset: recordsStart, length: record.offset + record.length - recordsStart, kind: 'metadata' })
   const tail = record.offset + record.length
@@ -697,6 +708,7 @@ function buildStructure(view, bytes, entries, eocd, central, warnings) {
     top.push(field('Data after the end record', tail, bytes.length - tail, { kind: 'data', description: 'Bytes after the end of central directory record and its comment; not part of the archive' }))
     regions.push({ name: 'Trailing data', offset: tail, length: bytes.length - tail, kind: 'other' })
     warnings.push(`${plural(bytes.length - tail, 'byte')} of data after the end of central directory record`)
+    unusual.push(unusualNote(`${plural(bytes.length - tail, 'byte')} follow the end of central directory record, which normally ends the file.`, tail, bytes.length - tail))
   }
   return { fields: top, regions }
 }
@@ -849,6 +861,7 @@ function parseZIP(bytes, meta = {}) {
     const inner = parseArchive(bytes.subarray(header.end), meta)
     shiftTree(inner.fields, header.end)
     for (const region of inner.regions) region.offset += header.end
+    for (const note of inner.unusual) if (note.offset !== undefined) note.offset += header.end
     if (inner.fields[0] && inner.fields[0].kind === 'magic') inner.fields[0].kind = 'header'
     inner.fields.unshift(header.field)
     inner.regions.unshift({ name: 'CRX header', offset: 0, length: header.end, kind: 'header' })
@@ -891,7 +904,8 @@ function parseArchive(bytes, meta) {
     if (!result.complete) warnings.push('Listing stops early because the archive is truncated or uses data descriptors')
   }
 
-  const structure = buildStructure(view, bytes, entries, eocd, central, warnings)
+  const unusual = []
+  const structure = buildStructure(view, bytes, entries, eocd, central, warnings, unusual)
   fields = dropOverlaps(structure.fields, warnings)
   regions = structure.regions
 
@@ -921,7 +935,7 @@ function parseArchive(bytes, meta) {
   warnings.push(...pathWarnings(entries.map(entry => entry.name)))
 
   markSignatureRecord(fields)
-  const result = { summary, fields, regions, entries: entries.map(toArchiveEntry), warnings }
+  const result = { summary, fields, regions, entries: entries.map(toArchiveEntry), warnings, unusual }
   if (container) result.formatName = container[0]
   return result
 }

@@ -2,8 +2,9 @@ import { revealText } from '../lib/visibleText.js'
 
 // Every piece of text in an analysis came from the file or was written about
 // it, so all of it is passed through revealText on the way out of
-// analyzeBytes: names, values, descriptions, symbols, entries and the
-// parsers' own warnings, which often quote a name. Text the parsers write
+// analyzeBytes: names, values, descriptions, symbols, entries, the parsers'
+// own warnings and unusual notes, which often quote a name, and the section
+// names of the memory layout. Text the parsers write
 // themselves holds no hidden characters and comes through unchanged.
 
 function revealIn(value, found) {
@@ -49,7 +50,7 @@ function distinctNames(found) {
 export function revealAnalysis(analysis) {
   const found = new Set()
   analysis.formatName = revealIn(analysis.formatName, found)
-  for (const key of ['summary', 'fields', 'regions', 'symbols', 'entries', 'warnings']) revealIn(analysis[key], found)
+  for (const key of ['summary', 'fields', 'regions', 'symbols', 'entries', 'warnings', 'unusual', 'image']) revealIn(analysis[key], found)
   const names = distinctNames(found)
   if (names) {
     const count = names.toLocaleString('en-US')

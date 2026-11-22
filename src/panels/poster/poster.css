@@ -30,6 +30,70 @@
   gap: 4px;
 }
 
+.poster-switches,
+.poster-pins {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+}
+
+.poster-switch {
+  align-items: center;
+  color: var(--neon-blue);
+  cursor: pointer;
+  display: inline-flex;
+  font-family: 'Unifont', monospace;
+  font-size: 0.85em;
+  gap: 6px;
+  min-height: 24px;
+  white-space: nowrap;
+}
+
+.poster-switch input {
+  accent-color: var(--neon-pink);
+  margin: 0;
+}
+
+.poster-pins {
+  gap: 4px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.poster-pins .poster-pin {
+  align-items: baseline;
+  display: inline-flex;
+  gap: 6px;
+  max-width: 100%;
+  text-transform: none;
+}
+
+.poster-pin-name {
+  max-width: 18ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.poster-pin-offset {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.poster-pin-x {
+  color: var(--neon-pink);
+}
+
+.poster-pins li {
+  min-width: 0;
+}
+
+.poster-pins-hint {
+  font-size: 0.85em;
+  margin: 2px 0 0;
+}
+
 .poster-select {
   max-width: 100%;
   min-width: 0;

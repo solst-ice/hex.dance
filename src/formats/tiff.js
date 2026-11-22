@@ -1,5 +1,6 @@
 import { ByteReader, capFields, field, fitted, formatNumber, latin1, nonOverlapping, plural, printable } from './reader.js'
 import { formatBytes, item } from './shared.js'
+import { pointAt } from './pointers.js'
 
 const MAX_IFDS = 128
 const MAX_ENTRIES_SHOWN = 200
@@ -81,6 +82,9 @@ function formatRational(r, type, offset) {
   return Number.isInteger(value) ? String(value) : `${n}/${d} (${+value.toFixed(4)})`
 }
 
+// Exif, GPS and interoperability directories, and sub-images
+const IFD_POINTER_TAGS = new Set([330, 34665, 34853, 40965])
+
 function parseTIFF(bytes) {
   const little = bytes[0] === 0x49
   const r = new ByteReader(bytes, little)
@@ -102,7 +106,7 @@ function parseTIFF(bytes) {
     headerChildren.push(field('Offset size', 4, 2, r.u16(4), 'Always 8', 'size'), field('Reserved', 6, 2, undefined, 'Zero', 'padding'))
   }
   const firstIFD = big ? r.u64(8) : r.u32(4)
-  headerChildren.push(field('First IFD offset', big ? 8 : 4, offsetSize, formatNumber(firstIFD), 'Where the first image directory starts', 'offset'))
+  headerChildren.push(pointAt(field('First IFD offset', big ? 8 : 4, offsetSize, formatNumber(firstIFD), 'Where the first image directory starts', 'offset'), firstIFD, bytes.length))
   const fields = [field('Header', 0, Math.min(headerLength, bytes.length), big ? 'BigTIFF' : 'TIFF', 'Image file header', 'header', headerChildren)]
   if (!r.has(0, headerLength)) {
     warnings.add('File is truncated inside the header')
@@ -169,7 +173,9 @@ function parseTIFF(bytes) {
       if (valueCount > MAX_PREVIEW_VALUES && entry.text === null && type !== 7) shown += `, … (${formatNumber(valueCount)} values)`
       const decoded = describeTag(kind, tag, entry)
       if (decoded) shown = `${decoded} (${shown})`
-      entryFields.push(field(name, at, entrySize, shown, `Tag ${tag}, ${typeName} × ${formatNumber(valueCount)}${total > inlineSize ? `, data at offset ${formatNumber(dataOffset)}` : ''}`, 'header'))
+      // Out-of-line values, and the tags whose value is the offset of another directory
+      const pointsTo = total > inlineSize && size > 0 ? dataOffset : IFD_POINTER_TAGS.has(tag) && entry.values.length === 1 ? entry.values[0] : null
+      entryFields.push(pointAt(field(name, at, entrySize, shown, `Tag ${tag}, ${typeName} × ${formatNumber(valueCount)}${total > inlineSize ? `, data at offset ${formatNumber(dataOffset)}` : ''}`, 'header'), pointsTo, bytes.length))
       if (total > inlineSize && size > 0 && total >= 16 && r.has(dataOffset, 1) && type !== 13 && type !== 18 && dataFields.length < 512) {
         dataFields.push(field(`${name} data (${label})`, dataOffset, Math.min(total, bytes.length - dataOffset), formatBytes(total), `Out-of-line value of ${name}`, 'data'))
       }
@@ -180,7 +186,7 @@ function parseTIFF(bytes) {
     children.push(...capFields(entryFields, MAX_ENTRIES_SHOWN, 'more entries', readable - entryFields.length, end))
     let length = end - offset
     if (r.has(end, offsetSize)) {
-      children.push(field('Next IFD offset', end, offsetSize, next ? formatNumber(next) : '0 (last)', 'Links to the next image', 'offset'))
+      children.push(pointAt(field('Next IFD offset', end, offsetSize, next ? formatNumber(next) : '0 (last)', 'Links to the next image', 'offset'), next || null, bytes.length))
       length += offsetSize
     }
     const ifd = { offset, kind, label, tags, next, field: field(label, offset, length, plural(count, 'entry', 'entries'), `${kind === 'main' ? 'Image' : kind} file directory`, 'table', children) }

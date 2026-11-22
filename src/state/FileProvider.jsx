@@ -1,6 +1,7 @@
 /* eslint-disable react/prop-types -- the project does not use prop-types */
 import { useCallback, useMemo, useRef, useState } from 'react'
-import { FileContext, UnsavedEditsContext } from './contexts.js'
+import { FileContext, PosterPinsContext, UnsavedEditsContext } from './contexts.js'
+import { createPosterPins } from './posterPins.js'
 import { createEditTracker, nextOpenStep } from './unsavedEdits.js'
 import { analyzeFile } from '../analysis/client.js'
 import { downloadName } from '../components/hex/bytes.js'
@@ -23,6 +24,9 @@ export default function FileProvider({ children }) {
   // ask about them. It is a store rather than state: typing a byte only
   // updates it, and only its subscribers hear, and only when the answer flips.
   const [edits] = useState(createEditTracker)
+  // Pins belong to the file as opened: edits do not change the field tree,
+  // so they survive edits, and opening another file empties them
+  const [pins] = useState(createPosterPins)
   const [pending, setPending] = useState(null)
   const pendingRef = useRef(null)
   const latest = useRef(state)
@@ -34,6 +38,7 @@ export default function FileProvider({ children }) {
     setState({ ...EMPTY, file })
     setRevision(0)
     edits.reset()
+    pins.reset()
 
     // The hex view only needs the bytes, so it appears as soon as they are
     // read; the analysis arrives separately from the worker.
@@ -45,7 +50,7 @@ export default function FileProvider({ children }) {
       analysis => isCurrent() && setState(previous => ({ ...previous, analysis })),
       error => isCurrent() && setState(previous => ({ ...previous, error }))
     )
-  }, [edits])
+  }, [edits, pins])
 
   const step = useCallback((action) => {
     const next = nextOpenStep(pendingRef.current, action)
@@ -84,7 +89,8 @@ export default function FileProvider({ children }) {
     setState(EMPTY)
     setRevision(0)
     edits.reset()
-  }, [edits])
+    pins.reset()
+  }, [edits, pins])
 
   const notifyEdit = useCallback((edit) => {
     if (Number.isFinite(edit?.modifiedCount)) edits.edited(edit.modifiedCount)
@@ -121,7 +127,9 @@ export default function FileProvider({ children }) {
 
   return (
     <FileContext.Provider value={value}>
-      <UnsavedEditsContext.Provider value={unsaved}>{children}</UnsavedEditsContext.Provider>
+      <UnsavedEditsContext.Provider value={unsaved}>
+        <PosterPinsContext.Provider value={pins}>{children}</PosterPinsContext.Provider>
+      </UnsavedEditsContext.Provider>
     </FileContext.Provider>
   )
 }

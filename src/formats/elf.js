@@ -2,6 +2,7 @@ import { dataView, hex, inBounds, item, MAX_SYMBOLS, readCString, sortSymbols } 
 import {
   createBudget, field, hexBig, hexString, MAX_TABLE_ENTRIES, readStruct, tableNodes, tileRegions, toNumber
 } from './binfields.js'
+import { hexText, isAddress, MAX_IMAGE_SECTIONS, pointAt, pointNamed, rwx, unusualNote } from './pointers.js'
 
 const ELF_MACHINES = {
   0x02: 'SPARC',
@@ -120,6 +121,12 @@ const MAX_NOTES = 256
 const MAX_VERSION_ENTRIES = 4096
 const MAX_SUMMARY_LIBRARIES = 200
 const MAX_SUMMARY_LINES = 200
+const MAX_UNUSUAL_NOTES = 8
+// Dynamic tags whose value is an address in the image
+const DT_ADDRESS_TAGS = new Set([
+  DT.PLTGOT, DT.HASH, DT.STRTAB, DT.SYMTAB, DT.RELA, DT.INIT, DT.FINI, DT.REL, DT.JMPREL, DT.INIT_ARRAY,
+  DT.FINI_ARRAY, DT.PREINIT_ARRAY, DT.SYMTAB_SHNDX, DT.RELR, 0x6ffffef5, 0x6ffffff0, 0x6ffffffc, 0x6ffffffe
+])
 
 const flagLetters = (value, table) => table.filter(([bit]) => (value & bit) !== 0).map(([, letter]) => letter).join('')
 
@@ -360,9 +367,12 @@ function parseELF(view, bytes) {
       const s = segments[i]
       const { children } = readStruct(view, at, phSpec, le, budget)
       budget.left--
-      return field(`[${i}] ${PT_NAMES[s.type] || hex(s.type)}`, at, phentsize,
+      // A segment with no bytes in the file points nowhere, whatever its p_offset says
+      const data = s.filesz > 0 ? s.offset : null
+      pointNamed(children, { p_offset: data }, view.byteLength)
+      return pointAt(field(`[${i}] ${PT_NAMES[s.type] || hex(s.type)}`, at, phentsize,
         `${segmentFlags(s.flags)}, offset ${hex(s.offset)}, ${hex(s.filesz)} bytes`, 'header',
-        PT_DESCRIPTIONS[s.type] || 'Program header', children)
+        PT_DESCRIPTIONS[s.type] || 'Program header', children), data, view.byteLength)
     }, 'program headers')
     if (nodes.length) {
       fields.push(field('Program header table', phoff, count * phentsize, `${count} entries`, 'header',
@@ -383,6 +393,13 @@ function parseELF(view, bytes) {
     return null
   }
   const segmentOf = type => segments.find(s => s.type === type)
+  const entryAddress = h.e_entry === undefined ? 0 : toNumber(h.e_entry)
+  const entryOffset = entryAddress && isAddress(entryAddress) ? addressToOffset(entryAddress) : null
+  pointNamed(header.children, {
+    e_entry: entryOffset,
+    e_phoff: phoff && segments.length ? phoff : null,
+    e_shoff: shoff && sections.length ? shoff : null
+  }, view.byteLength)
 
   // ---------------------------------------------------------------- interpreter
   let interpreter = ''
@@ -450,7 +467,9 @@ function parseELF(view, bytes) {
       }
       if (nodes.length < MAX_TABLE_ENTRIES && budget.left > 0) {
         budget.left--
-        nodes.push(field(DT_NAMES[tag] || `Tag ${hex(tag >>> 0)}`, entry.at, entrySize, shown, DT_STRING_TAGS.has(tag) ? 'string' : 'data'))
+        const node = field(DT_NAMES[tag] || `Tag ${hex(tag >>> 0)}`, entry.at, entrySize, shown, DT_STRING_TAGS.has(tag) ? 'string' : 'data')
+        if (DT_ADDRESS_TAGS.has(tag) && value) pointAt(node, addressToOffset(value), view.byteLength)
+        nodes.push(node)
       }
     }
     if ((dynamic.flags & DF_BIND_NOW) || (dynamic.flags1 & DF_1_NOW)) dynamic.bindNow = true
@@ -510,9 +529,14 @@ function parseELF(view, bytes) {
       const s = sections[i]
       const { children } = readStruct(view, at, shSpec, le, budget)
       budget.left--
-      return field(`[${i}] ${s.label || (i === 0 ? '(null)' : '(unnamed)')}`, at, shentsize,
+      const data = i > 0 && hasFileData(s) ? s.offset : null
+      pointNamed(children, {
+        sh_offset: data,
+        sh_name: shstrtab && shstrtab.type === SHT_STRTAB && s.name < shstrtab.size ? shstrtab.offset + s.name : null
+      }, view.byteLength)
+      return pointAt(field(`[${i}] ${s.label || (i === 0 ? '(null)' : '(unnamed)')}`, at, shentsize,
         `${SHT_NAMES[s.type] || hex(s.type)}, ${s.type === SHT_NOBITS ? 'no file data' : `offset ${hex(s.offset)}`}, ${hex(s.size)} bytes`,
-        'header', 'Section header', children)
+        'header', 'Section header', children), data, view.byteLength)
     }, 'section headers')
     fields.push(field('Section header table', shoff, sections.length * shentsize, `${sections.length} entries`, 'header',
       'Sections: the linker\'s view of the file (code, data, symbols, debug info)', nodes))
@@ -729,8 +753,86 @@ function parseELF(view, bytes) {
     fields,
     regions: tileRegions(regions, view.byteLength, 'Not in any section', bytes),
     symbols: sortSymbols(symbols),
-    warnings
+    warnings,
+    image: memoryLayout(loads, sections, entryAddress, entryOffset, view.byteLength),
+    unusual: elfUnusual({ eType, headerSize, h, phoff, phentsize, segments, loads, shoff, shentsize, sections, shstrndx, entryAddress, is64Bit })
   }
+}
+
+// What the loader maps: the PT_LOAD segments, or, in a file without program
+// headers, the sections that have an address
+function memoryLayout(loads, sections, entryAddress, entryOffset, fileSize) {
+  const entry = entryAddress && isAddress(entryAddress) ? { address: entryAddress, offset: entryOffset } : null
+  const fileBytes = (offset, size) => (isAddress(offset) && offset < fileSize && size > 0 ? Math.min(size, fileSize - offset) : 0)
+  let parts
+  if (loads.length) {
+    parts = loads.map(s => ({
+      name: `LOAD ${segmentFlags(s.flags).toLowerCase()}`,
+      offset: s.offset,
+      size: fileBytes(s.offset, s.filesz),
+      address: s.vaddr,
+      memSize: s.memsz,
+      flags: segmentFlags(s.flags).toLowerCase()
+    }))
+  } else {
+    parts = sections.filter(s => s.addr > 0).map(s => ({
+      name: s.label,
+      offset: s.offset,
+      size: s.type === SHT_NOBITS ? 0 : fileBytes(s.offset, s.size),
+      address: s.addr,
+      memSize: s.size,
+      flags: rwx(s.flags & SHF_ALLOC, s.flags & SHF_WRITE, s.flags & SHF_EXECINSTR)
+    }))
+  }
+  const total = parts.length
+  if (!total && !entry) return null
+  const kept = parts.filter(p => [p.offset, p.size, p.address, p.memSize].every(isAddress)).slice(0, MAX_IMAGE_SECTIONS)
+  return { addressLabel: 'address', entry, sections: kept, total }
+}
+
+function elfUnusual(p) {
+  const notes = []
+  const linked = p.eType === 2 || p.eType === 3
+  const ranges = []
+  ranges.push({ name: 'ELF header', start: 0, end: p.headerSize })
+  if (p.segments.length) ranges.push({ name: 'program header table', start: p.phoff, end: p.phoff + p.segments.length * p.phentsize })
+  if (p.sections.length) ranges.push({ name: 'section header table', start: p.shoff, end: p.shoff + p.sections.length * p.shentsize })
+  const shoffAt = p.is64Bit ? 40 : 32
+  const shstrndxAt = p.is64Bit ? 62 : 50
+  const entryAt = 24
+
+  if (linked && !p.sections.length) {
+    notes.push(unusualNote('The file has no section headers; linkers write them, and strip keeps them.', shoffAt, p.is64Bit ? 8 : 4))
+  }
+  if (linked && p.entryAddress && p.loads.length && !p.loads.some(s => p.entryAddress >= s.vaddr && p.entryAddress < s.vaddr + s.memsz)) {
+    notes.push(unusualNote(`The entry point (${hexText(p.entryAddress)}) is outside every loadable segment.`, entryAt, p.is64Bit ? 8 : 4))
+  }
+  const writableCode = p.loads.filter(s => (s.flags & 3) === 3)
+  if (writableCode.length) {
+    const first = writableCode[0]
+    notes.push(unusualNote(writableCode.length === 1
+      ? `Loadable segment ${first.index} is both writable and executable; linkers keep code and writable data in separate segments.`
+      : `${writableCode.length} loadable segments are both writable and executable; linkers keep code and writable data in separate segments.`,
+    p.phoff + first.index * p.phentsize, p.phentsize))
+  }
+  for (let i = 0; i < ranges.length; i++) {
+    for (let j = i + 1; j < ranges.length; j++) {
+      const a = ranges[i]
+      const b = ranges[j]
+      if (a.end > a.start && b.end > b.start && a.start < b.end && b.start < a.end) {
+        notes.push(unusualNote(`The ${a.name} and the ${b.name} overlap.`, Math.max(a.start, b.start), Math.min(a.end, b.end) - Math.max(a.start, b.start)))
+      }
+    }
+  }
+  if (p.sections.length) {
+    const names = p.sections[p.shstrndx]
+    if (!names || names.type !== SHT_STRTAB) {
+      notes.push(unusualNote(p.shstrndx === SHN_UNDEF
+        ? 'e_shstrndx is 0, so the sections have no names.'
+        : `e_shstrndx (${p.shstrndx}) does not name a string table section, so the sections have no names.`, shstrndxAt, 2))
+    }
+  }
+  return notes.slice(0, MAX_UNUSUAL_NOTES)
 }
 
 function symbolOffset(value, s, sections, eType, addressToOffset, thumb, fileSize) {

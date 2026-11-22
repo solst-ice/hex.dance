@@ -1,8 +1,9 @@
 /* eslint-disable react/prop-types -- the project does not use prop-types */
 import { memo, useEffect, useMemo, useState } from 'react'
-import { useFile, useSelection } from '../../state/hooks.js'
+import { useFile, usePosterPins, useSelection } from '../../state/hooks.js'
 import { buildPoster } from './render.js'
-import { BYTES_PER_ROW, DEPTHS, LABEL_LIMITS, MAX_ROWS, DEFAULT_OPTIONS, topLevelChoices } from './plan.js'
+import { BYTES_PER_ROW, DEPTHS, LABEL_LIMITS, DEFAULT_OPTIONS, topLevelChoices } from './plan.js'
+import { DEFAULT_MODE, DEFAULT_SHOW, INCLUDE, PAGE_PROPORTIONS, describePlan, includeChoices, posterOptions } from './controls.js'
 import { hexOffset, formatSize } from './layout.js'
 import { posterBaseName } from './escape.js'
 import { readTheme } from './theme.js'
@@ -14,7 +15,6 @@ import './poster.css'
 import { visibleText } from '../../lib/visibleText.js'
 
 const STYLES = [['dark', 'Dark'], ['print', 'Print']]
-const PROPORTIONS = [['landscape', 'Landscape'], ['portrait', 'Portrait'], ['square', 'Square']]
 
 function today() {
   const d = new Date()
@@ -24,7 +24,7 @@ function today() {
 function Segmented({ label, value, options, onChange }) {
   return (
     <div className="poster-field" role="group" aria-label={label}>
-      <span className="poster-label">{label}</span>
+      <span className="poster-label" aria-hidden="true">{label}</span>
       <div className="poster-segmented">
         {options.map(([id, text]) => (
           <button
@@ -62,6 +62,74 @@ const SelectionSource = memo(function SelectionSource({ active, range, onUse }) 
   )
 })
 
+const ModeButton = ({ id, mode, disabled, onPick, children }) => (
+  <button
+    type="button"
+    className={`hd-button hd-button--small${mode === id ? ' hd-button--active' : ''}`}
+    aria-pressed={mode === id}
+    disabled={disabled}
+    onClick={() => onPick(id)}
+  >
+    {children}
+  </button>
+)
+
+// Switches for the poster's extra blocks; only those that can change this file's poster are shown
+function Include({ choices, show, onChange }) {
+  const usable = INCLUDE.filter(([id]) => choices[id])
+  if (usable.length === 0) return null
+  return (
+    <div className="poster-field poster-field--wide" role="group" aria-labelledby="poster-include-label">
+      <span className="poster-label" id="poster-include-label">Include</span>
+      <div className="poster-switches">
+        {usable.map(([id, text]) => (
+          <label key={id} className="poster-switch">
+            <input type="checkbox" checked={show[id]} onChange={event => onChange(id, event.target.checked)} />
+            {text}
+          </label>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function Pins({ pins, mode, onRemove, onClear, onWholeFile }) {
+  if (pins.length === 0) return null
+  return (
+    <div className="poster-field poster-field--wide" role="group" aria-labelledby="poster-pins-label">
+      <span className="poster-label" id="poster-pins-label">Pinned fields</span>
+      <ul className="poster-pins">
+        {pins.map(pin => {
+          const name = visibleText(pin.name) || '(unnamed)'
+          return (
+            <li key={`${pin.offset}:${pin.length}`}>
+              <button
+                type="button"
+                className="hd-button hd-button--small poster-pin"
+                aria-label={`Unpin ${name} at ${hexOffset(pin.offset)}`}
+                onClick={() => onRemove(pin.offset, pin.length)}
+              >
+                <span className="poster-pin-name">{name}</span>
+                <span className="poster-pin-offset">{hexOffset(pin.offset)}</span>
+                <span className="poster-pin-x" aria-hidden="true">×</span>
+              </button>
+            </li>
+          )
+        })}
+        <li>
+          <button type="button" className="hd-button hd-button--small poster-pins-clear" onClick={onClear}>Clear pins</button>
+        </li>
+      </ul>
+      {mode !== 'tour' && (
+        <p className="poster-pins-hint hd-muted">
+          Pinned fields are always labelled on the whole-file poster.{' '}
+          <button type="button" className="hd-button hd-button--small" onClick={onWholeFile}>Show whole file</button>
+        </p>
+      )}
+    </div>
+  )
+}
+
 function usePreviewUrl(svg) {
   const [url, setUrl] = useState(null)
   useEffect(() => {
@@ -78,8 +146,16 @@ function usePreviewUrl(svg) {
 
 export default function Poster() {
   const { file, bytes, analysis, status, revision } = useFile()
-  const [options, setOptions] = useState({ ...DEFAULT_OPTIONS, style: 'dark', proportion: 'landscape' })
-  const [source, setSource] = useState({ file: null, mode: 'auto', range: null, fieldIndex: 0 })
+  const { pins, remove: unpin, clear: clearPins } = usePosterPins()
+  const [options, setOptions] = useState({
+    bytesPerRow: DEFAULT_OPTIONS.bytesPerRow,
+    depth: DEFAULT_OPTIONS.depth,
+    maxLabels: DEFAULT_OPTIONS.maxLabels,
+    style: 'dark',
+    proportion: 'landscape'
+  })
+  const [show, setShow] = useState(DEFAULT_SHOW)
+  const [source, setSource] = useState({ file: null, mode: DEFAULT_MODE, range: null, fieldIndex: 0 })
   const [builtRevision, setBuiltRevision] = useState(revision)
   const [zoom, setZoom] = useState('fit')
   const [busy, setBusy] = useState(null)
@@ -87,31 +163,41 @@ export default function Poster() {
   const themeToken = useThemeVersion()
 
   const choices = useMemo(() => (analysis && bytes ? topLevelChoices(analysis, bytes.length) : []), [analysis, bytes])
-  const current = source.file === file ? source : { file, mode: 'auto', range: null, fieldIndex: 0 }
-  const mode = current.mode === 'field' && !choices[current.fieldIndex] ? 'auto' : current.mode
+  const includeGuess = useMemo(() => includeChoices(analysis), [analysis])
+  const current = source.file === file ? source : { file, mode: DEFAULT_MODE, range: null, fieldIndex: 0 }
+  const mode = current.mode === 'field' && !choices[current.fieldIndex] ? DEFAULT_MODE : current.mode
   const setOption = (key, value) => setOptions(previous => ({ ...previous, [key]: value }))
+  const setMode = next => setSource({ ...current, mode: next })
+
+  const built = useMemo(
+    () => posterOptions({ options, mode, range: current.range, fieldIndex: current.fieldIndex, pins, show }),
+    [options, mode, current.range, current.fieldIndex, pins, show]
+  )
 
   const poster = useMemo(() => {
     if (status !== 'ready' || !bytes || !analysis) return null
     try {
-      const theme = options.style === 'dark' ? readTheme() : null
+      const theme = built.style === 'dark' ? readTheme() : null
       const result = buildPoster({
         bytes,
         analysis,
         fileName: file?.name || 'untitled',
-        options: { ...options, mode, range: current.range, fieldIndex: current.fieldIndex },
+        options: built,
         theme,
         date: today()
       })
-      return { ...result, background: theme?.background || (options.style === 'print' ? '#ffffff' : '#060714'), error: null }
+      return { ...result, background: theme?.background || (built.style === 'print' ? '#ffffff' : '#060714'), error: null }
     } catch (err) {
       console.error('Poster generation failed', err)
       return { error: err }
     }
     // builtRevision and themeToken only trigger a rebuild
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, bytes, analysis, file, options, mode, current.range, current.fieldIndex, builtRevision, themeToken])
+  }, [status, bytes, analysis, file, built, builtRevision, themeToken])
 
+  // Which switches do something: the poster itself knows what it could draw for this file,
+  // whatever is switched off; before one is built, go by what the analysis holds
+  const include = poster?.scene?.available || includeGuess
   const previewUrl = usePreviewUrl(poster?.svg)
   const baseName = posterBaseName(file?.name)
 
@@ -146,7 +232,6 @@ export default function Poster() {
   const copy = () => run('copy', () => copyImage(svgToPng(poster.svg, poster.width, poster.height, background)), 'Copied the poster as an image')
 
   const plan = poster?.plan
-  const rows = plan ? plan.items.filter(i => i.type === 'row').length : 0
 
   return (
     <div className="hd-panel poster">
@@ -160,30 +245,16 @@ export default function Poster() {
 
       <div className="poster-options">
         <div className="poster-field" role="group" aria-label="Show">
-          <span className="poster-label">Show</span>
+          <span className="poster-label" aria-hidden="true">Show</span>
           <div className="poster-segmented">
-            <button
-              type="button"
-              className={`hd-button hd-button--small${mode === 'auto' ? ' hd-button--active' : ''}`}
-              aria-pressed={mode === 'auto'}
-              onClick={() => setSource({ ...current, mode: 'auto' })}
-            >
-              Start of file
-            </button>
+            <ModeButton id="tour" mode={mode} onPick={setMode}>Whole file</ModeButton>
+            <ModeButton id="auto" mode={mode} onPick={setMode}>Start of file</ModeButton>
             <SelectionSource
               active={mode === 'selection'}
               range={current.range}
               onUse={range => setSource({ ...current, mode: 'selection', range })}
             />
-            <button
-              type="button"
-              className={`hd-button hd-button--small${mode === 'field' ? ' hd-button--active' : ''}`}
-              aria-pressed={mode === 'field'}
-              disabled={choices.length === 0}
-              onClick={() => setSource({ ...current, mode: 'field' })}
-            >
-              One field
-            </button>
+            <ModeButton id="field" mode={mode} onPick={setMode} disabled={choices.length === 0}>This field</ModeButton>
           </div>
         </div>
 
@@ -197,7 +268,7 @@ export default function Poster() {
             >
               {choices.map(choice => (
                 <option key={choice.index} value={choice.index}>
-                  {choice.name || '(unnamed)'} · {hexOffset(choice.offset)} · {formatSize(choice.length)}
+                  {visibleText(choice.name) || '(unnamed)'} · {hexOffset(choice.offset)} · {formatSize(choice.length)}
                 </option>
               ))}
             </select>
@@ -221,7 +292,11 @@ export default function Poster() {
         </label>
 
         <Segmented label="Style" value={options.style} options={STYLES} onChange={v => setOption('style', v)} />
-        <Segmented label="Page" value={options.proportion} options={PROPORTIONS} onChange={v => setOption('proportion', v)} />
+        <Segmented label="Page" value={options.proportion} options={PAGE_PROPORTIONS} onChange={v => setOption('proportion', v)} />
+
+        <Include choices={include} show={show} onChange={(key, on) => setShow(previous => ({ ...previous, [key]: on }))} />
+
+        <Pins pins={pins} mode={mode} onRemove={unpin} onClear={clearPins} onWholeFile={() => setMode('tour')} />
       </div>
 
       {poster?.error && <p className="hd-warning">The poster could not be drawn: {String(poster.error.message || poster.error)}</p>}
@@ -229,9 +304,7 @@ export default function Poster() {
       {plan && (
         <p className="poster-summary hd-muted">
           {mode === 'selection' && current.range && <>Selection {hexOffset(current.range.start)}–{hexOffset(current.range.end - 1)}. </>}
-          {plan.shown
-            ? <>Showing {hexOffset(plan.shown.start)}–{hexOffset(plan.shown.end - 1)} in {rows} row{rows === 1 ? '' : 's'} (at most {MAX_ROWS}, long runs collapsed) with {plan.labels.length} label{plan.labels.length === 1 ? '' : 's'}.</>
-            : <>Nothing to show.</>}
+          {describePlan(plan, { pins: built.pins })}
           {plan.source === 'regions' && ' No field map for this format: boxes show regions.'}
           {plan.source === 'none' && plan.size > 0 && ' No field map for this format: bytes are coloured by class.'}
         </p>

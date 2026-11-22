@@ -91,3 +91,20 @@ export function tourSteps(index) {
   }
   return steps
 }
+
+/** Identity of a field for the poster's pins: its offset and length. */
+export const pinKey = (offset, length) => `${offset}:${length}`
+
+/**
+ * What to announce after the reader pins or unpins a field.
+ * @param {'pinned'|'unpinned'|'full'|'invalid'} outcome   from the pin store's toggle
+ */
+export function pinMessage(outcome, name, limit) {
+  const what = name ? String(name) : 'This field'
+  switch (outcome) {
+    case 'pinned': return `${what} is pinned to the poster.`
+    case 'unpinned': return `${what} is no longer pinned.`
+    case 'full': return `${limit} fields are pinned already, the most a poster takes. Unpin one first.`
+    default: return 'This field cannot be pinned.'
+  }
+}

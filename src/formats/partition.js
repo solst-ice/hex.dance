@@ -1,6 +1,7 @@
 import { ByteReader, capFields, field, fitted, formatNumber, guid, hex32, plural, printable, utf16 } from './reader.js'
 import { crc32 } from '../lib/crc32.js'
 import { formatBytes, item } from './shared.js'
+import { pointAt } from './pointers.js'
 
 const MAX_GPT_ENTRIES = 256
 
@@ -66,7 +67,7 @@ function parsePartitions(bytes) {
       field('First sector (CHS)', entry.at + 1, 3, chs(bytes, entry.at + 1), 'Legacy cylinder/head/sector address'),
       field('Type', entry.at + 4, 1, `0x${entry.type.toString(16).toUpperCase().padStart(2, '0')} (${MBR_TYPES[entry.type] || 'unknown'})`, 'Partition type', 'flags'),
       field('Last sector (CHS)', entry.at + 5, 3, chs(bytes, entry.at + 5), 'Legacy cylinder/head/sector address'),
-      field('First sector (LBA)', entry.at + 8, 4, formatNumber(entry.start), `Byte offset ${formatNumber(entry.start * 512)}`, 'offset'),
+      pointAt(field('First sector (LBA)', entry.at + 8, 4, formatNumber(entry.start), `Byte offset ${formatNumber(entry.start * 512)}`, 'offset'), used && entry.sectors ? entry.start * 512 : null, bytes.length),
       field('Sector count', entry.at + 12, 4, formatNumber(entry.sectors), formatBytes(entry.sectors * 512), 'size')
     ]))
   })
@@ -97,12 +98,12 @@ function parsePartitions(bytes) {
       field('Revision', h + 8, 4, `${r.u16(h + 10)}.${r.u16(h + 8)}`, 'Header format revision'),
       field('Header size', h + 12, 4, headerSize, 'Bytes covered by the header CRC', 'size'),
       field('Header CRC32', h + 16, 4, `${hex32(storedCrc)}${headerCrcOk === null ? '' : headerCrcOk ? ' (valid)' : ' (mismatch)'}`, 'With this field zeroed', 'checksum'),
-      field('Current LBA', h + 24, 8, formatNumber(r.u64(h + 24)), 'Where this header is', 'offset'),
-      field('Backup LBA', h + 32, 8, formatNumber(r.u64(h + 32)), 'Where the backup header is (last sector)', 'offset'),
+      pointAt(field('Current LBA', h + 24, 8, formatNumber(r.u64(h + 24)), 'Where this header is', 'offset'), r.u64(h + 24) * sectorSize, bytes.length),
+      pointAt(field('Backup LBA', h + 32, 8, formatNumber(r.u64(h + 32)), 'Where the backup header is (last sector)', 'offset'), r.u64(h + 32) * sectorSize, bytes.length),
       field('First usable LBA', h + 40, 8, formatNumber(r.u64(h + 40)), 'Start of the space for partitions', 'offset'),
       field('Last usable LBA', h + 48, 8, formatNumber(r.u64(h + 48)), 'End of the space for partitions', 'offset'),
       field('Disk GUID', h + 56, 16, diskGuid, 'Unique disk identifier'),
-      field('Partition entries LBA', h + 72, 8, formatNumber(entriesLba), 'Start of the entry array', 'offset'),
+      pointAt(field('Partition entries LBA', h + 72, 8, formatNumber(entriesLba), 'Start of the entry array', 'offset'), entriesStart, bytes.length),
       field('Entry count', h + 80, 4, formatNumber(count), 'Slots in the entry array', 'count'),
       field('Entry size', h + 84, 4, entrySize, 'Bytes per entry (usually 128)', 'size'),
       field('Entries CRC32', h + 88, 4, hex32(entriesCrc), 'Of the whole entry array', 'checksum')
@@ -133,7 +134,7 @@ function parsePartitions(bytes) {
         entryFields.push(field(`Partition ${i + 1}`, at, entrySize, `${type}${name ? ` "${name}"` : ''}`, 'GPT partition entry', 'header', [
           field('Type GUID', at, 16, `${typeGuid}${GPT_TYPES[typeGuid] ? ` (${GPT_TYPES[typeGuid]})` : ''}`, 'Partition type'),
           field('Unique GUID', at + 16, 16, guid(bytes, at + 16), 'Identifies this partition'),
-          field('First LBA', at + 32, 8, formatNumber(first), `Byte offset ${formatNumber(first * sectorSize)}`, 'offset'),
+          pointAt(field('First LBA', at + 32, 8, formatNumber(first), `Byte offset ${formatNumber(first * sectorSize)}`, 'offset'), first * sectorSize, bytes.length),
           field('Last LBA', at + 40, 8, formatNumber(last), 'Inclusive', 'offset'),
           field('Attributes', at + 48, 8, `0x${r.u64big(at + 48).toString(16)}`, 'Bit 0 required, bit 2 legacy BIOS bootable', 'flags'),
           field('Name', at + 56, 72, name, 'UTF-16LE partition name', 'string')
