@@ -1,6 +1,8 @@
 /* eslint-disable react/prop-types -- the project does not use prop-types */
 import { useMemo, useState } from 'react'
-import { useFile } from '../../state/hooks.js'
+import { useFile, useSelectionActions } from '../../state/hooks.js'
+import { formatOffset } from '../../lib/format.js'
+import { unusualNotes } from './unusual.js'
 import { formatBytes, hexBytes } from '../../formats/shared.js'
 import { visibleText } from '../../lib/visibleText.js'
 import './overview.css'
@@ -64,10 +66,38 @@ function DetailRow({ entry, open, onToggle }) {
   )
 }
 
+// Observations from the parser, not problems: the same notes the poster shows
+function Unusual({ notes, size }) {
+  const { jumpTo } = useSelectionActions()
+  return (
+    <section className="hd-panel overview-unusual">
+      <h4 className="hd-section-title">What&apos;s unusual</h4>
+      <ul>
+        {notes.map((note, index) => (
+          <li key={index}>
+            <span className="overview-unusual-text">{visibleText(note.text)}</span>
+            {note.offset !== null && note.offset < size && (
+              <button
+                type="button"
+                className="hd-button hd-button--small overview-unusual-jump"
+                aria-label={`Show ${formatOffset(note.offset)} in the hex view`}
+                onClick={() => jumpTo(note.offset, Math.min(note.length, size - note.offset))}
+              >
+                Show in hex view <span className="overview-unusual-offset">{formatOffset(note.offset)}</span>
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
+
 function Overview() {
   const { file, bytes, analysis, status, error } = useFile()
   const [opened, setOpened] = useState({ analysis: null, keys: new Set(), all: false })
   const { cards, rows, groups } = useMemo(() => splitSummary(analysis ? analysis.summary : []), [analysis])
+  const unusual = useMemo(() => unusualNotes(analysis), [analysis])
 
   if (!file) return null
 
@@ -163,6 +193,8 @@ function Overview() {
           ))}
         </section>
       )}
+
+      {unusual.length > 0 && <Unusual notes={unusual} size={bytes ? bytes.length : file.size} />}
     </div>
   )
 }

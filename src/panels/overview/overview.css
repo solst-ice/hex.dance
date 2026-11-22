@@ -39,3 +39,30 @@
 .overview-warnings .hd-section-title {
   margin-top: 0;
 }
+
+.overview-unusual .hd-section-title {
+  margin-top: 0;
+}
+
+.overview-unusual ul {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding-left: 20px;
+}
+
+.overview-unusual li {
+  color: var(--text);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.overview-unusual-jump {
+  margin-left: 8px;
+  vertical-align: baseline;
+}
+
+.overview-unusual-offset {
+  text-transform: none;
+}
