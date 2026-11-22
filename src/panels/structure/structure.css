@@ -255,6 +255,46 @@
   font-variant-numeric: tabular-nums;
 }
 
+.sx-pin {
+  border: 1px dashed color-mix(in srgb, var(--neon-pink) 60%, transparent);
+  border-radius: 4px;
+  color: var(--neon-pink);
+  flex: none;
+  font-size: 0.75em;
+  line-height: 1.3;
+  padding: 0 5px;
+  visibility: hidden;
+}
+
+.sx-row:hover .sx-pin,
+.sx-row.is-hovered .sx-pin,
+.sx-row.is-active .sx-pin,
+.sx-row.is-pinned .sx-pin {
+  visibility: visible;
+}
+
+.sx-row.is-pinned .sx-pin {
+  border-style: solid;
+}
+
+.sx-pin:hover {
+  background: var(--hd-pink-tint);
+}
+
+.sx-pin-button {
+  margin-left: auto;
+}
+
+.sx-pin-note {
+  font-size: 0.8em;
+  margin-top: 4px !important;
+  min-height: 1.2em;
+}
+
+.sx-pin-note:empty {
+  min-height: 0;
+}
+
 .sx-empty {
   color: var(--sx-text);
 }

@@ -529,6 +529,20 @@
   content: '>';
 }
 
+:root[data-theme="tui"] .sx-pin {
+  border: none;
+  border-radius: 0;
+  padding: 0;
+}
+
+:root[data-theme="tui"] .sx-pin::before {
+  content: '<';
+}
+
+:root[data-theme="tui"] .sx-pin::after {
+  content: '>';
+}
+
 :root[data-theme="tui"] .hd-tab-badge {
   background: none;
   color: var(--tui-bright-yellow);

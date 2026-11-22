@@ -2,11 +2,12 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { fieldKind, fieldKindLabel } from '../../lib/kinds.js'
 import { formatLength, formatOffset } from '../../lib/format.js'
+import { pinKey } from './treeModel.js'
 
 export const ROW_HEIGHT = 28
 const OVERSCAN = 8
 
-const Row = memo(function Row({ node, top, active, hovered, expanded, rowId, onPick, onToggle, onHover }) {
+const Row = memo(function Row({ node, top, active, hovered, expanded, pinned, rowId, onPick, onToggle, onHover, onPinRow }) {
   const { field, depth, children } = node
   const hasChildren = children.length > 0
   const kind = fieldKind(field.kind)
@@ -17,7 +18,7 @@ const Row = memo(function Row({ node, top, active, hovered, expanded, rowId, onP
       aria-level={depth + 1}
       aria-expanded={hasChildren ? expanded : undefined}
       aria-selected={active}
-      className={`sx-row${active ? ' is-active' : ''}${hovered ? ' is-hovered' : ''}`}
+      className={`sx-row${active ? ' is-active' : ''}${hovered ? ' is-hovered' : ''}${pinned ? ' is-pinned' : ''}`}
       style={{ top, '--sx-depth': depth }}
       onClick={() => onPick(node.id)}
       onDoubleClick={() => hasChildren && onToggle(node.id)}
@@ -41,6 +42,19 @@ const Row = memo(function Row({ node, top, active, hovered, expanded, rowId, onP
       <span className="sx-range hd-muted" aria-label={`offset ${formatOffset(field.offset)}, ${formatLength(field.length)}, ${fieldKindLabel(field.kind)}`}>
         {formatOffset(field.offset)}<span className="sx-len"> · {field.length.toLocaleString('en-US')}</span>
       </span>
+      {/* For the mouse, like the caret: from the keyboard, P in the list or the button above it */}
+      <span
+        className="sx-pin"
+        aria-hidden="true"
+        title={pinned ? 'Unpin from the poster' : 'Pin to the poster'}
+        onClick={event => {
+          event.stopPropagation()
+          onPinRow(node.id)
+        }}
+      >
+        {pinned ? 'pinned' : 'pin'}
+      </span>
+      {pinned && <span className="sr-only">, pinned to the poster</span>}
     </div>
   )
 })
@@ -48,9 +62,10 @@ const Row = memo(function Row({ node, top, active, hovered, expanded, rowId, onP
 /**
  * Windowed tree of fields: only the rows in view (plus a few) are rendered,
  * so tens of thousands of fields stay fast. Keyboard: arrows move, Right and
- * Left open and close, Home and End jump, Enter toggles.
+ * Left open and close, Home and End jump, Enter toggles, P pins the current
+ * field to the poster or unpins it.
  */
-function FieldTree({ index, rows, expanded, activeId, hoverId, revealToken, onPick, onToggle, onHover, label }) {
+function FieldTree({ index, rows, expanded, activeId, hoverId, revealToken, onPick, onToggle, onHover, pinnedKeys, onPin, onPinRow, label }) {
   const scrollerRef = useRef(null)
   const [scrollTop, setScrollTop] = useState(0)
   const [height, setHeight] = useState(400)
@@ -113,13 +128,18 @@ function FieldTree({ index, rows, expanded, activeId, hoverId, revealToken, onPi
         if (node && node.children.length) onToggle(node.id)
         else if (node) onPick(node.id)
         break
+      case 'p':
+      case 'P':
+        if (event.ctrlKey || event.metaKey || event.altKey) return
+        if (node) onPin(node.id)
+        break
       default:
         return
     }
     event.preventDefault()
     // Stepping through the tree: the hex view follows without flashing
     if (next !== null && next !== undefined) onPick(next, { reveal: true, flash: false })
-  }, [rows, activeId, index, expanded, height, onPick, onToggle])
+  }, [rows, activeId, index, expanded, height, onPick, onToggle, onPin])
 
   const activePosition = activeId >= 0 ? rows.indexOf(activeId) : -1
   const first = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN)
@@ -127,18 +147,21 @@ function FieldTree({ index, rows, expanded, activeId, hoverId, revealToken, onPi
   const rendered = []
   for (let i = first; i < last; i++) {
     const id = rows[i]
+    const node = index.nodes[id]
     rendered.push(
       <Row
         key={id}
-        node={index.nodes[id]}
+        node={node}
         top={i * ROW_HEIGHT}
         rowId={`sx-node-${id}`}
         active={id === activeId}
         hovered={id === hoverId}
         expanded={expanded.has(id)}
+        pinned={pinnedKeys.has(pinKey(node.field.offset, node.field.length))}
         onPick={onPick}
         onToggle={onToggle}
         onHover={onHover}
+        onPinRow={onPinRow}
       />
     )
   }
@@ -149,6 +172,7 @@ function FieldTree({ index, rows, expanded, activeId, hoverId, revealToken, onPi
       className="sx-tree"
       role="tree"
       aria-label={label}
+      aria-keyshortcuts="P"
       tabIndex={0}
       aria-activedescendant={activePosition >= first && activePosition < last ? `sx-node-${activeId}` : undefined}
       onKeyDown={onKeyDown}

@@ -1,13 +1,13 @@
 /* eslint-disable react/prop-types -- the project does not use prop-types */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useFile, useHexCursor, useHighlightLayer, useSelection } from '../../state/hooks.js'
+import { useFile, useHexCursor, useHighlightLayer, usePosterPins, useSelection } from '../../state/hooks.js'
 import { formatCardFor } from '../../education/index.js'
 import FieldTree from './FieldTree.jsx'
 import FormatCard from './FormatCard.jsx'
 import { fieldKind, fieldKindLabel, fieldKindMeaning } from '../../lib/kinds.js'
 import { buildTreeIndex } from '../../lib/fieldIndex.js'
 import { formatLength, formatOffset } from '../../lib/format.js'
-import { ancestors, locate, tourSteps, visibleRows } from './treeModel.js'
+import { ancestors, locate, pinKey, pinMessage, tourSteps, visibleRows } from './treeModel.js'
 import '../../lib/kinds.css'
 import './structure.css'
 
@@ -21,7 +21,7 @@ function keyOf(analysis) {
   return analysisKeys.get(analysis)
 }
 
-function FieldDetail({ index, id, tour }) {
+function FieldDetail({ index, id, tour, pinned, onPin, pinNote }) {
   if (id < 0) {
     return (
       <div className="sx-detail sx-detail--idle">
@@ -42,7 +42,17 @@ function FieldDetail({ index, id, tour }) {
         <span className="hd-badge sx-kind-badge" style={{ '--sx-kind': `var(--sx-field-${kind})` }}>
           {field.kind === 'magic' ? 'magic' : fieldKindLabel(field.kind).toLowerCase()}
         </span>
+        <button
+          type="button"
+          className={`hd-button hd-button--small sx-pin-button${pinned ? ' hd-button--active' : ''}`}
+          aria-pressed={pinned}
+          aria-describedby="sx-pin-note"
+          onClick={() => onPin(id)}
+        >
+          Pin to poster
+        </button>
       </div>
+      <p className="sx-pin-note hd-muted" id="sx-pin-note" role="status" aria-live="polite">{pinNote}</p>
       {field.value !== undefined && field.value !== '' && <p className="sx-detail-value hd-mono">{field.value}</p>}
       <p className="sx-detail-range">
         Offset {formatOffset(field.offset)} ({field.offset.toLocaleString('en-US')}), {formatLength(field.length)}
@@ -64,6 +74,10 @@ function StructureView({ analysis }) {
   const [tourStep, setTourStep] = useState(null)
   const rows = useMemo(() => visibleRows(index, expanded), [index, expanded])
   const nextButtonRef = useRef(null)
+  const { pins, toggle: togglePin, limit: pinLimit } = usePosterPins()
+  const pinnedKeys = useMemo(() => new Set(pins.map(pin => pinKey(pin.offset, pin.length))), [pins])
+  // What the last pin did, for the field it was done to
+  const [pinNote, setPinNote] = useState({ id: -1, text: '' })
 
   const activeRef = useRef(activeId)
   activeRef.current = activeId
@@ -104,6 +118,18 @@ function StructureView({ analysis }) {
   }, [])
 
   const hover = useCallback(id => setHoverId(id), [])
+
+  const pin = useCallback(id => {
+    const { field } = index.nodes[id]
+    const outcome = togglePin({ offset: field.offset, length: field.length, name: field.name })
+    setPinNote({ id, text: pinMessage(outcome, field.name, pinLimit) })
+  }, [index, togglePin, pinLimit])
+
+  // The pin on a row also picks the row, so the detail shows what was pinned
+  const pinRow = useCallback(id => {
+    pin(id)
+    if (id !== activeRef.current) pick(id)
+  }, [pin, pick])
 
   // Selection made elsewhere (hex view, other panels): show the field holding it
   useEffect(() => {
@@ -192,7 +218,14 @@ function StructureView({ analysis }) {
         </div>
       )}
 
-      <FieldDetail index={index} id={activeId} tour={touring ? { step: tourStep, total: steps.length } : null} />
+      <FieldDetail
+        index={index}
+        id={activeId}
+        tour={touring ? { step: tourStep, total: steps.length } : null}
+        pinned={activeId >= 0 && pinnedKeys.has(pinKey(index.nodes[activeId].field.offset, index.nodes[activeId].field.length))}
+        onPin={pin}
+        pinNote={pinNote.id === activeId ? pinNote.text : ''}
+      />
 
       <FieldTree
         index={index}
@@ -204,6 +237,9 @@ function StructureView({ analysis }) {
         onPick={pick}
         onToggle={toggle}
         onHover={hover}
+        pinnedKeys={pinnedKeys}
+        onPin={pin}
+        onPinRow={pinRow}
         label={`Fields of this ${analysis.formatName}`}
       />
     </>
