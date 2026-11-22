@@ -134,8 +134,11 @@ export function describePlan(plan, { pins = [] } = {}) {
   }
   const omitted = Number.isSafeInteger(plan.omittedLabels) ? plan.omittedLabels : 0
   if (omitted > 0) text += ` ${plural(omitted, 'more field')} ${omitted === 1 ? 'is' : 'are'} not labelled.`
-  if (pins.length) {
-    const labelled = pinnedOnPoster(plan, pins)
+  // Pins only shape the whole-file poster; in the other modes the hint under the chips says so
+  if (pins.length && (plan.mode === undefined || plan.mode === 'tour')) {
+    // The planner's own count: a pinned field with children is labelled through them
+    const counted = plan.pins?.labelled
+    const labelled = Number.isSafeInteger(counted) ? Math.min(counted, pins.length) : pinnedOnPoster(plan, pins)
     if (labelled === pins.length) text += pins.length === 1 ? ' The pinned field is labelled.' : ` All ${pins.length} pinned fields are labelled.`
     else text += ` ${labelled} of ${plural(pins.length, 'pinned field')} ${labelled === 1 ? 'is' : 'are'} labelled.`
   }

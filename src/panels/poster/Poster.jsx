@@ -163,7 +163,7 @@ export default function Poster() {
   const themeToken = useThemeVersion()
 
   const choices = useMemo(() => (analysis && bytes ? topLevelChoices(analysis, bytes.length) : []), [analysis, bytes])
-  const include = useMemo(() => includeChoices(analysis), [analysis])
+  const includeGuess = useMemo(() => includeChoices(analysis), [analysis])
   const current = source.file === file ? source : { file, mode: DEFAULT_MODE, range: null, fieldIndex: 0 }
   const mode = current.mode === 'field' && !choices[current.fieldIndex] ? DEFAULT_MODE : current.mode
   const setOption = (key, value) => setOptions(previous => ({ ...previous, [key]: value }))
@@ -195,6 +195,9 @@ export default function Poster() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, bytes, analysis, file, built, builtRevision, themeToken])
 
+  // Which switches do something: the poster itself knows what it could draw for this file,
+  // whatever is switched off; before one is built, go by what the analysis holds
+  const include = poster?.scene?.available || includeGuess
   const previewUrl = usePreviewUrl(poster?.svg)
   const baseName = posterBaseName(file?.name)
 

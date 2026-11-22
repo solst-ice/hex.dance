@@ -120,7 +120,25 @@ test('the summary sentence for one place and for many', () => {
 
 test('the summary stays true for a real plan', () => {
   const fields = Array.from({ length: 6 }, (_, i) => ({ name: `f${i}`, offset: i * 4, length: 4 }))
-  const plan = planPoster({ analysis: { fields }, size: 4096 })
+  const plan = planPoster({ analysis: { fields }, size: 4096, mode: 'auto' })
   const text = describePlan(plan)
-  assert.match(text, /^Showing 0x0–0x7F in 8 rows \(at most 40, long runs collapsed\) with 6 labels\./)
+  assert.match(text, /^Showing 0x0–0x7F in 8 rows \(at most 40, long runs collapsed\) with \d+ labels?\./)
+  assert.equal(text.includes(`with ${plan.labels.length} label`), true)
+})
+
+test('the summary uses the planner\'s count of pinned fields, and leaves pins out of the other modes', () => {
+  const child = (name, offset) => ({ name, offset, length: 4, value: `0x${offset.toString(16)}`, kind: 'size' })
+  const fields = [
+    { name: 'Magic', offset: 0, length: 4, kind: 'magic', value: 'TEST' },
+    { name: 'Header', offset: 4, length: 12, children: [child('a', 4), child('b', 8), child('c', 12)] },
+    { name: 'Body', offset: 16, length: 64, kind: 'data' }
+  ]
+  const bytes = Uint8Array.from({ length: 4096 }, (_, i) => (i * 7 + 1) & 0xff)
+  // The pinned field has children, so it is labelled through them, not as one box of its own
+  const pins = [{ offset: 4, length: 12 }]
+  const tour = planPoster({ analysis: { fields }, size: bytes.length, bytes, mode: 'tour', pins })
+  assert.equal(tour.pins.labelled, 1)
+  assert.match(describePlan(tour, { pins }), /The pinned field is labelled\.$/)
+  const start = planPoster({ analysis: { fields }, size: bytes.length, bytes, mode: 'auto', pins })
+  assert.doesNotMatch(describePlan(start, { pins }), /pinned/)
 })
