@@ -29,6 +29,19 @@ const SUMMARY_ENTRIES = 128
 const SUMMARY_CHILDREN = 24
 const POINTER_SCAN = 64
 const PAD_NAME = /(^|[\s_.-])(reserved|padding|unused|pad)\d*($|[\s_.-])|(^|_)res\d*$/i
+// A run of neighbouring fields whose bytes are all one value other than zero
+// (0x0D, 0xFF, 0xCC...) merges into one box when it has at least this many
+// fields and bytes; a run of two such fields, or one field of FILL_ALONE
+// bytes or more, merges with nothing but counts as dull
+export const FILL_RUN_FIELDS = 3
+export const FILL_RUN_BYTES = 8
+const FILL_ALONE = 8
+// Readable text: bytes looked at (the first and last TEXT_EDGE, and
+// TEXT_SAMPLES pieces of TEXT_SAMPLE between), and the shares that make text
+export const TEXT_MIN = 32
+const TEXT_EDGE = 512
+const TEXT_SAMPLES = 6
+const TEXT_SAMPLE = 64
 
 const isCount = n => Number.isSafeInteger(n) && n >= 0
 
@@ -62,6 +75,67 @@ export function zeroText(value) {
   if (s === '' || /^(empty|none|\(none\)|null|n\/a|-|0x0*|false)$/.test(s)) return true
   const lead = leadingNumber(s)
   return Boolean(lead) && lead.n === 0n
+}
+
+const printable = b => (b >= 0x20 && b < 0x7f) || b === 0x09 || b === 0x0a || b === 0x0d
+const letter = b => (b >= 0x41 && b <= 0x5a) || (b >= 0x61 && b <= 0x7a)
+
+/**
+ * Whether bytes [start, end) read as text: at least 90% printable ASCII, tab,
+ * CR or LF, at least a third letters, and at least eight different bytes, over
+ * the first and last TEXT_EDGE bytes and TEXT_SAMPLES samples between (at
+ * most about 1.4 KB looked at, whatever the length).
+ * @param {Uint8Array|null} bytes
+ */
+export function readableText(bytes, start, end) {
+  const stats = textStats(bytes, start, end)
+  return Boolean(stats) && stats.good >= stats.total * 0.9 && stats.letters * 3 >= stats.total && stats.distinct >= 8
+}
+
+/**
+ * Whether bytes [start, end) read as lines of text, the kind worth setting
+ * out as a listing: readable as above, with hardly anything unprintable
+ * (95% printable, at most 2% NUL bytes) and with the spaces and line ends
+ * that words need (5% or more). A table of NUL-separated names is readable
+ * text but not this.
+ */
+export function readableProse(bytes, start, end) {
+  const stats = textStats(bytes, start, end)
+  return Boolean(stats) && stats.good >= stats.total * 0.95 && stats.letters * 3 >= stats.total && stats.distinct >= 8 &&
+    stats.nuls * 50 <= stats.total && stats.spaces * 20 >= stats.total
+}
+
+// What the sampled bytes of [start, end) hold, or null when there is nothing to judge
+function textStats(bytes, start, end) {
+  if (!(bytes instanceof Uint8Array) || !isCount(start) || !(end - start >= TEXT_MIN) || end > bytes.length) return null
+  const pieces = []
+  if (end - start <= 2 * TEXT_EDGE + TEXT_SAMPLES * TEXT_SAMPLE) pieces.push([start, end])
+  else {
+    pieces.push([start, start + TEXT_EDGE], [end - TEXT_EDGE, end])
+    const between = end - start - 2 * TEXT_EDGE
+    for (let k = 1; k <= TEXT_SAMPLES; k++) {
+      const at = start + TEXT_EDGE + Math.floor((between * k) / (TEXT_SAMPLES + 1)) - TEXT_SAMPLE / 2
+      pieces.push([at, at + TEXT_SAMPLE])
+    }
+  }
+  let total = 0
+  let good = 0
+  let letters = 0
+  let nuls = 0
+  let spaces = 0
+  const seen = new Set()
+  for (const [a, b] of pieces) {
+    for (let i = a; i < b; i++) {
+      const v = bytes[i]
+      total++
+      if (printable(v)) good++
+      if (letter(v)) letters++
+      if (v === 0) nuls++
+      else if (v === 0x20 || v === 0x09 || v === 0x0A || v === 0x0D) spaces++
+      if (seen.size < 8) seen.add(v)
+    }
+  }
+  return total > 0 ? { total, good, letters, nuls, spaces, distinct: seen.size } : null
 }
 
 /** A name with indices and numbers taken out, to compare entries of a list. */
@@ -123,7 +197,7 @@ class PosterTree {
       length: region.length,
       kind: regionKindOf(region.kind),
       value: kind,
-      description: 'Region from the file map, not broken into fields',
+      description: 'From the file map; no fields inside',
       padding: kind === 'padding'
     }
   }
@@ -251,26 +325,28 @@ class PosterTree {
 
   /**
    * The fields inside a region, with the bytes around them as pieces of the
-   * region ("start of Section 1", "rest of Section 1"), so that what the
-   * region holds besides those fields can still get a label.
+   * region ("Section 1, first 80 bytes", "Section 1, the rest"), so that what
+   * the region holds besides those fields can still get a label.
    */
   withPieces(region, inside) {
     const out = []
     const piece = (offset, end, name) => {
-      const node = this.node({ ...region.src, name, offset, length: end - offset, description: `Part of ${region.name} that no field describes` }, region, true)
+      const node = this.node({ ...region.src, name, offset, length: end - offset, description: 'Bytes no field describes' }, region, true)
       node.raw = []
       node.piece = true
       out.push(node)
     }
     let at = region.offset
     let middles = 0
+    const hexAt = n => '0x' + n.toString(16).toUpperCase()
     for (const child of inside) {
       const gap = child.offset - at
-      if (at === region.offset ? gap >= 1 : gap >= 64 && middles++ < 32) piece(at, child.offset, at === region.offset ? `start of ${region.name}` : `more of ${region.name}`)
+      if (at === region.offset && gap >= 1) piece(at, child.offset, `${region.name}, first ${formatNumber(gap)} byte${gap === 1 ? '' : 's'}`)
+      else if (at > region.offset && gap >= 64 && middles++ < 32) piece(at, child.offset, `${region.name}, from ${hexAt(at)}`)
       out.push(child)
       at = child.end
     }
-    if (region.end > at) piece(at, region.end, `rest of ${region.name}`)
+    if (region.end > at) piece(at, region.end, at === region.offset ? region.name : `${region.name}, the rest`)
     return out
   }
 
@@ -310,13 +386,52 @@ class PosterTree {
     }
   }
 
-  allZero(node) {
-    if (!this.bytes) return null
+  /**
+   * The one value all of a node's bytes hold, -1 when they differ, or null
+   * when that is not known (no bytes, or past the check limits).
+   */
+  fillOf(node) {
+    if (node.fill !== undefined) return node.fill
+    let fill = null
     const length = node.end - node.offset
-    if (length > ZERO_CAP_FIELD || length > this.zeroBudget) return null
-    this.zeroBudget -= length
-    for (let i = node.offset; i < node.end; i++) if (this.bytes[i] !== 0) return false
-    return true
+    if (this.bytes && length <= ZERO_CAP_FIELD && length <= this.zeroBudget) {
+      this.zeroBudget -= length
+      const v = this.bytes[node.offset]
+      fill = v
+      for (let i = node.offset + 1; i < node.end; i++) {
+        if (this.bytes[i] !== v) {
+          fill = -1
+          break
+        }
+      }
+    }
+    node.fill = fill
+    return fill
+  }
+
+  allZero(node) {
+    const fill = this.fillOf(node)
+    return fill === null ? null : fill === 0
+  }
+
+  /** Whether a node may be folded into a box with its neighbours at all. */
+  mergeable(node) {
+    return !node.merged && !node.pinned && !node.hasPin && node.kind !== 'magic' && !this.pointerOf(node)
+  }
+
+  /**
+   * The value a node is filled with, when it may join a run of one repeated
+   * byte other than zero; null otherwise.
+   */
+  fillerByte(node) {
+    if (!this.mergeable(node)) return null
+    const fill = this.fillOf(node)
+    return fill !== null && fill > 0 ? fill : null
+  }
+
+  /** Dull: nothing set, reserved, or one repeated byte (see mergeDull). */
+  isFiller(node) {
+    return Boolean(this.dull(node)) || node.fillDull === true
   }
 
   /** Why a node carries nothing ('zero' or 'reserved'), or null when it does. */
@@ -324,7 +439,7 @@ class PosterTree {
     if (node.dullness !== undefined) return node.dullness
     let why = null
     if (node.merged) why = node.merged.reason
-    else if (!node.pinned && !node.hasPin && node.kind !== 'magic' && !this.pointerOf(node)) {
+    else if (this.mergeable(node)) {
       const reserved = node.rawKind === 'padding' || node.src.padding === true || PAD_NAME.test(node.name)
       const zero = this.allZero(node)
       if (zero === true) why = 'zero'
@@ -350,6 +465,21 @@ class PosterTree {
   }
 
   mergeDull(raw, parent) {
+    // Runs of one repeated byte other than zero first
+    const filled = new Map()
+    for (let i = 0; i < raw.length;) {
+      const v = this.fillerByte(raw[i])
+      if (v === null) {
+        i++
+        continue
+      }
+      let j = i + 1
+      while (j < raw.length && raw[j].offset === raw[j - 1].end && this.fillerByte(raw[j]) === v) j++
+      const bytes = raw[j - 1].end - raw[i].offset
+      if (j - i >= FILL_RUN_FIELDS && bytes >= FILL_RUN_BYTES) filled.set(i, { end: j, fill: v })
+      else if ((j - i >= 2 && bytes >= FILL_RUN_BYTES) || bytes >= FILL_ALONE) for (let k = i; k < j; k++) raw[k].fillDull = true
+      i = j
+    }
     const out = []
     let run = []
     const flush = () => {
@@ -357,7 +487,15 @@ class PosterTree {
       else out.push(...run)
       run = []
     }
-    for (const node of raw) {
+    for (let i = 0; i < raw.length; i++) {
+      const node = raw[i]
+      const fillRun = filled.get(i)
+      if (fillRun) {
+        flush()
+        out.push(this.mergedNode(raw.slice(i, fillRun.end), parent, fillRun.fill))
+        i = fillRun.end - 1
+        continue
+      }
       const why = this.dull(node)
       if (why && (run.length === 0 || run[run.length - 1].end === node.offset)) run.push(node)
       else {
@@ -370,19 +508,29 @@ class PosterTree {
     return out
   }
 
-  mergedNode(run, parent) {
+  /** One box for a run of fields; `fill` is the byte they all hold, when that is what joins them. */
+  mergedNode(run, parent, fill = null) {
     const first = run[0]
     const last = run[run.length - 1]
-    const reasons = new Set(run.map(n => this.dull(n)))
-    const reason = reasons.size === 1 ? [...reasons][0] : 'mixed'
+    let reason
+    if (fill !== null) reason = 'fill'
+    else {
+      const reasons = new Set(run.map(n => this.dull(n)))
+      reason = reasons.size === 1 ? [...reasons][0] : 'mixed'
+    }
     const what = run.every(n => n.region) ? 'regions' : 'fields'
-    const says = reason === 'zero' ? (this.bytes ? 'all zero' : 'all zero or empty') : reason === 'reserved' ? 'reserved or padding' : 'zero or reserved'
+    const says = reason === 'fill'
+      ? `all ${fill.toString(16).toUpperCase().padStart(2, '0')}`
+      : reason === 'zero' ? (this.bytes ? 'all zero' : 'all zero or empty') : reason === 'reserved' ? 'reserved or padding' : 'zero or reserved'
+    const merged = { count: run.length, first: first.name, last: last.name, reason }
+    if (fill !== null) merged.fill = fill
     return {
       id: this.nextId++,
       src: { name: '', offset: first.offset, length: last.end - first.offset },
       name: `${first.name} to ${last.name}`,
       value: `${run.length} ${what}, ${says}`,
-      description: reason === 'zero' ? 'Merged into one box: nothing set in any of them' : 'Merged into one box: kept free by the format',
+      // The name and value say it all
+      description: '',
       kind: 'padding',
       rawKind: 'padding',
       offset: first.offset,
@@ -390,7 +538,7 @@ class PosterTree {
       level: parent.level + 1,
       parent,
       region: run.every(n => n.region),
-      merged: { count: run.length, first: first.name, last: last.name, reason },
+      merged,
       dullness: reason,
       raw: [],
       units: []

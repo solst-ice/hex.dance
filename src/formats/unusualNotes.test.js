@@ -130,6 +130,74 @@ test('PE: header placement, sizes and alignment', () => {
   assertNoNote(buildCustomPE({ fileAlignment: 0x1000, sectionAlignment: 0x10000 }), /aligned/)
 })
 
+// A PE whose header starts at 0x200, leaving 0x40-0x1FF for whatever `fill` writes there
+function peWithStub(fill, options = {}) {
+  const bytes = buildCustomPE({ peOffset: 0x200, sections: [TEXT, RDATA, DATA], ...options })
+  fill(bytes)
+  return bytes
+}
+const SOURCE = ';this file is also its own source\r\n;read it with type\r\n\r\ndb "MZ"\r\nalign 3bh, db 0dh\r\n'
+const writeText = (bytes, from, to, text) => { for (let i = from; i < to; i++) bytes[i] = text.charCodeAt((i - from) % text.length) }
+// The stub every linker writes: 14 bytes of code, one sentence, padding
+const DOS_STUB = [0x0E, 0x1F, 0xBA, 0x0E, 0x00, 0xB4, 0x09, 0xCD, 0x21, 0xB8, 0x01, 0x4C, 0xCD, 0x21,
+  ...Array.from('This program cannot be run in DOS mode.\r\r\n$', c => c.charCodeAt(0))]
+
+test('PE: text where the DOS program usually is', () => {
+  const quine = peWithStub(bytes => writeText(bytes, 0x40, 0x200, SOURCE))
+  assertNote(quine, /^The 448 bytes between the DOS header and the PE header are readable text/)
+  const analysis = analyse(quine)
+  const note = analysis.unusual.find(n => /readable text/.test(n.text))
+  assert.deepEqual([note.offset, note.length], [0x40, 448])
+  // The field and the region say what is there, instead of calling it a DOS program
+  const stub = analysis.fields.find(f => f.offset === 0x40)
+  assert.equal(stub.name, 'Text before the PE header')
+  assert.equal(stub.kind, 'string')
+  assert.equal(stub.value, '448 bytes of text')
+  assert.ok(!/DOS program that prints/.test(stub.description))
+  assert.ok(analysis.regions.some(r => r.offset === 0x40 && r.name === 'Text before the PE header'))
+  assert.ok(!analysis.fields.some(f => f.name === 'DOS stub') && !analysis.regions.some(r => r.name === 'DOS stub'))
+
+  // A real stub, with zeros or with padding around it, is still a DOS stub and gets no note
+  for (const pad of [0x00, 0x90]) {
+    const usual = peWithStub(bytes => {
+      bytes.fill(pad, 0x40, 0x200)
+      bytes.set(DOS_STUB, 0x40)
+    })
+    assertNoNote(usual, /readable text/)
+    assert.equal(analyse(usual).fields.find(f => f.offset === 0x40).name, 'DOS stub')
+  }
+  // Mostly text is not enough: 80% printable stays a stub
+  const mixed = peWithStub(bytes => {
+    writeText(bytes, 0x40, 0x200, SOURCE)
+    for (let i = 0x40; i < 0x200; i += 5) bytes[i] = 0x01
+  })
+  assertNoNote(mixed, /readable text/)
+  // Too short to call
+  assertNoNote(buildCustomPE({ peOffset: 0x60, sections: [TEXT] }), /readable text/)
+})
+
+test('PE: a DOS header filled with one byte', () => {
+  const filled = peWithStub(bytes => bytes.fill(0x0D, 2, 0x3C))
+  assertNote(filled, /^Every byte of the DOS header between its signature and the offset of the PE header is 0x0D \(a carriage return\)\. Windows ignores those bytes/)
+  const note = analyse(filled).unusual.find(n => /Every byte of the DOS header/.test(n.text))
+  assert.deepEqual([note.offset, note.length], [2, 58])
+  assertNote(peWithStub(bytes => bytes.fill(0xFF, 2, 0x3C)), /is 0xFF\. Windows/)
+  // All zero is what hand-made and packed files commonly do, and one byte out of line is not "filled"
+  assertNoNote(peWithStub(() => {}), /Every byte of the DOS header/)
+  assertNoNote(peWithStub(bytes => { bytes.fill(0x0D, 2, 0x3C); bytes[0x20] = 0 }), /Every byte of the DOS header/)
+  // A PE header that starts inside the DOS header leaves no such range
+  assertNoNote(buildCustomPE({ peOffset: 0x10, sections: [TEXT] }), /Every byte of the DOS header/)
+})
+
+test('PE: a zero timestamp is shown as not set, not as a date in 1970', () => {
+  const stamp = analysis => [
+    analysis.summary.find(item => item.label === 'Timestamp').value,
+    analysis.fields.find(f => f.name === 'COFF file header').children.find(f => f.name === 'TimeDateStamp').value
+  ]
+  assert.deepEqual(stamp(analyse(buildCustomPE({ timestamp: 0 }))), ['0 (not set)', '0x0 (not set)'])
+  assert.deepEqual(stamp(analyse(buildCustomPE({ timestamp: 0x4B3D3B00 }))), ['2010-01-01T00:00:00.000Z', '0x4B3D3B00 (2010-01-01T00:00:00.000Z)'])
+})
+
 test('PE: TLS callbacks outside code', () => {
   assertNote(buildCustomPE({ tlsCallbacks: [0x3010] }), /TLS callback, which runs before the entry point, is at RVA 0x3010, outside every code section/)
   assertNote(buildCustomPE({ tlsCallbacks: [0x9000] }), /outside every code section/)

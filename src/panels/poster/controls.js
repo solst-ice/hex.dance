@@ -11,10 +11,11 @@ export const TALL_MAX_ROWS = 120
 export const INCLUDE = [
   ['pointers', 'Pointers'],
   ['unusual', "What's unusual"],
+  ['text', 'Readable text'],
   ['tiles', 'Section tiles'],
   ['memory', 'Memory map']
 ]
-export const DEFAULT_SHOW = { pointers: true, unusual: true, tiles: true, memory: true }
+export const DEFAULT_SHOW = { pointers: true, unusual: true, text: true, tiles: true, memory: true }
 
 // Tree nodes looked at when searching for a pointer field, whatever the parser produced
 const TARGET_VISITS = 20000
@@ -36,19 +37,35 @@ export function hasPointerField(fields, budget = TARGET_VISITS) {
   return false
 }
 
+// Sections looked at when counting those that take up memory
+const SECTION_VISITS = 1024
+
+/** How many sections take up memory (have a size there), up to `enough`. */
+function sectionsInMemory(sections, enough = 2) {
+  let n = 0
+  for (const s of sections.slice(0, SECTION_VISITS)) {
+    if (typeof s?.memSize === 'number' && s.memSize > 0 && Number.isFinite(s.memSize) && ++n >= enough) break
+  }
+  return n
+}
+
 /**
- * Which "Include" switches can change the poster of this file.
+ * Which "Include" switches can change the poster of this file. A guess from
+ * the analysis, for before a poster is built; the poster's own `available`
+ * is exact. Readable text is found by the planner, so it is never guessed.
  * @param {import('../../analysis/types.js').Analysis|null} analysis
- * @returns {{ pointers: boolean, unusual: boolean, tiles: boolean, memory: boolean }}
+ * @returns {{ pointers: boolean, unusual: boolean, text: boolean, tiles: boolean, memory: boolean }}
  */
 export function includeChoices(analysis) {
-  const sections = Array.isArray(analysis?.image?.sections) ? analysis.image.sections.length : 0
+  const list = Array.isArray(analysis?.image?.sections) ? analysis.image.sections : []
   const regions = Array.isArray(analysis?.regions) ? analysis.regions.length : 0
   return {
     pointers: hasPointerField(analysis?.fields),
     unusual: Array.isArray(analysis?.unusual) && analysis.unusual.length > 0,
-    tiles: sections > 0 || regions >= 3,
-    memory: sections > 0
+    text: false,
+    tiles: list.length > 0 || regions >= 3,
+    // One section is one wedge: the diagram needs two that take up memory
+    memory: sectionsInMemory(list) >= 2
   }
 }
 
@@ -60,7 +77,7 @@ export function includeChoices(analysis) {
  * @param {{ start: number, end: number }|null} state.range
  * @param {number} state.fieldIndex
  * @param {Array<{ offset: number, length: number }>} state.pins
- * @param {{ pointers: boolean, unusual: boolean, tiles: boolean, memory: boolean }} state.show
+ * @param {{ pointers: boolean, unusual: boolean, text: boolean, tiles: boolean, memory: boolean }} state.show
  */
 export function posterOptions({ options, mode, range, fieldIndex, pins, show }) {
   const out = {
@@ -76,6 +93,7 @@ export function posterOptions({ options, mode, range, fieldIndex, pins, show }) 
     show: {
       pointers: show?.pointers !== false,
       unusual: show?.unusual !== false,
+      text: show?.text !== false,
       tiles: show?.tiles !== false,
       memory: show?.memory !== false
     }

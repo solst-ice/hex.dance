@@ -1,7 +1,6 @@
 // The "what's unusual" box: plain sentences from the parsers (untrusted text,
-// cleaned, wrapped and cut to fit) plus facts the poster works out itself,
-// each with the offset that shows it. At most a handful of lines, in one or
-// two columns.
+// cleaned and wrapped) plus facts the poster works out itself, each with the
+// offset that shows it, in one or two columns. Notes are shown whole.
 
 import { cleanText } from './escape.js'
 import { textWidth, charsFor, hex, plural, whole, wrapLines } from './measure.js'
@@ -13,8 +12,16 @@ const PAD_TOP = 34
 const PAD_BOTTOM = 12
 const NOTE_GAP = 5
 const MAX_NOTES = 24
+// Lines one note may take: parsers write a sentence or two, so this only stops a runaway
+const NOTE_LINES = 8
 const TWO_COLUMNS_AT = 840
 const COLUMN_GAP = 28
+const TAB_H = 15
+const TAB_F = 10
+const TAB_GAP = 8
+
+/** Width of the numbered tab for box `number`, as in the legend. */
+const tabWidth = number => Math.max(20, String(number).length * TAB_F * 0.6 + 9)
 
 /** The notes to show: parser notes first, then computed facts; empty texts and repeats dropped. */
 export function unusualNotes(analysis, facts = []) {
@@ -37,85 +44,48 @@ export function unusualNotes(analysis, facts = []) {
 
 function layout(notes, w) {
   const columns = w >= TWO_COLUMNS_AT && notes.length >= 2 ? 2 : 1
-  const maxLines = columns === 2 ? 7 : 10
   const colW = (w - 2 * PAD_X - (columns - 1) * COLUMN_GAP) / columns
   const offW = notes.some(n => n.offset !== null) ? Math.max(...notes.map(n => (n.offset !== null ? textWidth(hex(n.offset), 11) : 0))) + 10 : 0
-  const textChars = charsFor(colW - offW - 12, F)
-  const cols = Array.from({ length: columns }, () => ({ items: [], lines: 0 }))
-  let shown = 0
-  // Two columns: the split in reading order that shows every note in the
-  // fewest lines, when there is one
+  // A column for the numbered tabs of the boxes that hold the offsets, when any does
+  const tabW = notes.some(n => n.tab) ? Math.max(...notes.map(n => (n.tab ? tabWidth(n.tab.number) : 0))) + TAB_GAP : 0
+  const textX = offW + tabW || 12
+  const textChars = charsFor(colW - (offW + tabW) - 12, F)
+  // Every note is shown whole: the box grows instead of cutting one short
+  const wrapped = notes.map(note => ({ note, lines: wrapLines(note.text, textChars, NOTE_LINES) }))
+  const gap = NOTE_GAP / LINE
+  // Two columns: the split, in reading order, that makes the box shortest
+  let split = wrapped.length
   if (columns === 2) {
-    const wrapped = notes.map(note => ({ note, lines: wrapLines(note.text, textChars, 3) }))
-    const total = wrapped.reduce((n, x) => n + x.lines.length, 0)
-    let bestSplit = -1
-    let bestH = Infinity
+    const total = wrapped.reduce((n, x) => n + x.lines.length + gap, 0)
+    let best = Infinity
     let first = 0
     for (let i = 1; i < wrapped.length; i++) {
-      first += wrapped[i - 1].lines.length
+      first += wrapped[i - 1].lines.length + gap
       const h = Math.max(first, total - first)
-      if (first <= maxLines && total - first <= maxLines && h < bestH) {
-        bestH = h
-        bestSplit = i
+      if (h < best) {
+        best = h
+        split = i
       }
     }
-    if (bestSplit > 0) {
-      wrapped.forEach((x, i) => {
-        const col = cols[i < bestSplit ? 0 : 1]
-        col.items.push({ note: x.note, lines: x.lines, y: col.lines })
-        col.lines += x.lines.length
-      })
-      const lineCount = Math.max(...cols.map(col => col.lines + col.items.length * (NOTE_GAP / LINE)))
-      return { columns, colW, offW, cols, more: 0, height: PAD_TOP + lineCount * LINE + PAD_BOTTOM }
-    }
   }
-  // Otherwise fill columns in reading order: the first column, then the second
-  let c = 0
-  for (const note of notes) {
-    let col = cols[c]
-    let room = maxLines - col.lines
-    const whole_ = wrapLines(note.text, textChars, 3)
-    if (whole_.length > room && c < columns - 1) {
-      c++
-      col = cols[c]
-      room = maxLines - col.lines
-    }
-    if (room < 1) break
-    const lines = whole_.length <= room ? whole_ : wrapLines(note.text, textChars, room)
-    if (!lines.length) continue
-    col.items.push({ note, lines, y: col.lines })
-    col.lines += lines.length
-    shown++
-  }
-  // Balance two columns when everything fit in the first
-  if (columns === 2 && cols[1].items.length === 0 && cols[0].items.length > 1) {
-    const half = cols[0].lines / 2
-    const moved = []
-    while (cols[0].items.length > 1 && cols[0].lines - cols[0].items[cols[0].items.length - 1].lines.length >= half) {
-      const item = cols[0].items.pop()
-      cols[0].lines -= item.lines.length
-      moved.unshift(item)
-    }
-    let y = 0
-    for (const item of moved) {
-      item.y = y
-      y += item.lines.length
-    }
-    cols[1].items = moved
-    cols[1].lines = y
-  }
-  const more = notes.length - shown
-  const lineCount = Math.max(...cols.map(col => col.lines + col.items.length * (NOTE_GAP / LINE)))
-  const height = PAD_TOP + lineCount * LINE + (more > 0 ? LINE : 0) + PAD_BOTTOM
-  return { columns, colW, offW, cols, more, height }
+  const cols = Array.from({ length: columns }, () => ({ items: [], lines: 0 }))
+  wrapped.forEach((x, i) => {
+    const col = cols[i < split ? 0 : 1]
+    col.items.push({ note: x.note, lines: x.lines, y: col.lines })
+    col.lines += x.lines.length
+  })
+  const lineCount = Math.max(...cols.map(col => col.lines + col.items.length * gap))
+  return { columns, colW, offW, textX, cols, more: 0, height: PAD_TOP + lineCount * LINE + PAD_BOTTOM }
 }
 
 /**
  * The band, or null when there is nothing to say.
- * @param {{ analysis: Object, colors: Object, facts?: Array<string|{text: string, offset?: number}> }} input
+ * @param {{ analysis: Object, colors: Object, facts?: Array<string|{text: string, offset?: number}>,
+ *   boxAt?: (offset: number) => ({ number: number, color: string }|null) }} input
+ *   boxAt names the numbered box on the poster that holds an offset, if any
  */
-export function unusualBand({ analysis, colors, facts = [] }) {
-  const notes = unusualNotes(analysis, facts)
+export function unusualBand({ analysis, colors, facts = [], boxAt = () => null }) {
+  const notes = unusualNotes(analysis, facts).map(note => ({ ...note, tab: note.offset !== null ? boxAt(note.offset) || null : null }))
   if (!notes.length) return null
   return {
     id: 'unusual',
@@ -136,11 +106,17 @@ export function unusualBand({ analysis, colors, facts = [] }) {
           const iy = y + PAD_TOP + item.y * LINE + col.items.indexOf(item) * NOTE_GAP
           if (item.note.offset !== null) {
             el.push({ t: 'text', x: cx, y: iy + 10, size: 11, fill: colors.accent3, text: hex(item.note.offset), g: 'unusual' })
+            const tab = item.note.tab
+            if (tab) {
+              const tw = tabWidth(tab.number)
+              el.push({ t: 'tab', x: cx + L.offW, y: iy - 1, w: tw, h: TAB_H, fill: tab.color, round: 'all', g: 'unusual' })
+              el.push({ t: 'text', x: cx + L.offW + tw / 2, y: iy + 10, size: TAB_F, weight: 700, fill: colors.tabText, anchor: 'middle', text: String(tab.number), g: 'unusual' })
+            }
           } else {
             el.push({ t: 'rect', x: cx + 1, y: iy + 4, w: 5, h: 5, rx: 1, fill: colors.accent3, g: 'unusual' })
           }
           item.lines.forEach((line, li) => {
-            el.push({ t: 'text', x: cx + L.offW + (L.offW ? 0 : 12), y: iy + 11 + li * LINE, size: F, fill: colors.text, text: line, g: 'unusual' })
+            el.push({ t: 'text', x: cx + L.textX, y: iy + 11 + li * LINE, size: F, fill: colors.text, text: line, g: 'unusual' })
           })
         }
       })

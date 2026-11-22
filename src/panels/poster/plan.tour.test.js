@@ -414,3 +414,240 @@ test('rows that only repeat the row above are not used as filler', () => {
   const plan = planPoster({ analysis: analysisWith([{ name: 'm', offset: 0, length: 4, kind: 'magic' }, { name: 'code', offset: 0x100, length: 0x3f00, kind: 'data' }]), size, bytes, maxRows: 120 })
   assert.ok(plan.items.length < 20, `${plan.items.length} items for repeated rows`)
 })
+
+// --- Filler, text and legend wording ------------------------------------------
+
+/**
+ * Shaped like a "type-able" program: a DOS header filled with 0x0D, a long
+ * stretch of source text ending in short strings, a PE header with a full
+ * optional header, and one code section holding an import directory.
+ */
+function fakeQuine() {
+  const size = 0x2100
+  const bytes = new Uint8Array(size)
+  bytes[0] = 0x4d
+  bytes[1] = 0x5a
+  bytes.fill(0x0d, 2, 0x3c)
+  bytes.set([0x00, 0x1e, 0, 0], 0x3c)
+  const prose = ';this is a type-able PE quine PE: a working PE file, made entirely in assembly, with no need of a linker.\r\n'
+  for (let i = 0x40; i < 0x1de2; i++) bytes[i] = prose.charCodeAt((i - 0x40) % prose.length)
+  bytes[0x1de1] = 0x1a
+  const tail = 'open\0cmd\0/K type quine.exe\0'
+  for (let k = 0; k < tail.length; k++) bytes[0x1de2 + k] = tail.charCodeAt(k)
+  for (let i = 0x1e00; i < 0x1f20; i++) bytes[i] = (i * 7) & 0x3 ? 0 : (i & 0xff) | 1
+  for (let i = 0x2000; i < size; i++) bytes[i] = ((i * 37) ^ (i >> 3)) & 0xff | 1
+  const dosNames = ['e_cblp', 'e_cp', 'e_crlc', 'e_cparhdr', 'e_minalloc', 'e_maxalloc', 'e_ss', 'e_sp', 'e_csum', 'e_ip', 'e_cs', 'e_lfarlc', 'e_ovno']
+  const dos = dosNames.map((name, i) => ({ name, offset: 2 + i * 2, length: 2, kind: 'data', value: '0xD0D', description: 'Some DOS value' }))
+  dos.push({ name: 'e_res', offset: 0x1c, length: 8, kind: 'padding', value: '0xD0D0D0D0D0D0D0D' })
+  dos.push({ name: 'e_oemid', offset: 0x24, length: 2, kind: 'data', value: '0xD0D' }, { name: 'e_oeminfo', offset: 0x26, length: 2, kind: 'data', value: '0xD0D' })
+  dos.push({ name: 'e_res2', offset: 0x28, length: 20, kind: 'padding' })
+  dos.push({ name: 'e_lfanew', offset: 0x3c, length: 4, kind: 'offset', value: '0x1E00', target: 0x1e00 })
+  const at = 0x1e18
+  const f = (name, offset, length, kind, value, extra = {}) => ({ name, offset, length, kind, value, description: `${name} of the image`, ...extra })
+  const standard = [f('Magic', at, 2, 'magic', '0x10B'), f('SizeOfCode', at + 4, 4, 'size', '0x0'), f('SizeOfInitializedData', at + 8, 4, 'size', '0x0'), f('AddressOfEntryPoint', at + 0x10, 4, 'offset', '0x2000', { target: 0x2000 }), f('BaseOfCode', at + 0x14, 4, 'offset', '0x0'), f('BaseOfData', at + 0x18, 4, 'offset', '0x0')]
+  const w = 0x1e34
+  const windows = [
+    f('ImageBase', w, 4, 'offset', '0x400000'), f('SectionAlignment', w + 4, 4, 'size', '0x4'), f('FileAlignment', w + 8, 4, 'size', '0x4'),
+    f('MajorOperatingSystemVersion', w + 12, 2, 'data', '0'), f('MinorOperatingSystemVersion', w + 14, 2, 'data', '0'), f('MajorSubsystemVersion', w + 20, 2, 'data', '4'),
+    f('SizeOfImage', w + 0x1c, 4, 'size', '0x20B6'), f('SizeOfHeaders', w + 0x20, 4, 'size', '0x2000'), f('CheckSum', w + 0x24, 4, 'checksum', '0x0'),
+    f('Subsystem', w + 0x28, 2, 'header', 'Windows GUI'), f('SizeOfStackReserve', w + 0x2c, 4, 'size', '0x0'), f('NumberOfRvaAndSizes', w + 0x40, 4, 'count', '16')
+  ]
+  for (const x of [...standard, ...windows]) if (x.value !== '0x0' && x.value !== '0') bytes[x.offset] = 0x11
+  const fields = [
+    { name: 'DOS signature', offset: 0, length: 2, kind: 'magic', value: 'MZ' },
+    { name: 'DOS header', offset: 2, length: 62, kind: 'header', value: 'PE header at 0x1E00', children: dos },
+    { name: 'DOS stub', offset: 0x40, length: 0x1dc0, kind: 'data', description: 'Small DOS program' },
+    { name: 'PE signature', offset: 0x1e00, length: 4, kind: 'magic', value: 'PE' },
+    { name: 'COFF file header', offset: 0x1e04, length: 20, kind: 'header', value: 'x86' },
+    { name: 'Optional header', offset: at, length: 224, kind: 'header', value: 'PE32', children: [
+      { name: 'Standard fields', offset: at, length: 28, kind: 'header', children: standard },
+      { name: 'Windows-specific fields', offset: w, length: 68, kind: 'header', children: windows },
+      { name: 'Data directories', offset: 0x1e78, length: 128, kind: 'table', value: '16 entries' }
+    ] },
+    { name: 'Section table', offset: 0x1ef8, length: 40, kind: 'header', value: '1 sections' },
+    { name: 'Import directory', offset: 0x2033, length: 60, kind: 'table', value: '2 DLLs', children: [
+      { name: 'kernel32.dll', offset: 0x2033, length: 20, kind: 'header', value: '1 imports' },
+      { name: 'shell32.dll', offset: 0x2047, length: 20, kind: 'header', value: '1 imports' }
+    ] }
+  ]
+  const regions = [{ name: 'DOS header', offset: 0, length: 64, kind: 'header' }, { name: 'DOS stub', offset: 0x40, length: 0x1dc0, kind: 'code' }, { name: 'PE headers', offset: 0x1e00, length: 288, kind: 'header' }, { name: 'Section 1', offset: 0x2000, length: 0x100, kind: 'code' }]
+  return { bytes, size, analysis: analysisWith(fields, { regions }) }
+}
+
+test('a run of fields filled with one repeated byte merges like a run of zeros', () => {
+  const { bytes, size, analysis } = fakeQuine()
+  const plan = planPoster({ analysis, size, bytes })
+  const merged = plan.labels.find(l => l.merged && l.offset === 2)
+  assert.ok(merged, 'the 0x0D fields share one box')
+  assert.equal(merged.name, 'e_cblp to e_res2')
+  assert.equal(merged.value, '17 fields, all 0D')
+  assert.deepEqual({ count: merged.merged.count, reason: merged.merged.reason, fill: merged.merged.fill }, { count: 17, reason: 'fill', fill: 0x0d })
+  assert.equal(merged.description, '')
+  assert.ok(plan.labels.some(l => l.name === 'e_lfanew'), 'a pointer is never merged')
+  // The freed labels go to the optional header
+  for (const name of ['AddressOfEntryPoint', 'ImageBase', 'SectionAlignment', 'FileAlignment', 'SizeOfImage', 'SizeOfHeaders']) {
+    assert.ok(plan.labels.some(l => l.name === name), `${name} has a box`)
+  }
+  // Without bytes nothing is known to be filled, so nothing merges by fill
+  const noBytes = planPoster({ analysis, size })
+  assert.ok(!noBytes.labels.some(l => l.merged && l.merged.reason === 'fill'))
+
+  const run = (values, lengths = values.map(() => 2), extra = {}) => {
+    const n = lengths.reduce((s, x) => s + x, 0)
+    const b = new Uint8Array(n + 4).fill(0x55)
+    let o = 0
+    const fields = values.map((v, i) => {
+      b.fill(v, o, o + lengths[i])
+      // Distinct names, so the fields are not a repeat
+      const field = { name: `f${'abcdefgh'[i]}`, offset: o, length: lengths[i], kind: 'data', value: String(v), ...(extra[i] || {}) }
+      o += lengths[i]
+      return field
+    })
+    return planPoster({ analysis: analysisWith(fields), size: n + 4, bytes: b, mode: 'auto' }).labels.map(l => l.name)
+  }
+  // At least three fields and eight bytes, all of one value
+  assert.deepEqual(run([0xff, 0xff, 0xff, 0xff]), ['fa to fd'])
+  assert.deepEqual(run([0xff, 0xff, 0xff], [1, 1, 1]), ['fa', 'fb', 'fc'], 'too few bytes')
+  assert.deepEqual(run([0xcc, 0xcc], [4, 4]), ['fa', 'fb'], 'too few fields')
+  assert.deepEqual(run([0x90, 0x90, 0x91, 0x90]), ['fa', 'fb', 'fc', 'fd'], 'not one value')
+  // Magic numbers, pointers and pins are never merged
+  assert.deepEqual(run([0x20, 0x20, 0x20, 0x20, 0x20], undefined, { 2: { kind: 'magic' } }), ['fa', 'fb', 'fc', 'fd', 'fe'])
+  assert.deepEqual(run([0x20, 0x20, 0x20, 0x20, 0x20, 0x20], [4, 4, 4, 4, 4, 4], { 2: { target: 0 } }), ['fa', 'fb', 'fc', 'fd to ff'])
+})
+
+test('boxes of readable text are marked, and the plan lists the longest', () => {
+  const { bytes, size, analysis } = fakeQuine()
+  const plan = planPoster({ analysis, size, bytes })
+  const stub = plan.labels.find(l => l.name === 'DOS stub')
+  assert.equal(stub.text, true)
+  assert.ok(!plan.labels.some(l => l.text && l !== stub), 'binary boxes are not text')
+  assert.deepEqual(plan.texts, [{ offset: 0x40, length: 0x1dc0, label: stub.number, name: 'DOS stub' }])
+  // The break inside the text says so
+  assert.ok(plan.items.some(i => i.type === 'break' && i.text))
+  const svg = buildPoster({ bytes, analysis, fileName: 'quine.exe', options: {}, date: '2026-11-22' }).svg
+  assert.match(svg, /7,616 bytes of readable text/)
+  assert.match(svg, /more of the text/)
+  for (const bytesPerRow of BYTES_PER_ROW) {
+    for (const proportion of ['landscape', 'portrait', 'tall']) {
+      const result = buildPoster({ bytes, analysis, fileName: 'quine.exe', options: { bytesPerRow, proportion }, date: '2026-11-22' })
+      assertTidy(result)
+      for (const e of result.scene.elements) if (String(e.g || '').startsWith('break') && e.text) assert.ok(e.text.endsWith(' …'), `break cut: ${e.text}`)
+      assert.ok(!legendTexts(result).some(t => t.endsWith('…')))
+    }
+  }
+
+  // Several, longest first, at most three; none on binary data
+  const many = new Uint8Array(0x4000)
+  // Words and lines: a space every sixth byte, a line end every sixtieth
+  for (let i = 0; i < many.length; i++) many[i] = i % 60 === 59 ? 0x0a : i % 6 === 5 ? 0x20 : 0x61 + (i % 26)
+  for (let i = 0x3000; i < 0x4000; i++) many[i] = (i * 151) & 0xff
+  const fields = [[0, 0x100], [0x100, 0x800], [0x900, 0x40], [0xa00, 0x400], [0xe00, 0x30], [0x1000, 0x200], [0x3000, 0x1000]].map(([offset, length], i) => ({ name: `t${i}`, offset, length, kind: 'data' }))
+  const texts = planPoster({ analysis: analysisWith(fields), size: many.length, bytes: many, maxLabels: 99 }).texts
+  assert.deepEqual(texts.map(t => t.name), ['t1', 't3', 't5'])
+  // Text, but not worth a listing: under 256 bytes, or a table of names with NULs between and no spaces
+  const short = planPoster({ analysis: analysisWith([{ name: 'note', offset: 0, length: 0xc0, kind: 'data' }, { name: 'rest', offset: 0x3000, length: 0x1000, kind: 'data' }]), size: many.length, bytes: many })
+  assert.equal(short.labels.find(l => l.name === 'note').text, true)
+  assert.deepEqual(short.texts, [])
+  const names = new Uint8Array(0x800)
+  for (let i = 0; i < names.length; i++) names[i] = i % 12 === 11 ? 0 : 0x61 + ((i * 7) % 26)
+  const table = planPoster({ analysis: analysisWith([{ name: '.strtab', offset: 0, length: names.length, kind: 'data' }]), size: names.length, bytes: names })
+  assert.equal(table.labels[0].text, true)
+  assert.deepEqual(table.texts, [])
+  const binary = planPoster({ analysis: analysisWith([{ name: 'b', offset: 0, length: 0x1000, kind: 'data' }]), size: 0x1000, bytes: many.subarray(0x3000) })
+  assert.deepEqual(binary.texts, [])
+  assert.ok(!binary.labels[0].text)
+  // Bounded on a huge box
+  const huge = new Uint8Array(1 << 24).fill(0x41)
+  for (let i = 0; i < huge.length; i += 7) huge[i] = i % 3 ? 0x20 : 0x30 + (i % 70)
+  const t = performance.now()
+  const big = planPoster({ analysis: analysisWith([{ name: 'h', offset: 0, length: huge.length, kind: 'data' }]), size: huge.length, bytes: huge })
+  assert.ok(performance.now() - t < 400)
+  assert.equal(big.texts.length, 1)
+})
+
+test('rows that hold readable strings are shown', () => {
+  // The end of a long text holds something else: its last rows are shown,
+  // and only a handful of its first rows
+  const { bytes, size, analysis } = fakeQuine()
+  for (const maxRows of [40, 120]) {
+    const plan = planPoster({ analysis, size, bytes, maxRows })
+    const rowAt = o => plan.items.some(i => i.type === 'row' && i.start === o)
+    assert.ok(rowAt(0x1de0) && rowAt(0x1df0), 'the strings at the end of the text')
+    const head = plan.items.filter(i => i.type === 'row' && i.start >= 0x40 && i.start < 0x1de0).length
+    assert.ok(head >= 3 && head <= 5, `${head} rows at the start of the text`)
+  }
+  // A sentence in a code section, between code and an import directory,
+  // on a poster whose rows are all taken by labels
+  const { bytes: b, size: s, analysis: a } = fakeProgram(24)
+  const sentence = ' * a PE with 96 used code sections\n'
+  const at = 0x400 + 0x28
+  for (let k = 0; k < sentence.length; k++) b[at + k] = sentence.charCodeAt(k)
+  b.fill(0, at + sentence.length, 0x400 + 0x50)
+  a.fields.push({ name: 'Import directory', offset: 0x450, length: 40, kind: 'table', value: '2 DLLs', children: [
+    { name: 'kernel32.dll', offset: 0x450, length: 20, kind: 'header', value: '1 imports' },
+    { name: 'msvcrt.dll', offset: 0x464, length: 20, kind: 'header', value: '1 imports' }
+  ] })
+  const plan = planPoster({ analysis: a, size: s, bytes: b })
+  assertPlanSane(plan)
+  assert.ok(plan.labels.some(l => l.name === 'Section 1, first 80 bytes'))
+  for (const o of [0x420, 0x430, 0x440]) assert.ok(plan.items.some(i => i.type === 'row' && i.start === o), `row ${hex(o)} with the sentence`)
+  // Without bytes nothing changes
+  assertPlanSane(planPoster({ analysis: a, size: s }))
+})
+
+/** Text of every legend element, with whether it came from the file. */
+function legendTexts(result) {
+  return result.scene.elements
+    .filter(e => e.t === 'text' && String(e.g || '').startsWith('legend'))
+    .map(e => (e.spans ? e.spans.map(s => s.text).join('') : String(e.text ?? '')))
+}
+
+test('the legend wraps instead of cutting what the poster and parsers wrote', () => {
+  const long = 'A description that a parser wrote, one sentence long, which goes on for a good while so that it has to wrap'
+  const { bytes, size, analysis } = fakeProgram(24)
+  const fields = analysis.fields.map(f => ({ ...f, description: long }))
+  fields[4].children[0].children[4].value = '0xE0000060 (Code, Initialised data, Executable, Readable, Writable, Shared)'
+  // A file name from the file: very long, may be cut, but only after three lines
+  const fileName = 'x'.repeat(400)
+  fields.push({ name: 'Trailer', offset: size - 16, length: 16, kind: 'header', children: [{ name: 'Stored name', offset: size - 16, length: 16, kind: 'string', value: fileName }] })
+  const regions = [...analysis.regions]
+  regions[regions.length - 1] = { ...regions[regions.length - 1], length: 0x1f0 }
+  const fileAnalysis = analysisWith(fields, { regions })
+  for (const bytesPerRow of BYTES_PER_ROW) {
+    for (const depth of DEPTHS) {
+      for (const maxLabels of LABEL_LIMITS) {
+        const result = buildPoster({ bytes, analysis: fileAnalysis, fileName: 'fake.exe', options: { bytesPerRow, depth, maxLabels, pins: [{ offset: size - 16, length: 16 }] }, date: '2026-11-22' })
+        assertTidy(result)
+        for (const text of legendTexts(result)) {
+          if (text.endsWith('…')) assert.match(text, /^x+…$/, `cut: ${text}`)
+        }
+        // Breaks in the dump are never cut either: each text ends ' …'
+        for (const e of result.scene.elements) if (String(e.g || '').startsWith('break') && e.text) assert.ok(e.text.endsWith(' …'), `break cut: ${e.text}`)
+      }
+    }
+  }
+  const result = buildPoster({ bytes, analysis: fileAnalysis, fileName: 'fake.exe', options: { maxLabels: 99, depth: 4, pins: [{ offset: size - 16, length: 16 }] }, date: '2026-11-22' })
+  const texts = legendTexts(result)
+  assert.ok(texts.some(t => t.startsWith('0xE0000060 (Code, Initialised')) || texts.some(t => t.includes('0xE0000060')), 'long value shown')
+  assert.ok(texts.some(t => t === 'Writable, Shared)' || t.endsWith('Writable, Shared)')), 'the value is not cut')
+  assert.equal(texts.filter(t => /^x+…$/.test(t)).length, 1, 'the name from the file is cut once, after three lines')
+  assert.ok(texts.filter(t => /^x+$/.test(t)).length >= 2)
+})
+
+test('the legend keeps its notes last and says a section once', () => {
+  const { bytes, analysis } = fakeQuine()
+  const result = buildPoster({ bytes, analysis, fileName: 'quine.exe', options: { maxLabels: 60 }, date: '2026-11-22' })
+  const texts = legendTexts(result)
+  const firstEntry = texts.findIndex(t => t.startsWith('DOS signature'))
+  const firstNote = texts.findIndex(t => t.startsWith('Neighbouring fields'))
+  assert.ok(firstEntry >= 0 && firstNote > firstEntry, 'notes after the entries')
+  assert.ok(!texts.some(t => /Merged into one box|Region from the file map|that no field describes/.test(t)))
+  assert.ok(texts.includes('Section 1, first 51 bytes  code'), texts.filter(t => t.startsWith('Section')).join(' | '))
+  assert.ok(texts.some(t => t.startsWith('Section 1, the rest')))
+  // Headings: none repeated word for word
+  const headings = result.scene.elements.filter(e => e.t === 'text' && e.size === 12.5 && e.spans && e.spans[0].weight === 700).map(e => e.spans.map(s => s.text).join(''))
+  for (let i = 1; i < headings.length; i++) assert.notEqual(headings[i], headings[i - 1])
+  assert.equal(headings.filter(h => h === 'Section 1').length, 1, headings.join(' | '))
+  assert.ok(headings.includes('Section 1, continued'))
+  assert.ok(headings.includes('› Import directory'))
+})

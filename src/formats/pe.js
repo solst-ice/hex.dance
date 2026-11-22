@@ -15,6 +15,7 @@ const MAX_SUMMARY_LIBRARIES = 500
 const MAX_SUMMARY_LINES = 300
 const MAX_TLS_CALLBACKS = 64
 const MAX_NOTES = 8
+const STUB_TEXT_NAME = 'Text before the PE header'
 
 const PE_MACHINES = {
   0x14c: 'x86',
@@ -161,7 +162,7 @@ function coffHeaderSpec() {
   return [
     ['Machine', 2, 'header', 'Target CPU', v => PE_MACHINES[v] || hex(v)],
     ['NumberOfSections', 2, 'count', 'Entries in the section table'],
-    ['TimeDateStamp', 4, 'data', 'Link time (seconds since 1970); a hash in reproducible builds', v => `${hex(v)} (${new Date(v * 1000).toISOString()})`],
+    ['TimeDateStamp', 4, 'data', 'Link time (seconds since 1970); a hash in reproducible builds', v => `${hex(v)} (${linkTime(v)})`],
     ['PointerToSymbolTable', 4, 'offset', 'File offset of the COFF symbol table (0 for most images)', v => hex(v)],
     ['NumberOfSymbols', 4, 'count', 'Entries in the COFF symbol table'],
     ['SizeOfOptionalHeader', 2, 'size', 'Size of the optional header that follows'],
@@ -250,6 +251,49 @@ const DEBUG_ENTRY_SPEC = [
   ['PointerToRawData', 4, 'offset', 'File offset of the debug data', v => hex(v)]
 ]
 
+// Zero is not a date: shown as 1970 it reads like one
+const linkTime = seconds => (seconds === 0 ? 'not set' : new Date(seconds * 1000).toISOString())
+
+// Bytes looked at when deciding whether the space before the PE header holds text
+const TEXT_CHECK = 64 * 1024
+const isTextByte = v => (v >= 0x20 && v < 0x7F) || v === 0x09 || v === 0x0A || v === 0x0D
+
+/**
+ * Whether [start, end) reads as text: at least 64 bytes, of which 90% or more
+ * are printable ASCII, tabs or line ends. The usual DOS stub is a few
+ * instructions, one sentence and padding, and stays well under that. Long
+ * ranges are judged by their first and last 32 KB.
+ */
+function looksLikeText(bytes, start, end) {
+  const length = end - start
+  if (length < 64 || end > bytes.length) return false
+  let seen = 0
+  let text = 0
+  const count = (from, to) => {
+    for (let i = from; i < to; i++) {
+      seen++
+      if (isTextByte(bytes[i])) text++
+    }
+  }
+  if (length <= TEXT_CHECK) count(start, end)
+  else {
+    count(start, start + TEXT_CHECK / 2)
+    count(end - TEXT_CHECK / 2, end)
+  }
+  return text >= seen * 0.9
+}
+
+// The one value every byte of the DOS header holds between its signature and
+// the offset of the PE header (0x02-0x3B), or -1. Windows reads neither.
+function headerFiller(bytes, peOffset) {
+  if (peOffset < 0x40 || bytes.length < 0x40) return -1
+  const value = bytes[2]
+  for (let i = 3; i < 0x3C; i++) if (bytes[i] !== value) return -1
+  return value
+}
+
+const FILLER_NAMES = { 0x0D: ' (a carriage return)', 0x0A: ' (a line feed)', 0x20: ' (a space)' }
+
 // Rich header: undocumented linker metadata between the DOS stub and the PE
 // header, XOR-masked with a key that follows the "Rich" marker.
 function findRichHeader(view, peOffset) {
@@ -287,7 +331,7 @@ function parsePE(view, bytes) {
 
   const summary = [
     item('Architecture', PE_MACHINES[machine] || `Unknown (${hex(machine)})`),
-    item('Timestamp', new Date(timeDateStamp * 1000).toISOString()),
+    item('Timestamp', timeDateStamp === 0 ? '0 (not set)' : linkTime(timeDateStamp)),
     item('Characteristics', hex(characteristics), decodeFlags(characteristics, PE_FILE_FLAGS))
   ]
   const dos = readStruct(view, 2, dosHeaderSpec(), true, budget)
@@ -305,6 +349,8 @@ function parsePE(view, bytes) {
 
   // ---------------------------------------------------------------- DOS stub and Rich header
   const rich = peOffset > 0x40 ? findRichHeader(view, peOffset) : null
+  // Hand-made files sometimes keep text there (a message, or their own source)
+  const stubIsText = !rich && peOffset > 0x40 && peOffset <= fileSize && looksLikeText(bytes, 0x40, peOffset)
   if (peOffset > 0x40) {
     const stubChildren = []
     if (rich) {
@@ -316,11 +362,18 @@ function parsePE(view, bytes) {
         'Undocumented Microsoft linker record of the build tools, XOR-masked', entries))
       regions.push({ name: 'DOS stub', offset: 0x40, length: rich.start - 0x40, kind: 'code' })
       regions.push({ name: 'Rich header', offset: rich.start, length: rich.end - rich.start, kind: 'metadata' })
+    } else if (stubIsText) {
+      regions.push({ name: STUB_TEXT_NAME, offset: 0x40, length: peOffset - 0x40, kind: 'data' })
     } else {
       regions.push({ name: 'DOS stub', offset: 0x40, length: peOffset - 0x40, kind: 'code' })
     }
-    fields.push(field('DOS stub', 0x40, peOffset - 0x40, rich ? 'with Rich header' : undefined, 'data',
-      'Small DOS program that prints "This program cannot be run in DOS mode"', stubChildren))
+    if (stubIsText) {
+      fields.push(field(STUB_TEXT_NAME, 0x40, peOffset - 0x40, `${(peOffset - 0x40).toLocaleString('en-US')} bytes of text`, 'string',
+        'Readable text where the small DOS program usually sits'))
+    } else {
+      fields.push(field('DOS stub', 0x40, peOffset - 0x40, rich ? 'with Rich header' : undefined, 'data',
+        'Small DOS program that prints "This program cannot be run in DOS mode"', stubChildren))
+    }
   }
 
   // ---------------------------------------------------------------- optional header
@@ -910,7 +963,8 @@ function parsePE(view, bytes) {
   const goBuildId = sections.length > 0 && startsWithText(bytes, sections[0].rawAddress, '\xFF Go build ID: "')
   const unusual = peUnusual({
     view, peOffset, fileHeader, optionalHeaderOffset, optionalHeaderSize, sectionHeadersOffset, magic, isPE32Plus,
-    declaredSections, sections, opt, timeDateStamp, reproducible, goBuildId, tls, sectionForRva
+    declaredSections, sections, opt, timeDateStamp, reproducible, goBuildId, tls, sectionForRva,
+    stubIsText, filler: headerFiller(bytes, peOffset)
   })
   return { summary, fields, regions: tiled, symbols: sortSymbols(symbols), warnings, image, unusual }
 }
@@ -964,6 +1018,15 @@ function peUnusual(p) {
   const notes = []
   const tableLength = sections.length * 40
   const s0 = sections.length
+
+  // What sits in front of the PE header
+  if (p.stubIsText) {
+    const length = p.peOffset - 0x40
+    notes.push(unusualNote(`The ${length.toLocaleString('en-US')} bytes between the DOS header and the PE header are readable text; there is usually a small DOS program there.`, 0x40, length))
+  }
+  if (p.filler > 0) {
+    notes.push(unusualNote(`Every byte of the DOS header between its signature and the offset of the PE header is 0x${p.filler.toString(16).toUpperCase().padStart(2, '0')}${FILLER_NAMES[p.filler] || ''}. Windows ignores those bytes; linkers put a DOS program's header there.`, 2, 0x3A))
+  }
 
   // Section count
   if (count >= 96) {
