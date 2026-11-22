@@ -1,5 +1,6 @@
 import { ByteReader, capFields, field, fitted, formatDate, formatNumber, fourcc, latin1, nonOverlapping, plural, printable, utf16 } from './reader.js'
 import { formatBytes, item } from './shared.js'
+import { pointAt } from './pointers.js'
 
 const MAX_TABLES = 512
 const MAX_FONTS = 64
@@ -104,7 +105,7 @@ function parseSfnt(r, base, label, info, warnings) {
     if (offset + length > r.length) warnings.add(`${label}table "${printable(tag)}" runs past the end of the file`)
     const valid = tag === 'head' || !r.has(offset, length) ? null : checksum(r, offset, length) === sum
     if (valid === false) info.badChecksums.push(tag)
-    records.push(field(printable(tag), at, 16, `${formatBytes(length)} at offset ${formatNumber(offset)}${valid === false ? ', checksum mismatch' : ''}`, TABLES[tag.trim()] || TABLES[tag] || 'Table record', 'header'))
+    records.push(pointAt(field(printable(tag), at, 16, `${formatBytes(length)} at offset ${formatNumber(offset)}${valid === false ? ', checksum mismatch' : ''}`, TABLES[tag.trim()] || TABLES[tag] || 'Table record', 'header'), length ? offset : null, r.length))
   }
   if (records.length) children.push(field('Table records', base + 12, records.length * 16, plural(records.length, 'table'), 'Tag, checksum, offset and length per table', 'table', capFields(records, 100, 'more tables')))
   readTables(r, tables, info)
@@ -149,9 +150,9 @@ function parseFont(bytes) {
       field('Signature', 0, 4, 'wOFF', 'WOFF 1.0 signature', 'magic'), field('Flavor', 4, 4, flavorName(flavor), 'Outline format of the wrapped font', 'magic'),
       field('Length', 8, 4, formatNumber(r.u32(8)), 'Whole WOFF file', 'size'), field('Table count', 12, 2, numTables, 'Tables in the font', 'count'),
       field('Reserved', 14, 2, r.u16(14), 'Zero', 'padding'), field('sfnt size', 16, 4, formatNumber(r.u32(16)), 'Size once decompressed', 'size'),
-      field('Version', 20, 4, `${r.u16(20)}.${r.u16(22)}`, 'Font version'), field('Metadata offset', 24, 4, formatNumber(r.u32(24)), 'Optional XML metadata', 'offset'),
+      field('Version', 20, 4, `${r.u16(20)}.${r.u16(22)}`, 'Font version'), pointAt(field('Metadata offset', 24, 4, formatNumber(r.u32(24)), 'Optional XML metadata', 'offset'), r.u32(28) ? r.u32(24) : null, bytes.length),
       field('Metadata length', 28, 4, formatNumber(r.u32(28)), 'Compressed', 'size'), field('Metadata original length', 32, 4, formatNumber(r.u32(32)), 'Uncompressed', 'size'),
-      field('Private data offset', 36, 4, formatNumber(r.u32(36)), 'Optional vendor data', 'offset'), field('Private data length', 40, 4, formatNumber(r.u32(40)), 'Bytes', 'size')
+      pointAt(field('Private data offset', 36, 4, formatNumber(r.u32(36)), 'Optional vendor data', 'offset'), r.u32(40) ? r.u32(36) : null, bytes.length), field('Private data length', 40, 4, formatNumber(r.u32(40)), 'Bytes', 'size')
     ]
     fields.push(field('WOFF header', 0, Math.min(44, bytes.length), undefined, 'WOFF 1.0 header', 'header', headerFields))
     const records = []
@@ -163,7 +164,7 @@ function parseFont(bytes) {
       }
       const table = { tag: fourcc(bytes, at), offset: r.u32(at + 4), length: r.u32(at + 8), original: r.u32(at + 12) }
       tables.push(table)
-      records.push(field(printable(table.tag), at, 20, `${formatBytes(table.length)} → ${formatBytes(table.original)}${table.length < table.original ? ' (zlib)' : ''}`, TABLES[table.tag] || 'Table record', 'header'))
+      records.push(pointAt(field(printable(table.tag), at, 20, `${formatBytes(table.length)} → ${formatBytes(table.original)}${table.length < table.original ? ' (zlib)' : ''}`, TABLES[table.tag] || 'Table record', 'header'), table.length ? table.offset : null, bytes.length))
     }
     if (records.length) fields.push(field('Table directory', 44, records.length * 20, plural(records.length, 'table'), 'Per table: tag, offset, compressed and original length, checksum', 'table', capFields(records, 100, 'more tables')))
     // Uncompressed tables can still be read

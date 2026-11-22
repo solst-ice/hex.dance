@@ -1,5 +1,6 @@
 import { item, startsWith } from './shared.js'
 import { FieldList, field, hexOffset, plural } from './fieldTree.js'
+import { pointAt } from './pointers.js'
 
 // Only the start and end of large files are scanned: the header, linearization
 // dictionary and first objects live at the start, the trailer and the objects
@@ -345,7 +346,7 @@ function checkTarget(text, base, target, number) {
   return parseInt(match[1], 10) === number ? ' (verified)' : ` (finds object ${match[1]})`
 }
 
-function xrefField(text, base, at, windowEnd) {
+function xrefField(text, base, at, windowEnd, size) {
   const children = [field('xref keyword', base + at, 4, { value: 'xref', kind: 'header' })]
   let p = at + 4
   let total = 0
@@ -368,11 +369,11 @@ function xrefField(text, base, at, windowEnd) {
       } else {
         const inUse = entry[3] === 'n'
         const target = parseInt(entry[1], 10)
-        entries.push(field(`Object ${first + n}`, base + q, length, {
+        entries.push(pointAt(field(`Object ${first + n}`, base + q, length, {
           value: inUse ? `at ${hexOffset(target)}, generation ${parseInt(entry[2], 10)}${checkTarget(text, base, target, first + n)}` : `free, generation ${parseInt(entry[2], 10)}`,
           kind: inUse ? 'offset' : 'padding',
           description: inUse ? 'In use: 10-digit byte offset of the object, 5-digit generation, "n"' : 'Free entry: links to the next free object number, "f"'
-        }))
+        }), inUse ? target : null, size))
       }
       q += length
       n++
@@ -432,7 +433,7 @@ function pointsAt(text, base, target) {
   return ', points to neither a table nor a stream'
 }
 
-function startxrefField(text, base, at, windowEnd) {
+function startxrefField(text, base, at, windowEnd, size) {
   const match = /^startxref[ \t\r\n\f\0]{1,16}(\d{1,12})/.exec(text.slice(at, Math.min(windowEnd, at + 40)))
   if (!match) return { end: at + 9, field: field('startxref', base + at, 9, { value: 'startxref', kind: 'header' }) }
   const numberAt = at + match[0].length - match[1].length
@@ -445,7 +446,7 @@ function startxrefField(text, base, at, windowEnd) {
       description: 'Byte offset of the last cross-reference section; a reader starts here, near the end of the file',
       children: [
         field('startxref keyword', base + at, 9, { value: 'startxref', kind: 'header' }),
-        field('Offset', base + numberAt, match[1].length, { value: `${target} (${hexOffset(target)})${pointsAt(text, base, target)}`, kind: 'offset' })
+        pointAt(field('Offset', base + numberAt, match[1].length, { value: `${target} (${hexOffset(target)})${pointsAt(text, base, target)}`, kind: 'offset' }), target, size)
       ]
     })
   }
@@ -475,13 +476,13 @@ function scanWindow(bytes, start, end, list, regions) {
       result = objectField(text, start, match, text.length)
       addRegion('Objects', start + match.index, result.end - match.index, 'data')
     } else if (token === 'xref') {
-      result = xrefField(text, start, match.index, text.length)
+      result = xrefField(text, start, match.index, text.length, bytes.length)
       addRegion('Cross-reference table', start + match.index, result.end - match.index, 'table')
     } else if (token === 'trailer') {
       result = trailerField(text, start, match.index, text.length)
       addRegion('Trailer', start + match.index, result.end - match.index, 'metadata')
     } else if (token === 'startxref') {
-      result = startxrefField(text, start, match.index, text.length)
+      result = startxrefField(text, start, match.index, text.length, bytes.length)
       addRegion('Trailer', start + match.index, result.end - match.index, 'metadata')
     } else {
       result = { end: match.index + 5, field: field('End-of-file marker', start + match.index, 5, { value: '%%EOF', kind: 'header', description: 'Ends a revision of the file; incremental updates append more objects and another %%EOF' }) }

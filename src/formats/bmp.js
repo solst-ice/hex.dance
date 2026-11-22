@@ -1,5 +1,6 @@
 import { ByteReader, field, fitted, formatNumber, fourcc, hex32, plural } from './reader.js'
 import { formatBytes, item } from './shared.js'
+import { pointAt } from './pointers.js'
 
 const DIB_VERSIONS = {
   12: 'BITMAPCOREHEADER (OS/2 1.x)',
@@ -116,7 +117,7 @@ function parseBMP(bytes) {
     field('Signature', 0, 2, 'BM', 'Windows bitmap signature', 'magic'),
     field('File size', 2, 4, formatNumber(declaredSize), 'Whole file, as recorded', 'size'),
     field('Reserved', 6, 4, undefined, 'Application-specific, usually zero', 'padding'),
-    field('Pixel data offset', 10, 4, formatNumber(pixelOffset), 'Where the pixel array starts', 'offset')
+    pointAt(field('Pixel data offset', 10, 4, formatNumber(pixelOffset), 'Where the pixel array starts', 'offset'), pixelOffset, bytes.length)
   ]))
   regions.push({ name: 'File header', offset: 0, length: 14, kind: 'header' })
   const dib = readDib(r, 14)

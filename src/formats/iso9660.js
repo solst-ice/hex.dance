@@ -1,5 +1,6 @@
 import { ByteReader, capFields, field, fitted, formatNumber, latin1, plural, printable, utf16 } from './reader.js'
 import { formatBytes, item } from './shared.js'
+import { pointAt } from './pointers.js'
 
 const SECTOR = 2048
 const FIRST_DESCRIPTOR = 16 * SECTOR
@@ -88,6 +89,12 @@ function walkTree(r, rootOffset, blockSize, joliet, warnings) {
   return entries
 }
 
+// File offset of the extent a directory record names, in blocks of the volume's size
+function rootExtent(r, at, blockSize) {
+  if (!r.has(at, 10) || !(blockSize === 512 || blockSize === 1024 || blockSize === 2048)) return null
+  return r.u32(at + 2, true) * blockSize
+}
+
 function parseISO(bytes) {
   const r = new ByteReader(bytes, true)
   const warnings = new Set()
@@ -122,7 +129,7 @@ function parseISO(bytes) {
         ...(type === 2 ? [field('Escape sequences', pos + 88, 32, isJoliet ? `Joliet (UCS-2 level ${'@CE'.indexOf(escape[2]) + 1})` : printable(escape), 'Character set of this descriptor')] : []),
         field('Logical block size', pos + 128, 4, vd.blockSize, 'Both-endian, usually 2048', 'size'),
         field('Path table size', pos + 132, 8, formatNumber(vd.pathTableSize), 'Bytes', 'size'),
-        field('Root directory record', pos + 156, 34, undefined, 'Where the directory tree starts', 'header'),
+        pointAt(field('Root directory record', pos + 156, 34, undefined, 'Where the directory tree starts', 'header'), rootExtent(r, pos + 156, vd.blockSize), bytes.length),
         field('Volume set identifier', pos + 190, 128, vd.volumeSet, 'Volume set name', 'string'),
         field('Publisher identifier', pos + 318, 128, vd.publisher, 'Publisher', 'string'),
         field('Data preparer identifier', pos + 446, 128, vd.preparer, 'Who prepared the data', 'string'),
@@ -135,7 +142,7 @@ function parseISO(bytes) {
       value = system
       if (system.startsWith('EL TORITO')) {
         bootCatalog = r.u32(pos + 71)
-        children.push(field('Boot system identifier', pos + 7, 32, system, 'El Torito bootable CD', 'string'), field('Boot catalog', pos + 71, 4, `sector ${formatNumber(bootCatalog)}`, 'Where the boot entries are', 'offset'))
+        children.push(field('Boot system identifier', pos + 7, 32, system, 'El Torito bootable CD', 'string'), pointAt(field('Boot catalog', pos + 71, 4, `sector ${formatNumber(bootCatalog)}`, 'Where the boot entries are', 'offset'), bootCatalog * SECTOR, bytes.length))
       }
     }
     descriptorFields.push(field(name, pos, Math.min(SECTOR, bytes.length - pos), value, `Volume descriptor in sector ${pos / SECTOR}`, 'header', children))

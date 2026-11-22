@@ -1,6 +1,7 @@
 import { ByteReader, field, fitted, formatNumber, hex32, plural, printable, utf16 } from './reader.js'
 import { crc32 } from '../lib/crc32.js'
 import { formatBytes, item } from './shared.js'
+import { pointAt } from './pointers.js'
 
 const SIGNATURE = [0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C]
 const MAX_ITEMS = 100000
@@ -239,7 +240,7 @@ function parse7z(bytes) {
     field('Signature', 0, 6, "7z\\xBC\\xAF'\\x1C", '7z signature', 'magic'),
     field('Version', 6, 2, `${r.u8(6)}.${r.u8(7)}`, 'Format version', 'magic'),
     field('Start header CRC', 8, 4, `${hex32(startCrc)}${bytes.length >= 32 ? (startCrcOk ? ' (valid)' : ' (mismatch)') : ''}`, 'CRC-32 of the next 20 bytes', 'checksum'),
-    field('Next header offset', 12, 8, formatNumber(nextOffset), 'From the end of this 32-byte header', 'offset'),
+    pointAt(field('Next header offset', 12, 8, formatNumber(nextOffset), 'From the end of this 32-byte header', 'offset'), nextSize ? 32 + nextOffset : null, bytes.length),
     field('Next header size', 20, 8, formatNumber(nextSize), 'Bytes', 'size'),
     field('Next header CRC', 28, 4, hex32(nextCrc), 'CRC-32 of the next header', 'checksum')
   ])]

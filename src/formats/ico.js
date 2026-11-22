@@ -1,6 +1,7 @@
 import { readDib } from './bmp.js'
 import { ByteReader, capFields, field, fitted, formatNumber, nonOverlapping, plural } from './reader.js'
 import { formatBytes, item } from './shared.js'
+import { pointAt } from './pointers.js'
 
 const MAX_IMAGES = 256
 const PNG_SIGNATURE = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
@@ -46,7 +47,7 @@ function parseICO(bytes) {
     const b = r.u16(at + 6)
     const size = r.u32(at + 8)
     const offset = r.u32(at + 12)
-    directory.push(field(`Entry ${i + 1}`, at, 16, `${width}×${height}`, 'ICONDIRENTRY', 'header', [
+    directory.push(pointAt(field(`Entry ${i + 1}`, at, 16, `${width}×${height}`, 'ICONDIRENTRY', 'header', [
       field('Width', at, 1, `${width}px`, '0 means 256'),
       field('Height', at + 1, 1, `${height}px`, '0 means 256'),
       field('Palette size', at + 2, 1, colors || 'none', 'Colours in the palette, 0 if none', 'count'),
@@ -54,8 +55,8 @@ function parseICO(bytes) {
       isCursor ? field('Hotspot X', at + 4, 2, a, 'Cursor click point') : field('Colour planes', at + 4, 2, a, '0 or 1'),
       isCursor ? field('Hotspot Y', at + 6, 2, b, 'Cursor click point') : field('Bits per pixel', at + 6, 2, b, 'Colour depth'),
       field('Image size', at + 8, 4, formatNumber(size), 'Bytes of image data', 'size'),
-      field('Image offset', at + 12, 4, formatNumber(offset), 'Where the image data starts', 'offset')
-    ]))
+      pointAt(field('Image offset', at + 12, 4, formatNumber(offset), 'Where the image data starts', 'offset'), size ? offset : null, bytes.length)
+    ]), size ? offset : null, bytes.length))
 
     let encoding = 'unknown'
     let detail = ''

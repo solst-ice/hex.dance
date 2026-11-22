@@ -1,5 +1,6 @@
 import { ByteReader, field, fitted, formatDate, formatNumber, latin1, plural, printable, utf16 } from './reader.js'
 import { formatBytes, item } from './shared.js'
+import { pointAt } from './pointers.js'
 
 const MAX_KEYS = 40
 // Seconds between 1970-01-01 and 2001-01-01 (Core Data reference date)
@@ -35,7 +36,7 @@ function parseBplist(bytes) {
     field('Object reference size', t + 7, 1, refSize, 'Bytes per object reference', 'size'),
     field('Object count', t + 8, 8, formatNumber(count), 'Objects in the file', 'count'),
     field('Top object', t + 16, 8, top, 'Index of the root object'),
-    field('Offset table offset', t + 24, 8, formatNumber(tableOffset), 'Where the offset table starts', 'offset')
+    pointAt(field('Offset table offset', t + 24, 8, formatNumber(tableOffset), 'Where the offset table starts', 'offset'), tableOffset < t ? tableOffset : null, bytes.length)
   ])
   const valid = offsetSize >= 1 && offsetSize <= 8 && refSize >= 1 && refSize <= 8 && count > 0 && top < count && tableOffset >= 8 && tableOffset + count * offsetSize <= t
   if (!valid) {
