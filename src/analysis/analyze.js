@@ -15,7 +15,8 @@ function clipRange(range, size) {
   return { ...range, length: Math.min(Math.floor(length), size - offset) }
 }
 
-function cleanFields(fields, size) {
+/** Exported for tests: what analyzeBytes keeps of a parser's fields, notes and layout */
+export function cleanFields(fields, size) {
   if (!Array.isArray(fields)) return []
   const result = []
   for (const field of fields) {
@@ -54,7 +55,7 @@ function cleanText(text, max) {
   return trimmed.length > max ? `${trimmed.slice(0, max - 1)}…` : trimmed
 }
 
-function cleanUnusual(notes, size) {
+export function cleanUnusual(notes, size) {
   if (!Array.isArray(notes)) return []
   const result = []
   for (let i = 0; i < notes.length && i < MAX_LOOKED_AT && result.length < MAX_UNUSUAL; i++) {
@@ -71,7 +72,7 @@ function cleanUnusual(notes, size) {
   return result
 }
 
-function cleanImage(image, size) {
+export function cleanImage(image, size) {
   if (!image || typeof image !== 'object' || !Array.isArray(image.sections)) return null
   if (image.addressLabel !== 'RVA' && image.addressLabel !== 'address') return null
   const sections = []
