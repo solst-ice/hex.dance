@@ -156,6 +156,13 @@ function breakText(item) {
   const n = item.end - item.start
   const count = n === 1 ? '1 byte' : `${formatCount(n)} bytes`
   const range = `${hexOffset(item.start)}–${hexOffset(item.end - 1)}`
+  if (Number.isInteger(item.fill) && n > 1) {
+    // The plan checked every byte: say what they all are
+    const all = item.fill === 0 ? 'all zero' : `all ${HEX[item.fill & 0xff]}`
+    if (item.where === 'after') return [`… ${count} more to the end of the file, ${all} (${range}) …`, `… ${count} more, ${all} …`, `… ${count} more …`]
+    if (item.where === 'before') return [`… first ${count}, ${all} (${range}) …`, `… ${count} before, ${all} …`, `… ${count} before …`]
+    return [`… ${count}, ${all} (${range}) …`, `… ${count}, ${all} …`, `… ${formatSize(n)}, ${all} …`, `… ${all} …`]
+  }
   if (item.where === 'after') return [`… ${count} more to the end of the file (${range}) …`, `… ${count} more …`]
   if (item.where === 'before') return [`… first ${count} not shown (${range}) …`, `… ${count} before …`]
   return [`… ${count} not shown (${range}) …`, `… ${count} not shown …`, `… ${formatSize(n)} …`]
@@ -630,12 +637,15 @@ function notesFor(plan) {
     const n = plan.omittedLabels
     const are = n === 1 ? 'is' : 'are'
     if (plan.mode === 'tour') {
-      const limit = plan.limitedBy === 'rows' ? `to fit in ${formatCount(plan.maxRows)} rows` : `to keep to ${formatCount(plan.maxLabels ?? labels.length)} labels`
-      notes.push(`${fieldsWord(n)} ${are} not labelled, ${limit}; the least interesting (zero, reserved and padding fields) went first.`)
+      const limit = plan.limitedBy === 'rows' ? `, to fit in ${formatCount(plan.maxRows)} rows` : plan.limitedBy === 'labels' ? `, to keep to ${formatCount(plan.maxLabels ?? labels.length)} labels` : ''
+      notes.push(`${fieldsWord(n)} ${are} not labelled${limit}; the least interesting (zero, reserved and padding fields) went first.`)
     } else {
       const where = plan.mode === 'auto' ? 'further into the file' : 'in this range'
       notes.push(`${formatCount(n)} more field${n === 1 ? '' : 's'} ${where} ${are} not labelled.`)
     }
+  }
+  if (plan.mode === 'tour' && plan.size > 0 && plan.items.length < plan.maxRows - 4 && plan.items.some(i => i.fill !== undefined)) {
+    notes.push('Some rows are left unused: stretches that hold only one repeated byte are shown as a single gap.')
   }
   if (plan.partialTree) notes.push('The field map is very large, so only part of it was read for this poster.')
   return notes

@@ -47,7 +47,8 @@ function fakeProgram(count = 24) {
   bytes[0] = 0x4d
   bytes[1] = 0x5a
   bytes[0x3c] = 0x40
-  for (let i = 0; i < count; i++) bytes.fill(0x90 + (i % 7), dataAt + i * 0x200, dataAt + (i + 1) * 0x200)
+  // Section contents that vary from row to row, so they are worth showing
+  for (let j = dataAt; j < size; j++) bytes[j] = ((j * 37) ^ (j >> 4)) & 0xff | 1
   const dosNames = ['e_cblp', 'e_cp', 'e_crlc', 'e_cparhdr', 'e_minalloc', 'e_maxalloc', 'e_ss', 'e_sp', 'e_csum', 'e_ip', 'e_cs', 'e_lfarlc', 'e_ovno']
   const dos = dosNames.map((name, i) => ({ name, offset: 2 + i * 2, length: 2, kind: 'data', value: '0x0' }))
   dos.push({ name: 'e_res', offset: 0x1c, length: 0x20, kind: 'padding' })
@@ -107,14 +108,21 @@ test('a section table collapses to its first and last entry, with what they shar
   assert.match(rep.text, /VirtualAddress goes up by 0x1000 each time, PointerToRawData by 0x200/)
   const brk = plan.items.find(i => i.type === 'break' && i.repeat && i.repeat.id === rep.id)
   assert.ok(brk, 'a break stands for the skipped entries')
-  assert.equal(brk.repeat.count, count - 2)
-  assert.equal(brk.repeat.start, 0x80 + 32)
+  // With labels to spare the second and third entries are shown as one box each
+  assert.equal(rep.shownEntries, 4)
+  assert.equal(brk.repeat.count, count - 4)
+  assert.equal(brk.repeat.start, 0x80 + 3 * 32)
   assert.equal(brk.repeat.end, 0x80 + (count - 1) * 32)
+  assert.ok(plan.labels.some(l => l.name === '[1] .s1' && l.repeat.role === 'more'))
+  const tight = planPoster({ analysis, size, bytes, maxLabels: 12 })
+  const tightRep = tight.repeats.find(r => r.first === '[0] .s0')
+  assert.equal(tightRep.shownEntries, 2)
+  assert.equal(tight.items.find(i => i.repeat && i.repeat.id === tightRep.id).repeat.count, count - 2)
   // First entry in full, last as one box
   const last = plan.labels.find(l => l.name === `[${count - 1}] .s${count - 1}`)
   assert.ok(last && last.repeat.role === 'last')
   assert.ok(plan.labels.some(l => l.name === 'VirtualAddress' && l.offset < 0x80 + 32))
-  assert.ok(!plan.labels.some(l => l.offset >= 0x80 + 32 && l.offset < 0x80 + (count - 1) * 32))
+  assert.ok(!plan.labels.some(l => l.offset >= 0x80 + 3 * 32 && l.offset < 0x80 + (count - 1) * 32))
   // The section data regions repeat too
   const data = plan.repeats.find(r => r.first === 'Section 1' || r.first === 'Section 2')
   assert.ok(data)
@@ -152,7 +160,10 @@ test('a pinned entry inside a repeat is labelled, splitting the run', () => {
   const pinned = plan.labels.find(l => l.offset === pinAt + 8)
   assert.ok(pinned && pinned.pinned, 'the pinned field has its own label')
   const breaks = plan.items.filter(i => i.repeat && i.repeat.end <= 0x80 + 24 * 32)
-  assert.deepEqual(breaks.map(b => b.repeat.count), [9, 12])
+  assert.equal(breaks.length, 2)
+  assert.ok(breaks[0].repeat.end <= pinAt && breaks[1].repeat.start >= pinAt + 32, 'the pinned entry splits the run')
+  const rep = plan.repeats.find(r => r.first === '[0] .s0')
+  assert.equal(breaks[0].repeat.count + breaks[1].repeat.count + rep.shownEntries, 24)
   assert.equal(plan.pins.ignored, 1)
   // A pinned entry with children is shown down to the chosen depth
   const deep = planPoster({ analysis, size, bytes, depth: 3, pins: [{ offset: pinAt, length: 32 }] })
@@ -306,4 +317,100 @@ test('the poster says what was left out, and the breaks name skipped entries', (
   assert.match(result.svg, /not labelled, to keep to 12 labels/)
   assert.match(result.svg, /Dashed boxes/)
   assert.match(result.svg, /stroke-dasharray/)
+})
+
+test('with rows to spare, rows of zeros are only drawn where a box starts or ends', () => {
+  // A header, a long zero padding region, and data with zero rows inside it
+  const size = 0x2000
+  const bytes = new Uint8Array(size)
+  for (let i = 0; i < 0x40; i++) bytes[i] = 1 + (i % 9)
+  for (let i = 0x1000; i < 0x2000; i++) bytes[i] = (i >> 6) % 3 === 0 ? 0 : 0x41 + (i % 26)
+  const fields = [{ name: 'Header', offset: 0, length: 0x40, kind: 'header', children: [{ name: 'magic', offset: 0, length: 4, kind: 'magic', value: 'x' }, { name: 'count', offset: 4, length: 4, kind: 'count', value: '3' }] }]
+  const regions = [{ name: 'Gap', offset: 0x40, length: 0xFC0, kind: 'padding' }, { name: 'Body', offset: 0x1000, length: 0x1000, kind: 'data' }]
+  for (const maxRows of [40, 120, 200]) {
+    for (const bytesPerRow of BYTES_PER_ROW) {
+      const plan = planPoster({ analysis: analysisWith(fields, { regions }), size, bytes, maxRows, bytesPerRow })
+      assertPlanSane(plan)
+      for (const item of plan.items) {
+        if (item.type !== 'row') continue
+        if (!bytes.subarray(item.start, item.end).every(b => b === 0)) continue
+        const anchored = plan.labels.some(l => (l.start >= item.start && l.start < item.end) || (l.end - 1 >= item.start && l.end - 1 < item.end))
+        assert.ok(anchored, `row of zeros at ${hex(item.start)} with ${maxRows} rows, ${bytesPerRow} per row`)
+      }
+      // The zero gap is one break that says so
+      const gap = plan.items.find(i => i.type === 'break' && i.start >= 0x40 && i.end <= 0x1000)
+      assert.equal(gap.fill, 0)
+      if (maxRows >= 120) assert.ok(plan.items.length < maxRows, 'rows are left unused rather than filled with zeros')
+    }
+  }
+})
+
+test('breaks over one repeated byte value say so, and the text names it', () => {
+  const size = 0x3000
+  const bytes = new Uint8Array(size).fill(0xff, 0x1000, 0x2000)
+  for (let i = 0; i < 16; i++) bytes[i] = i + 1
+  bytes.fill(7, 0x2ff0)
+  const fields = [{ name: 'a', offset: 0, length: 16, kind: 'magic' }, { name: 'b', offset: 0x1000, length: 0x1000, kind: 'data' }, { name: 'c', offset: 0x2ff0, length: 16, kind: 'data' }]
+  const result = buildPoster({ bytes, analysis: analysisWith(fields), fileName: 'f.bin', options: {}, date: '2026-11-22' })
+  const fills = result.plan.items.filter(i => i.type === 'break').map(i => i.fill)
+  assert.ok(fills.includes(0))
+  assert.ok(fills.includes(0xff))
+  assert.match(result.svg, /bytes, all zero \(0x/)
+  assert.match(result.svg, /bytes, all FF/)
+  // Without bytes, or past the check limit, nothing is claimed
+  const plan = planPoster({ analysis: analysisWith(fields), size, maxRows: 40 })
+  assert.ok(plan.items.every(i => i.fill === undefined))
+  const big = new Uint8Array(1 << 18)
+  const wide = planPoster({ analysis: analysisWith([{ name: 'm', offset: 0, length: 4, kind: 'magic' }]), size: big.length, bytes: big, mode: 'auto' })
+  assert.ok(wide.items.filter(i => i.type === 'break' && i.end - i.start > 1 << 16).every(i => i.fill === undefined))
+})
+
+test('a pointer set on a header and on its field is one link, at the field', () => {
+  const entries = Array.from({ length: 6 }, (_, i) => ({
+    name: `[${i}]`, offset: 0x40 + i * 16, length: 16, kind: 'header', target: 0x200 + i * 0x40,
+    children: [
+      { name: 'size', offset: 0x40 + i * 16, length: 8, kind: 'size', value: '0x40' },
+      { name: 'offset', offset: 0x48 + i * 16, length: 8, kind: 'offset', value: hex(0x200 + i * 0x40), target: 0x200 + i * 0x40 }
+    ]
+  }))
+  const fields = [
+    { name: 'magic', offset: 0, length: 4, kind: 'magic', value: 'x' },
+    { name: 'Table', offset: 0x40, length: 96, kind: 'table', children: entries },
+    { name: 'Other', offset: 0x100, length: 8, kind: 'offset', target: 0x200, children: [{ name: 'elsewhere', offset: 0x100, length: 4, kind: 'offset', target: 0x240 }] }
+  ]
+  const bytes = new Uint8Array(0x400).fill(5)
+  const plan = planPoster({ analysis: analysisWith(fields), size: 0x400, bytes, maxLabels: 99 })
+  // 6 entries: one link each, at the offset field; "Other" points somewhere its child does not, so both stay
+  assert.equal(plan.links.length, 8)
+  for (let i = 0; i < 6; i++) assert.ok(plan.links.some(l => l.offset === 0x48 + i * 16 && l.target === 0x200 + i * 0x40))
+  assert.ok(!plan.links.some(l => l.offset === 0x40 && l.length === 16))
+  // Pointers: never two from one label, never two for one pointing field
+  const froms = plan.pointers.map(p => p.from)
+  assert.equal(new Set(froms).size, froms.length)
+  const at = plan.pointers.map(p => `${p.offset}>${p.target}`)
+  assert.equal(new Set(at).size, at.length)
+  // A box drawn at entry level points from its field, not its first byte
+  const boxed = planPoster({ analysis: analysisWith(fields), size: 0x400, bytes, depth: 2 })
+  const entryPointer = boxed.pointers.find(p => boxed.labels[p.from - 1].name === '[0]')
+  assert.equal(entryPointer.offset, 0x48)
+})
+
+test('limitedBy names the limit that actually stopped more labels', () => {
+  const { bytes, size, analysis } = fakeProgram(24)
+  const byLabels = planPoster({ analysis, size, bytes, maxLabels: 12, maxRows: 200 })
+  assert.equal(byLabels.limitedBy, 'labels')
+  assert.ok(byLabels.items.length < 200, 'rows left unused on purpose')
+  const byRows = planPoster({ analysis, size, bytes, maxLabels: 99, maxRows: 12, bytesPerRow: 8 })
+  assert.equal(byRows.limitedBy, 'rows')
+  const neither = planPoster({ analysis, size, bytes, maxLabels: 99, maxRows: 200 })
+  assert.equal(neither.omittedLabels, 0)
+  assert.equal(neither.limitedBy, null)
+})
+
+test('rows that only repeat the row above are not used as filler', () => {
+  const size = 0x4000
+  const bytes = new Uint8Array(size)
+  for (let i = 0; i < size; i++) bytes[i] = [0xeb, 0xff, 0xc0, 0x48][i % 4]
+  const plan = planPoster({ analysis: analysisWith([{ name: 'm', offset: 0, length: 4, kind: 'magic' }, { name: 'code', offset: 0x100, length: 0x3f00, kind: 'data' }]), size, bytes, maxRows: 120 })
+  assert.ok(plan.items.length < 20, `${plan.items.length} items for repeated rows`)
 })

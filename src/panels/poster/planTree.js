@@ -529,21 +529,52 @@ class PosterTree {
 
   /** The first pointer at or under a node, looking at a few nodes only. */
   pointerOf(node) {
+    if (node.ptr !== undefined) return node.ptr
+    node.ptr = this.findPointer(node)
+    return node.ptr
+  }
+
+  /**
+   * A node's own pointer, or the first one among a few of its descendants.
+   * When a parser sets the same target on a header and on its pointer field
+   * (a section header and its PointerToRawData), the field's position is
+   * the more precise one, so that one is returned.
+   */
+  findPointer(node) {
     if (node.merged) return null
-    if (isCount(node.src.target) && node.src.target < this.size) return { offset: node.offset, length: node.end - node.offset, target: node.src.target }
-    if (node.region) return null
+    const own = isCount(node.src.target) && node.src.target < this.size ? node.src.target : null
+    if (node.region) return own === null ? null : { offset: node.offset, length: node.end - node.offset, target: own }
     let budget = POINTER_SCAN
-    const stack = Array.isArray(node.src.children) ? [node.src.children] : []
-    while (stack.length && budget > 0) {
-      const kids = stack.pop()
+    let first = null
+    const queue = Array.isArray(node.src.children) ? [node.src.children] : []
+    for (let q = 0; q < queue.length && budget > 0; q++) {
+      const kids = queue[q]
       for (let i = 0; i < kids.length && budget > 0; i++, budget--) {
         const k = kids[i]
-        if (!validNode(k, this.size)) continue
-        if (isCount(k.target) && k.target < this.size) return { offset: k.offset, length: Math.floor(k.length), target: k.target }
-        if (Array.isArray(k.children) && k.children.length) stack.push(k.children)
+        if (!validNode(k, this.size) || k === node.src) continue
+        if (isCount(k.target) && k.target < this.size) {
+          const found = { offset: k.offset, length: Math.floor(k.length), target: k.target }
+          if (own === null || k.target === own) return found
+          first = first || found
+        }
+        if (Array.isArray(k.children) && k.children.length) queue.push(k.children)
       }
     }
-    return null
+    if (own !== null) return { offset: node.offset, length: node.end - node.offset, target: own }
+    return first
+  }
+
+  /** Shows one more entry of a repeat as a box of its own. */
+  showEntry(rep, index) {
+    const entry = rep.members[index]
+    entry.rep = { rep, index, role: 'more' }
+    rep.shown = [...rep.shown, entry].sort((a, b) => a.rep.index - b.rep.index)
+  }
+
+  hideEntry(rep, index) {
+    const entry = rep.members[index]
+    rep.shown = rep.shown.filter(n => n !== entry)
+    if (entry.rep?.role === 'more') delete entry.rep
   }
 }
 

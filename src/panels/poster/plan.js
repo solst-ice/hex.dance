@@ -32,6 +32,19 @@ export const MAX_LINKS = 400
 const LEVEL_PENALTY = 4
 const KIND_SCORE = { magic: 8, count: 5, offset: 5, size: 4, flags: 3, checksum: 3, string: 3, header: 2, data: 1, other: 0, padding: -5 }
 const PIN_CAP = 64
+// Bytes looked at to tell rows of zeros, per poster
+const ZERO_ROW_BYTES = 1 << 20
+// Further entries shown per repeat when labels and rows allow, and rows kept back while doing it
+const MORE_ENTRIES = 2
+const ROW_RESERVE = 8
+// Rows of content added at the start of each long stretch (at least, and
+// per row of budget), and how far ahead to look past zeros
+const CONTENT_ROWS = 12
+const CONTENT_SHARE = 1 / 6
+const LOOK_AHEAD = 64
+// Bytes looked at to tell whether a break is all one value
+const FILL_PER_BREAK = 1 << 16
+const FILL_TOTAL = 1 << 20
 
 const isCount = n => Number.isSafeInteger(n) && n >= 0
 
@@ -178,6 +191,8 @@ function interest(tree, node) {
   return s
 }
 
+// The last entry of a repeat, and further ones shown, are one box each
+const boxOnly = node => Boolean(node.rep) && node.rep.role !== 'first' && node.rep.role !== 'pinned'
 const unitNodes = unit => (unit.type === 'repeat' ? unit.shown : [unit])
 const unitInterest = (tree, unit) => (unit.type === 'repeat' ? Math.max(...unit.shown.map(n => interest(tree, n))) + 2 : interest(tree, unit))
 const unitStart = unit => (unit.type === 'repeat' ? unit.members[0].offset : unit.offset)
@@ -255,20 +270,63 @@ function forcedIn(forced, a, b) {
   return null
 }
 
-function countItems(rows, forced) {
-  let n = rows.length
-  for (let k = 1; k < rows.length; k++) {
-    const g = rows[k] - rows[k - 1] - 1
-    if (g <= 0) continue
-    if (forcedIn(forced, rows[k - 1] + 1, rows[k] - 1)) n += 1
-    else n += g >= COLLAPSE_MIN ? 1 : g
+/**
+ * Whether a row's bytes are all zero, from a bounded cache. Without bytes
+ * nothing counts as zero.
+ */
+function zeroRows(tree, bpr) {
+  const bytes = tree.bytes
+  const cache = new Map()
+  let budget = ZERO_ROW_BYTES
+  return r => {
+    if (!bytes) return false
+    let z = cache.get(r)
+    if (z !== undefined) return z
+    const start = r * bpr
+    const end = Math.min(tree.size, start + bpr)
+    if (end - start > budget) return false
+    budget -= end - start
+    z = end > start
+    for (let i = start; i < end && z; i++) z = bytes[i] === 0
+    cache.set(r, z)
+    return z
   }
-  return n
 }
 
-function itemsFrom(rows, forced, bpr, size) {
+/** Whether a row repeats the bytes of the row above exactly (bounded, like zeroRows). */
+function sameRows(tree, bpr) {
+  const bytes = tree.bytes
+  const cache = new Map()
+  let budget = ZERO_ROW_BYTES
+  return r => {
+    if (!bytes || r <= 0) return false
+    let same = cache.get(r)
+    if (same !== undefined) return same
+    const start = r * bpr
+    const end = Math.min(tree.size, start + bpr)
+    if (end - start < bpr || bpr > budget) return false
+    budget -= bpr
+    same = true
+    for (let i = start; i < end && same; i++) same = bytes[i] === bytes[i - bpr]
+    cache.set(r, same)
+    return same
+  }
+}
+
+/**
+ * Items for a sorted set of kept rows: gaps of COLLAPSE_MIN rows or more,
+ * and the skipped middle of a repeat, become one break; shorter gaps are
+ * drawn row by row, except rows that are all zero, which become a break
+ * (no box starts or ends on them: kept rows are never dropped).
+ */
+function itemsFrom(rows, forced, bpr, size, zeroRow = () => false) {
   const window = { start: 0, end: size }
   const items = []
+  const pushBreak = (start, end) => {
+    const last = items[items.length - 1]
+    if (last && last.type === 'break' && !last.repeat && last.end === start) last.end = end
+    else items.push({ type: 'break', start, end, where: 'inside' })
+  }
   for (let k = 0; k < rows.length; k++) {
     if (k > 0) {
       const a = rows[k - 1]
@@ -277,13 +335,38 @@ function itemsFrom(rows, forced, bpr, size) {
       if (g > 0) {
         const f = forcedIn(forced, a + 1, b - 1)
         if (f) items.push({ type: 'break', start: (a + 1) * bpr, end: b * bpr, where: 'inside', repeat: { ...f.info } })
-        else if (g >= COLLAPSE_MIN) items.push({ type: 'break', start: (a + 1) * bpr, end: b * bpr, where: 'inside' })
-        else for (let r = a + 1; r < b; r++) items.push(rowItem(r, bpr, window))
+        else if (g >= COLLAPSE_MIN) pushBreak((a + 1) * bpr, b * bpr)
+        else {
+          for (let r = a + 1; r < b; r++) {
+            if (zeroRow(r)) pushBreak(r * bpr, (r + 1) * bpr)
+            else items.push(rowItem(r, bpr, window))
+          }
+        }
       }
     }
     items.push(rowItem(rows[k], bpr, window))
   }
   return items
+}
+
+function countItems(rows, forced, zeroRow = () => false) {
+  let n = rows.length
+  for (let k = 1; k < rows.length; k++) {
+    const a = rows[k - 1]
+    const b = rows[k]
+    const g = b - a - 1
+    if (g <= 0) continue
+    if (g >= COLLAPSE_MIN || forcedIn(forced, a + 1, b - 1)) n += 1
+    else {
+      let inZero = false
+      for (let r = a + 1; r < b; r++) {
+        const z = zeroRow(r)
+        if (!z || !inZero) n += 1
+        inZero = z
+      }
+    }
+  }
+  return n
 }
 
 // --- Tour --------------------------------------------------------------------
@@ -293,11 +376,12 @@ function planTour(tree, { depth, maxLabels, maxRows, bpr }) {
   const opened = new Set()
   const failed = new Set()
   const root = tree.root
+  const zeroRow = zeroRows(tree, bpr)
   const inFrontier = unit => unitNodes(unit).some(n => shown.has(n) || opened.has(n))
   const fits = () => {
     if (shown.size > maxLabels) return false
     const { rows, forced } = rowNeeds(tree, shown, bpr)
-    return countItems(rows, forced) <= maxRows
+    return countItems(rows, forced, zeroRow) <= maxRows
   }
   // Applies a change, keeping it only when it fits
   const attempt = change => {
@@ -317,7 +401,7 @@ function planTour(tree, { depth, maxLabels, maxRows, bpr }) {
     opened.add(node)
     for (const u of units) addUnit(u)
   }
-  const openable = node => !node.merged && node.rep?.role !== 'last' && tree.units(node).length > 0
+  const openable = node => !node.merged && (!node.rep || node.rep.role === 'first' || node.rep.role === 'pinned') && tree.units(node).length > 0
 
   // 1. Pins, ahead of everything else: the path down to each, then the pinned
   // field itself or its children to the chosen depth
@@ -423,11 +507,30 @@ function planTour(tree, { depth, maxLabels, maxRows, bpr }) {
     if (!done) break
   }
 
-  // 4. Use the rows that are left
+  // 4. With labels to spare and plenty of rows, show a further entry or two
+  // of each repeat (the second and third section header, say), one box each
+  const reps = new Set()
+  for (const n of [...shown, ...opened]) if (n.rep) reps.add(n.rep.rep)
+  for (let round = 0; round < MORE_ENTRIES; round++) {
+    for (const rep of [...reps].sort((a, b) => a.members[0].offset - b.members[0].offset)) {
+      if (shown.size >= maxLabels) break
+      const index = round + 1
+      if (index >= rep.count - 1 || rep.shown.some(n => n.rep.index === index)) continue
+      tree.showEntry(rep, index)
+      const entry = rep.members[index]
+      shown.add(entry)
+      const { rows, forced } = rowNeeds(tree, shown, bpr)
+      if (countItems(rows, forced, zeroRow) <= maxRows - ROW_RESERVE) continue
+      shown.delete(entry)
+      tree.hideEntry(rep, index)
+    }
+  }
+
+  // 5. Use the rows that are left
   const labels = [...shown].sort((a, b) => a.offset - b.offset)
   const { rows, forced } = rowNeeds(tree, shown, bpr)
-  const filled = fillRows(tree, rows, forced, labels, bpr, maxRows)
-  return { labels, rows: filled, forced, rootsLeft, pinsLabelled, rowLimited }
+  const filled = fillRows(tree, rows, forced, labels, bpr, maxRows, zeroRow)
+  return { labels, rows: filled, forced, rootsLeft, pinsLabelled, rowLimited, zeroRow }
 }
 
 function unitsCost(units) {
@@ -450,19 +553,24 @@ function holderUnit(tree, offset, shown, opened) {
 
 /**
  * Spends the rows left after labelling: a row or two more of each data box,
- * then short gaps (smallest first), then one more row at the start of each
- * long stretch in turn.
+ * then short gaps (smallest first), then a bounded number of rows more at the
+ * start of each long stretch, in turn. Rows whose bytes are all zero, or
+ * that only repeat the row above, are never added: rows left over stay unused, as a shorter dump is better than
+ * filler.
  */
-function fillRows(tree, rows, forced, labels, bpr, maxRows) {
+function fillRows(tree, rows, forced, labels, bpr, maxRows, zeroRow) {
+  const sameRow = sameRows(tree, bpr)
+  // Filler: rows of zeros, and rows that only repeat the row above
+  const filler = r => zeroRow(r) || sameRow(r)
   const set = new Set(rows)
   let current = [...rows]
-  let count = countItems(current, forced)
+  let count = countItems(current, forced, zeroRow)
   const inForced = r => forced.some(f => r >= f.r1 && r <= f.r2)
   const tryAdd = add => {
-    const fresh = add.filter(r => !set.has(r) && !inForced(r))
+    const fresh = add.filter(r => !set.has(r) && !inForced(r) && !filler(r))
     if (!fresh.length) return false
     const next = [...current, ...fresh].sort((a, b) => a - b)
-    const n = countItems(next, forced)
+    const n = countItems(next, forced, zeroRow)
     if (n > maxRows) return false
     for (const r of fresh) set.add(r)
     current = next
@@ -479,35 +587,46 @@ function fillRows(tree, rows, forced, labels, bpr, maxRows) {
       if (extra === 1 || rowOf(n.end - 1) - rowOf(n.offset) > 3) tryAdd([rowOf(n.offset) + extra])
     }
   }
+  const tried = new Set()
   for (let guard = 0; guard < 400 && count < maxRows; guard++) {
     let best = null
     for (let k = 1; k < current.length; k++) {
       const a = current[k - 1]
       const b = current[k]
       const g = b - a - 1
-      if (g < COLLAPSE_MIN || forcedIn(forced, a + 1, b - 1)) continue
+      if (g < COLLAPSE_MIN || tried.has(a) || forcedIn(forced, a + 1, b - 1)) continue
       if (g - 1 <= maxRows - count && (!best || g < best.g)) best = { a, b, g }
     }
     if (!best) break
+    tried.add(best.a)
     const add = []
     for (let r = best.a + 1; r < best.b; r++) add.push(r)
-    if (!tryAdd(add)) break
+    // Only whole gaps: a gap with filler in it stays a break
+    if (!add.some(filler)) tryAdd(add)
   }
-  // (never inside a box that holds nothing: more rows of zeros say nothing)
-  const dullRow = r => labels.some(n => tree.dull(n) && n.offset <= r * bpr && n.end >= (r + 1) * bpr)
-  for (let pass = 0; pass < maxRows && count < maxRows; pass++) {
-    let added = false
+  // More of what long stretches hold: the next row that is not all zero,
+  // looking a few rows ahead only
+  const added = new Map()
+  for (let pass = 0, passes = Math.max(CONTENT_ROWS, Math.floor(maxRows * CONTENT_SHARE)); pass < passes && count < maxRows; pass++) {
+    let any = false
     const gaps = []
     for (let k = 1; k < current.length; k++) {
       const a = current[k - 1]
       const b = current[k]
-      if (b - a - 1 >= COLLAPSE_MIN && !forcedIn(forced, a + 1, b - 1) && !dullRow(a + 1)) gaps.push(a + 1)
+      if (b - a - 1 >= COLLAPSE_MIN && !forcedIn(forced, a + 1, b - 1)) gaps.push([a, b])
     }
-    for (const r of gaps) {
+    for (const [a, b] of gaps) {
       if (count >= maxRows) break
-      if (tryAdd([r])) added = true
+      if (pass > 0 && !added.has(a)) continue
+      let r = a + 1
+      while (r < b - 1 && r - a <= LOOK_AHEAD && zeroRow(r)) r++
+      if (r >= b - 1 || filler(r)) continue
+      if (tryAdd([r])) {
+        added.set(r, true)
+        any = true
+      }
     }
-    if (!added) break
+    if (!any) break
   }
   return current
 }
@@ -524,7 +643,7 @@ function collectLeaves(tree, base, { depth, window }) {
     for (const unit of tree.units(node)) {
       for (const n of unitNodes(unit)) {
         if (n.end <= window.start || n.offset >= window.end) continue
-        if (n.level - base.level >= depth || n.merged || n.rep?.role === 'last' || tree.units(n).length === 0) leaves.push(n)
+        if (n.level - base.level >= depth || n.merged || boxOnly(n) || tree.units(n).length === 0) leaves.push(n)
         else walk(n)
       }
     }
@@ -608,7 +727,7 @@ function countLeaves(tree, depth) {
     const node = stack.pop()
     for (const unit of tree.units(node)) {
       for (const n of unitNodes(unit)) {
-        if (n.level >= depth || n.merged || n.rep?.role === 'last' || tree.units(n).length === 0) total++
+        if (n.level >= depth || n.merged || boxOnly(n) || tree.units(n).length === 0) total++
         else stack.push(n)
       }
     }
@@ -616,22 +735,61 @@ function countLeaves(tree, depth) {
   return total
 }
 
-/** Every pointer field in the analysis, in file order, at most MAX_LINKS. */
+/**
+ * Every pointer in the analysis, in file order, at most MAX_LINKS. When a
+ * field and one of its descendants point at the same place (parsers set the
+ * target on a header and on its pointer field), only the descendant counts:
+ * it is the more precise position.
+ */
 function collectLinks(analysis, size) {
   const links = []
-  const stack = Array.isArray(analysis?.fields) ? [analysis.fields] : []
+  const stack = Array.isArray(analysis?.fields) ? [{ list: analysis.fields, above: [] }] : []
   let visits = 0
   while (stack.length && visits < VISIT_BUDGET) {
-    const list = stack.pop()
+    const { list, above } = stack.pop()
     for (let i = 0; i < list.length && visits < VISIT_BUDGET; i++, visits++) {
       const f = list[i]
       if (!validNode(f, size)) continue
-      if (isCount(f.target) && f.target < size) links.push({ offset: f.offset, length: Math.floor(f.length), target: f.target })
-      if (Array.isArray(f.children) && f.children.length) stack.push(f.children)
+      let link = null
+      if (isCount(f.target) && f.target < size) {
+        link = { offset: f.offset, length: Math.floor(f.length), target: f.target }
+        for (const a of above) if (a.target === f.target) a.dropped = true
+        links.push(link)
+      }
+      if (Array.isArray(f.children) && f.children.length && above.length < 64) {
+        stack.push({ list: f.children, above: link ? [...above, link] : above })
+      }
     }
   }
-  links.sort((a, b) => a.offset - b.offset || a.target - b.target)
-  return links.slice(0, MAX_LINKS)
+  const kept = links.filter(l => !l.dropped)
+  kept.sort((a, b) => a.offset - b.offset || a.target - b.target)
+  const out = []
+  for (const l of kept) {
+    const last = out[out.length - 1]
+    if (last && last.offset === l.offset && last.length === l.length && last.target === l.target) continue
+    out.push({ offset: l.offset, length: l.length, target: l.target })
+    if (out.length >= MAX_LINKS) break
+  }
+  return out
+}
+
+/**
+ * Marks breaks whose bytes are all one value (all zero, all FF), looking at
+ * no more than FILL_PER_BREAK bytes per break and FILL_TOTAL per poster; a
+ * break not fully checked says nothing.
+ */
+function describeFill(items, bytes) {
+  if (!bytes) return items
+  let budget = FILL_TOTAL
+  return items.map(item => {
+    if (item.type !== 'break' || item.repeat) return item
+    const n = item.end - item.start
+    if (n <= 0 || n > FILL_PER_BREAK || n > budget) return item
+    budget -= n
+    const v = bytes[item.start]
+    for (let i = item.start + 1; i < item.end; i++) if (bytes[i] !== v) return item
+    return { ...item, fill: v }
+  })
 }
 
 function describe(tree, nodes, items, window) {
@@ -776,7 +934,7 @@ export function planPoster(input) {
     // every byte in it is drawn
     tour = planTour(tree, { depth, maxLabels, maxRows, bpr })
     nodes = tour.labels
-    items = itemsFrom(tour.rows, tour.forced, bpr, size)
+    items = itemsFrom(tour.rows, tour.forced, bpr, size, tour.zeroRow)
   } else {
     let base = tree.root
     if (mode === 'field') {
@@ -797,6 +955,7 @@ export function planPoster(input) {
     available = result.available
   }
 
+  items = describeFill(items, tree.bytes)
   const { labels, parents, pointers, repeats } = describe(tree, nodes, items, window)
   // omittedLabels: fields within the depth limit that would get a label of
   // their own on a poster without limits but have none here. In tour mode
@@ -824,7 +983,9 @@ export function planPoster(input) {
     regionsAdded: tree.regionNodes,
     pins: { asked: pins.length, labelled: tour ? tour.pinsLabelled : 0, ignored: tree.pinsIgnored },
     rootsLeft: tour ? tour.rootsLeft : 0,
-    limitedBy: omittedLabels > 0 || (tour && tour.rootsLeft) ? (tour && tour.rowLimited && labels.length < maxLabels ? 'rows' : 'labels') : null,
+    // What stopped more labels: the label limit, or the rows (rows may also
+    // be left unused on purpose, when all that is left is zeros)
+    limitedBy: omittedLabels > 0 || (tour && tour.rootsLeft) ? (labels.length >= maxLabels ? 'labels' : tour ? (tour.rowLimited ? 'rows' : null) : 'rows') : null,
     omittedLabels,
     partialTree: tree.truncated || tree.cutLists > 0,
     shown: rows.length ? { start: rows[0].start, end: rows[rows.length - 1].end } : null
