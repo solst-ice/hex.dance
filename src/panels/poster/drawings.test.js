@@ -631,6 +631,38 @@ test('unusual notes carry the number of the box that holds their offset', () => 
   }
 })
 
+test('every unusual note is shown whole, however many there are', () => {
+  const file = quineFile()
+  const sentence = i => `Note ${i}: sections are aligned to 0x4 bytes in the file and 0x4 in memory, where programs normally use 0x200 and 0x1000, and this goes on for a while.`
+  const unusual = Array.from({ length: 12 }, (_, i) => ({ text: sentence(i + 1), offset: 0x40 + i * 4 }))
+  const analysis = { ...file.analysis, unusual }
+  const plan = quinePlan(file)
+  for (const proportion of SHAPES) {
+    for (const style of STYLES) {
+      const { scene } = check({ plan, bytes: file.bytes, analysis, proportion, style })
+      const lines = textOf(scene, 'unusual')
+      assert.ok(!lines.some(line => line.includes('…')), `a note is cut: ${lines.find(line => line.includes('…'))}`)
+      const joined = lines.join(' ').replace(/\s+/g, ' ')
+      for (let i = 1; i <= 12; i++) assert.ok(joined.includes(sentence(i).slice(-28)), `note ${i} is not whole in ${proportion}`)
+    }
+  }
+})
+
+test('names on the file map and the memory diagram are whole or left out', () => {
+  const file = sectionsFile(12)
+  const names = ['.text', '.a-very-long-section-name', '.rdata', '.data']
+  const analysis = {
+    ...file.analysis,
+    regions: file.analysis.regions.map((r, i) => ({ ...r, name: `${names[i % names.length]} region` })),
+    image: { ...file.analysis.image, sections: file.analysis.image.sections.map((sec, i) => ({ ...sec, name: names[i % names.length] })) }
+  }
+  for (const proportion of SHAPES) {
+    const { scene } = check({ plan: corkamiPlan({ ...file, analysis }), bytes: file.bytes, analysis, proportion })
+    const cut = scene.elements.filter(e => e.t === 'text' && typeof e.text === 'string' && e.text.endsWith('…') && e.text.length > 1 && /region|^\.[a-z-]/.test(e.text))
+    assert.deepEqual(cut.map(e => e.text), [])
+  }
+})
+
 test('the title facts wrap and are never cut', () => {
   const summary = [
     { label: 'Architecture', value: 'x86' }, { label: 'Timestamp', value: '0 (not set)' },

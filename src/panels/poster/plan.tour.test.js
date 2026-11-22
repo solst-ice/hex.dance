@@ -538,17 +538,27 @@ test('boxes of readable text are marked, and the plan lists the longest', () => 
 
   // Several, longest first, at most three; none on binary data
   const many = new Uint8Array(0x4000)
-  for (let i = 0; i < many.length; i++) many[i] = 0x61 + (i % 26)
+  // Words and lines: a space every sixth byte, a line end every sixtieth
+  for (let i = 0; i < many.length; i++) many[i] = i % 60 === 59 ? 0x0a : i % 6 === 5 ? 0x20 : 0x61 + (i % 26)
   for (let i = 0x3000; i < 0x4000; i++) many[i] = (i * 151) & 0xff
   const fields = [[0, 0x100], [0x100, 0x800], [0x900, 0x40], [0xa00, 0x400], [0xe00, 0x30], [0x1000, 0x200], [0x3000, 0x1000]].map(([offset, length], i) => ({ name: `t${i}`, offset, length, kind: 'data' }))
   const texts = planPoster({ analysis: analysisWith(fields), size: many.length, bytes: many, maxLabels: 99 }).texts
   assert.deepEqual(texts.map(t => t.name), ['t1', 't3', 't5'])
+  // Text, but not worth a listing: under 256 bytes, or a table of names with NULs between and no spaces
+  const short = planPoster({ analysis: analysisWith([{ name: 'note', offset: 0, length: 0xc0, kind: 'data' }, { name: 'rest', offset: 0x3000, length: 0x1000, kind: 'data' }]), size: many.length, bytes: many })
+  assert.equal(short.labels.find(l => l.name === 'note').text, true)
+  assert.deepEqual(short.texts, [])
+  const names = new Uint8Array(0x800)
+  for (let i = 0; i < names.length; i++) names[i] = i % 12 === 11 ? 0 : 0x61 + ((i * 7) % 26)
+  const table = planPoster({ analysis: analysisWith([{ name: '.strtab', offset: 0, length: names.length, kind: 'data' }]), size: names.length, bytes: names })
+  assert.equal(table.labels[0].text, true)
+  assert.deepEqual(table.texts, [])
   const binary = planPoster({ analysis: analysisWith([{ name: 'b', offset: 0, length: 0x1000, kind: 'data' }]), size: 0x1000, bytes: many.subarray(0x3000) })
   assert.deepEqual(binary.texts, [])
   assert.ok(!binary.labels[0].text)
   // Bounded on a huge box
   const huge = new Uint8Array(1 << 24).fill(0x41)
-  for (let i = 0; i < huge.length; i += 7) huge[i] = 0x20 + (i % 90)
+  for (let i = 0; i < huge.length; i += 7) huge[i] = i % 3 ? 0x20 : 0x30 + (i % 70)
   const t = performance.now()
   const big = planPoster({ analysis: analysisWith([{ name: 'h', offset: 0, length: huge.length, kind: 'data' }]), size: huge.length, bytes: huge })
   assert.ok(performance.now() - t < 400)

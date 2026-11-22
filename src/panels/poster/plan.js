@@ -14,7 +14,7 @@
 // runs of entries with the same layout show only their first and last entry.
 
 import { kindOf } from './palette.js'
-import { createTree, validNode, readableText, VISIT_BUDGET, TEXT_MIN } from './planTree.js'
+import { createTree, validNode, readableText, readableProse, VISIT_BUDGET, TEXT_MIN } from './planTree.js'
 
 export const MAX_ROWS = 40
 export const COLLAPSE_MIN = 3
@@ -48,8 +48,10 @@ const FILL_TOTAL = 1 << 20
 // Rows that hold readable strings: a run of at least STRING_RUN printable
 // characters, half of them letters, looked for at most STRING_REACH bytes
 // past the row's ends; rows of a box checked, rows added per box per round,
-// and bytes looked at per poster
-const STRING_RUN = 6
+// and bytes looked at per poster. Ten characters, because compressed and
+// encrypted data throws up shorter runs by chance: about one row in 25 of
+// random bytes holds a run of six, one in a thousand a run of ten.
+const STRING_RUN = 10
 const STRING_REACH = 32
 const STRING_ROWS_CHECKED = 256
 const STRING_ROWS_PER_BOX = 3
@@ -68,8 +70,10 @@ const DROP_INTEREST = 4
 // A box of text shows at most this many rows at its start, and its last two
 const TEXT_HEAD = 5
 const TEXT_TAIL = 2
-// Stretches of text named for the text band
-const TEXT_BAND_MIN = 64
+// Stretches of text named for the text band: long enough to be worth
+// reading as a listing (a few rows of the dump show a short one whole), and
+// made of words and lines, not a table of names
+const TEXT_BAND_MIN = 256
 const TEXT_BAND_MAX = 3
 const TEXT_CHECKS = 200
 
@@ -1099,7 +1103,7 @@ function describe(tree, nodes, items, window, textOf) {
 
   // The longest stretches of text among the boxes, for the text band
   const texts = labels
-    .filter(l => l.text && l.end - l.start >= TEXT_BAND_MIN)
+    .filter(l => l.text && l.end - l.start >= TEXT_BAND_MIN && readableProse(tree.bytes, l.start, l.end))
     .sort((a, b) => (b.end - b.start) - (a.end - a.start) || a.start - b.start)
     .slice(0, TEXT_BAND_MAX)
     .map(l => ({ offset: l.start, length: l.end - l.start, label: l.number, name: l.name }))

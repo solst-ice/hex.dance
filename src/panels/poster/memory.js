@@ -160,7 +160,8 @@ export function memoryBand({ analysis, colors, fileSize }) {
         const numbersFit = unnamed.every(e => textWidth(String(e.p.index + 1), NAME_F) + 4 <= e.m2 - e.m1)
         for (const e of names) {
           const text = e.p.name.trim() ? truncate(e.p.name, charsFor(e.m2 - e.m1 - 4, NAME_F)) : numbersFit ? String(e.p.index + 1) : ''
-          if (!text || textWidth(text, NAME_F) + 4 > e.m2 - e.m1 || (e.p.name.trim() && text.length < 2)) continue
+          // The whole name or none
+          if (!text || textWidth(text, NAME_F) + 4 > e.m2 - e.m1 || (e.p.name.trim() && text.endsWith('…'))) continue
           el.push({ t: 'text', x: (e.m1 + e.m2) / 2, y: memY + 11.5, size: NAME_F, fill: e.p.offset === null ? colors.text : colors.tabText, weight: 700, anchor: 'middle', text })
         }
       }

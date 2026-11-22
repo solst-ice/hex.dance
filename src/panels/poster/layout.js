@@ -419,6 +419,8 @@ function entryValue(label, lineChars) {
   if (!label.text) return value
   const fits = value && textLength(value) <= lineChars
   if (fits && label.length < 64) return value
+  // The parser already said how much text there is
+  if (fits && /\bof (readable )?text$/i.test(value)) return value
   const amount = `${formatSize(label.length)} of text`
   // A short value stays, with how much text the box holds; a long one (a
   // sentence from the file) gives way to that
@@ -727,8 +729,9 @@ function overviewStrip(plan, regions, colors, x, y, width, out, extras = {}) {
     el.push({ t: 'rect', x: rx, y: barY + 1, w: Math.min(rw, x + width - rx), h: barH - 2, fill: color, fillOpacity: colors.style === 'print' ? 0.75 : 0.85 })
     const name = String(region.name ?? '')
     if (rw > 40) {
+      // The whole name or none: a name cut to a few letters says less than the legend does
       const text = truncate(name, charsFor(rw - 10, 10))
-      if (textLength(text) >= 3) el.push({ t: 'text', x: rx + 5, y: barY + 14, size: 10, fill: colors.tabText, weight: 700, text })
+      if (text && !text.endsWith('…')) el.push({ t: 'text', x: rx + 5, y: barY + 14, size: 10, fill: colors.tabText, weight: 700, text })
     }
   })
 

@@ -88,7 +88,26 @@ const letter = b => (b >= 0x41 && b <= 0x5a) || (b >= 0x61 && b <= 0x7a)
  * @param {Uint8Array|null} bytes
  */
 export function readableText(bytes, start, end) {
-  if (!(bytes instanceof Uint8Array) || !isCount(start) || !(end - start >= TEXT_MIN) || end > bytes.length) return false
+  const stats = textStats(bytes, start, end)
+  return Boolean(stats) && stats.good >= stats.total * 0.9 && stats.letters * 3 >= stats.total && stats.distinct >= 8
+}
+
+/**
+ * Whether bytes [start, end) read as lines of text, the kind worth setting
+ * out as a listing: readable as above, with hardly anything unprintable
+ * (95% printable, at most 2% NUL bytes) and with the spaces and line ends
+ * that words need (5% or more). A table of NUL-separated names is readable
+ * text but not this.
+ */
+export function readableProse(bytes, start, end) {
+  const stats = textStats(bytes, start, end)
+  return Boolean(stats) && stats.good >= stats.total * 0.95 && stats.letters * 3 >= stats.total && stats.distinct >= 8 &&
+    stats.nuls * 50 <= stats.total && stats.spaces * 20 >= stats.total
+}
+
+// What the sampled bytes of [start, end) hold, or null when there is nothing to judge
+function textStats(bytes, start, end) {
+  if (!(bytes instanceof Uint8Array) || !isCount(start) || !(end - start >= TEXT_MIN) || end > bytes.length) return null
   const pieces = []
   if (end - start <= 2 * TEXT_EDGE + TEXT_SAMPLES * TEXT_SAMPLE) pieces.push([start, end])
   else {
@@ -102,6 +121,8 @@ export function readableText(bytes, start, end) {
   let total = 0
   let good = 0
   let letters = 0
+  let nuls = 0
+  let spaces = 0
   const seen = new Set()
   for (const [a, b] of pieces) {
     for (let i = a; i < b; i++) {
@@ -109,10 +130,12 @@ export function readableText(bytes, start, end) {
       total++
       if (printable(v)) good++
       if (letter(v)) letters++
+      if (v === 0) nuls++
+      else if (v === 0x20 || v === 0x09 || v === 0x0A || v === 0x0D) spaces++
       if (seen.size < 8) seen.add(v)
     }
   }
-  return total > 0 && good >= total * 0.9 && letters * 3 >= total && seen.size >= 8
+  return total > 0 ? { total, good, letters, nuls, spaces, distinct: seen.size } : null
 }
 
 /** A name with indices and numbers taken out, to compare entries of a list. */
