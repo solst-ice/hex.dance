@@ -29,12 +29,6 @@ const BRACKET_STEP = 7
 
 const LF = 12.5 // legend font size
 const LEGEND_W = 384
-// Beside the dump the legend takes at most two columns, which may be wider
-// than LEGEND_W so that fewer entries wrap; under the dump it keeps columns
-// of LEGEND_W
-const LEGEND_BESIDE_MAX = 2
-const LEGEND_WIDTHS = [384, 448, 512, 576]
-const LEGEND_MAX_W = 576
 const COL_GAP = 28
 const BODY_GAP = 48
 
@@ -440,8 +434,8 @@ function entryValue(label, lineChars) {
  * when it fits, or on lines of its own below; then the position, with the
  * description after it wrapping onto further lines.
  */
-function entryLines(label, width) {
-  const lineChars = charsFor(width - 28, LF)
+function entryLines(label) {
+  const lineChars = charsFor(LEGEND_W - 28, LF)
   const nameLines = wrapText(label.name || '(unnamed)', lineChars, NAME_LINES)
   const value = entryValue(label, lineChars)
   let inline = ''
@@ -454,7 +448,7 @@ function entryLines(label, width) {
   const where = `${hexOffset(label.offset)} · ${formatCount(label.length)} B`
   const description = cleanText(label.description).trim()
   const descriptionLines = description
-    ? wrapText(description, charsFor(width - 28, 11), DESCRIPTION_LINES, charsFor(width - 28 - textWidth(where, 10.5) - 10, 11))
+    ? wrapText(description, charsFor(LEGEND_W - 28, 11), DESCRIPTION_LINES, charsFor(LEGEND_W - 28 - textWidth(where, 10.5) - 10, 11))
     : []
   const top = nameLines.length + valueLines.length
   const whereY = 16 + (top - 1) * 16 + 15
@@ -462,9 +456,10 @@ function entryLines(label, width) {
   return { nameLines, inline, valueLines, where, descriptionLines, whereY, boxH }
 }
 
-/** Blocks of a legend column `width` wide, each with a height and a draw function. */
-function legendBlocks(plan, colors, shadeOf, parentShade, notes, width = LEGEND_W) {
+/** Blocks of the legend column, each with a height and a draw function. */
+function legendBlocks(plan, colors, shadeOf, parentShade, notes) {
   const blocks = []
+  const width = LEGEND_W
 
   // Kinds present on this poster
   const kinds = [...new Set(plan.labels.map(l => kindOf(l.kind)))]
@@ -574,7 +569,7 @@ function legendBlocks(plan, colors, shadeOf, parentShade, notes, width = LEGEND_
       })
     }
     chain = ids
-    const lines = entryLines(label, width)
+    const lines = entryLines(label)
     blocks.push({
       type: 'entry',
       h: lines.boxH + 9,
@@ -866,16 +861,7 @@ export function layoutPoster({ plan, bytes, analysis, fileName, colors, proporti
   const parentShade = parent => colors.shades[parent.kind][(parentShadeIdx[plan.parents.indexOf(parent)] ?? 0)]
 
   const geometry = hexGeometry(plan)
-  // The legend's blocks depend on how wide its columns are; a legend handed in by a test has one width
-  const legendNotes = notesFor(plan)
-  const blocksAt = new Map()
-  const blocksFor = colW => {
-    if (Array.isArray(legend)) return legend
-    let made = blocksAt.get(colW)
-    if (!made) blocksAt.set(colW, (made = legendBlocks(plan, colors, shadeOf, parentShade, legendNotes, colW)))
-    return made
-  }
-  const besideWidths = Array.isArray(legend) ? [LEGEND_W] : LEGEND_WIDTHS
+  const blocks = Array.isArray(legend) ? legend : legendBlocks(plan, colors, shadeOf, parentShade, notesFor(plan))
 
   // The extra drawings, each only with its flag on and data to show
   const image = analysis?.image && typeof analysis.image === 'object' ? analysis.image : null
@@ -983,30 +969,23 @@ export function layoutPoster({ plan, bytes, analysis, fileName, colors, proporti
     for (const spec of specs) {
       if (spec.layout === 'stack') {
         for (const stacked of [false, true]) {
-          // Under the dump: up to four columns of the usual width. Beside it: one or two, of any width on offer
-          for (const colW of stacked ? [LEGEND_W] : besideWidths) {
-            const blocks = blocksFor(colW)
-            for (let k = 1; k <= (stacked ? 4 : LEGEND_BESIDE_MAX); k++) {
-              const flow = flowColumns(blocks, k, stacked ? 0 : s.dumpH)
-              const legendW = flow.cols.length * colW + (flow.cols.length - 1) * COL_GAP
-              const bodyW = stacked ? Math.max(s.allDumpW, legendW) : s.allDumpW + (flow.cols.length ? BODY_GAP + legendW : 0)
-              const bodyH = stacked ? s.dumpH + (flow.height ? 36 + flow.height : 0) : Math.max(s.dumpH, flow.height)
-              consider({ spec, ...s, penalty, stacked, flow, colW, blocks, legendW, bodyW, bodyH, innerW: Math.max(MIN_INNER_W, bodyW) })
-              if (flow.cols.length < k) break
-            }
+          for (let k = 1; k <= 4; k++) {
+            const flow = flowColumns(blocks, k, stacked ? 0 : s.dumpH)
+            const legendW = flow.cols.length * LEGEND_W + (flow.cols.length - 1) * COL_GAP
+            const bodyW = stacked ? Math.max(s.allDumpW, legendW) : s.allDumpW + (flow.cols.length ? BODY_GAP + legendW : 0)
+            const bodyH = stacked ? s.dumpH + (flow.height ? 36 + flow.height : 0) : Math.max(s.dumpH, flow.height)
+            consider({ spec, ...s, penalty, stacked, flow, legendW, bodyW, bodyH, innerW: Math.max(MIN_INNER_W, bodyW) })
+            if (flow.cols.length < k) break
           }
         }
       } else {
-        for (const colW of besideWidths) {
-          const blocks = blocksFor(colW)
-          for (let k = 1; k <= LEGEND_BESIDE_MAX; k++) {
-            const sideW = Math.max(SIDE_MIN, k * colW + (k - 1) * COL_GAP)
-            const sideH = stackHeight(spec.side, sideW)
-            const flow = flowColumns(blocks, k, Math.max(0, s.dumpH - sideH))
-            const bodyW = s.allDumpW + BODY_GAP + sideW
-            const bodyH = Math.max(s.dumpH, sideH + flow.height)
-            consider({ spec, ...s, penalty, flow, colW, blocks, sideW, bodyW, bodyH, innerW: Math.max(MIN_INNER_W, bodyW) })
-          }
+        for (let k = 1; k <= 5; k++) {
+          const sideW = Math.max(SIDE_MIN, k * LEGEND_W + (k - 1) * COL_GAP)
+          const sideH = stackHeight(spec.side, sideW)
+          const flow = flowColumns(blocks, k, Math.max(0, s.dumpH - sideH))
+          const bodyW = s.allDumpW + BODY_GAP + sideW
+          const bodyH = Math.max(s.dumpH, sideH + flow.height)
+          consider({ spec, ...s, penalty, flow, sideW, bodyW, bodyH, innerW: Math.max(MIN_INNER_W, bodyW) })
         }
       }
     }
@@ -1028,10 +1007,10 @@ export function layoutPoster({ plan, bytes, analysis, fileName, colors, proporti
     }
     return y
   }
-  const drawLegend = (flow, x0, y0, colW = best.colW, blocks = best.blocks) => {
+  const drawLegend = (flow, x0, y0) => {
     flow.cols.forEach((col, i) => {
       let ly = y0
-      const x = x0 + i * (colW + COL_GAP)
+      const x = x0 + i * (LEGEND_W + COL_GAP)
       for (const block of col) {
         const first = out.elements.length
         block.draw(x, ly, out)
@@ -1058,7 +1037,6 @@ export function layoutPoster({ plan, bytes, analysis, fileName, colors, proporti
 
   // Bands across the top; spare height goes below the body
   const by = drawBands(best.spec.top, innerX, MARGIN, innerW)
-  let legendDrawn = { columns: best.flow.cols.length, width: best.colW }
 
   if (best.spec.layout === 'stack') {
     const bx = innerX + Math.max(0, (innerW - best.bodyW) / 2)
@@ -1069,7 +1047,7 @@ export function layoutPoster({ plan, bytes, analysis, fileName, colors, proporti
       drawDump(bx, by)
       const legendX = bx + best.allDumpW + BODY_GAP
       drawLegend(best.flow, legendX, by)
-      if (best.flow.cols.length && best.blocks.length) {
+      if (best.flow.cols.length && blocks.length) {
         out.elements.push({ t: 'line', x1: legendX - BODY_GAP / 2, y1: by + 4, x2: legendX - BODY_GAP / 2, y2: by + best.bodyH - 4, stroke: colors.rule, sw: 0.75 })
       }
     }
@@ -1082,29 +1060,13 @@ export function layoutPoster({ plan, bytes, analysis, fileName, colors, proporti
     drawDump(left ? innerX + sideW + BODY_GAP : innerX, by)
     const legendY = drawBands(best.spec.side, sx, by, sideW)
     const room = height - MARGIN - FOOT_H - 20 - legendY
-    // The page's proportion may have made the side column wider than the
-    // search assumed: the legend's columns widen to fill it (never more of
-    // them than LEGEND_BESIDE_MAX), which can only shorten the legend
     let flow = best.flow
-    let colW = best.colW
-    let blocks = best.blocks
-    if (!Array.isArray(legend)) {
-      const minHeight = Math.max(0, by + best.dumpH - legendY)
-      for (const k of [LEGEND_BESIDE_MAX, flow.cols.length]) {
-        const w = Math.floor(Math.min(LEGEND_MAX_W, (sideW - (k - 1) * COL_GAP) / k))
-        if (w < LEGEND_W || (k === flow.cols.length && w <= colW)) continue
-        const widerBlocks = blocksFor(w)
-        const wider = flowColumns(widerBlocks, k, minHeight)
-        if (wider.height <= Math.max(room, flow.height)) {
-          flow = wider
-          colW = w
-          blocks = widerBlocks
-          break
-        }
-      }
+    const most = Math.max(1, Math.min(6, Math.floor((sideW + COL_GAP) / (LEGEND_W + COL_GAP))))
+    if (most > flow.cols.length) {
+      const wider = flowColumns(blocks, most, Math.max(0, by + best.dumpH - legendY))
+      if (wider.height <= room) flow = wider
     }
-    drawLegend(flow, sx, legendY, colW, blocks)
-    legendDrawn = { columns: flow.cols.length, width: colW }
+    drawLegend(flow, sx, legendY)
     const rule = left ? sx + sideW + BODY_GAP / 2 : sx - BODY_GAP / 2
     out.elements.push({ t: 'line', x1: rule, y1: by + 4, x2: rule, y2: Math.max(by + best.dumpH, legendY + flow.height) - 4, stroke: colors.rule, sw: 0.75 })
   }
@@ -1143,8 +1105,7 @@ export function layoutPoster({ plan, bytes, analysis, fileName, colors, proporti
       layout: best.spec.layout,
       paired: best.spec.paired,
       stacked: Boolean(best.stacked),
-      columns: legendDrawn.columns,
-      legendWidth: legendDrawn.width,
+      columns: best.flow.cols.length,
       dumpColumns: best.dumpColumns,
       textLeads: Boolean(text && best.spec.lead),
       bands: [titleBand, mapBand, unusual, text, tiles, memory].filter(Boolean).map(b => b.id)

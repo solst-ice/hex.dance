@@ -663,32 +663,6 @@ test('names on the file map and the memory diagram are whole or left out', () =>
   }
 })
 
-test('beside the dump the legend takes at most two columns, which may be wider', () => {
-  const cases = [
-    [sectionsFile(), file => corkamiPlan(file)],
-    [sectionsFile(), file => corkamiPlan(file, { maxLabels: 36, maxRows: 40 })],
-    [quineFile(), file => quinePlan(file)]
-  ]
-  let beside = 0
-  let wider = 0
-  for (const [file, planOf] of cases) {
-    const plan = planOf(file)
-    for (const proportion of SHAPES) {
-      for (const style of STYLES) {
-        const { scene } = check({ plan, bytes: file.bytes, analysis: file.analysis, proportion, style })
-        const columns = new Set(scene.boxes.filter(b => b.role === 'legend').map(b => Math.round(b.x)))
-        assert.equal(columns.size, scene.arrangement.columns)
-        if (scene.arrangement.stacked) continue
-        beside++
-        assert.ok(columns.size <= 2, `${columns.size} legend columns beside the dump (${proportion}, ${scene.arrangement.layout})`)
-        if (scene.arrangement.legendWidth > 384) wider++
-      }
-    }
-  }
-  assert.ok(beside >= 8, 'most arrangements put the legend beside the dump')
-  assert.ok(wider > 0, 'some arrangement widens the columns')
-})
-
 test('the title facts wrap and are never cut', () => {
   const summary = [
     { label: 'Architecture', value: 'x86' }, { label: 'Timestamp', value: '0 (not set)' },
