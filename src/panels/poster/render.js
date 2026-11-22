@@ -104,7 +104,7 @@ export function sceneToSvg(scene, meta) {
  */
 export function buildPoster({ bytes, analysis, fileName, options = {}, theme, date = '' }) {
   const data = bytes || new Uint8Array(0)
-  const plan = planPoster({ ...options, analysis, size: data.length })
+  const plan = planPoster({ ...options, analysis, bytes: data, size: data.length })
   const colors = posterColors(options.style === 'print' ? 'print' : 'dark', theme)
   const scene = layoutPoster({ plan, bytes: data, analysis, fileName, colors, proportion: options.proportion, date })
   const svg = sceneToSvg(scene, {

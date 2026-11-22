@@ -118,8 +118,10 @@ test('planRows marks bytes before a selection and after it', () => {
 })
 
 test('auto plan stops at the label limit and counts the rest', () => {
-  const fields = Array.from({ length: 50 }, (_, i) => ({ name: `f${i}`, offset: i * 4, length: 4, kind: 'size' }))
-  const plan = planPoster({ analysis: analysisWith(fields), size: 1000, maxLabels: 12 })
+  // Distinct names, so the fields are not a run of repeated entries
+  const name = i => `f${String.fromCharCode(97 + (i % 26))}${String.fromCharCode(97 + Math.floor(i / 26))}`
+  const fields = Array.from({ length: 50 }, (_, i) => ({ name: name(i), offset: i * 4, length: 4, kind: 'size' }))
+  const plan = planPoster({ analysis: analysisWith(fields), size: 1000, maxLabels: 12, mode: 'auto' })
   assert.equal(plan.labels.length, 12)
   assert.equal(plan.omittedLabels, 38)
   assert.equal(plan.window.end, 128)
@@ -127,7 +129,7 @@ test('auto plan stops at the label limit and counts the rest', () => {
 })
 
 test('auto plan shows some context when the field map is thin', () => {
-  const plan = planPoster({ analysis: analysisWith([{ name: 'Magic', offset: 0, length: 4, kind: 'magic' }]), size: 10000 })
+  const plan = planPoster({ analysis: analysisWith([{ name: 'Magic', offset: 0, length: 4, kind: 'magic' }]), size: 10000, mode: 'auto' })
   assert.equal(plan.items.filter(i => i.type === 'row').length, 8)
   assert.equal(plan.items[plan.items.length - 1].where, 'after')
 })
@@ -295,5 +297,5 @@ test('generation reads only the bytes it shows', () => {
   const t = performance.now()
   const result = buildPoster({ bytes, analysis: analysisWith([{ name: 'All', offset: 0, length: 5_000_000, kind: 'data' }]), fileName: 'big.bin', options: {}, date })
   assert.ok(performance.now() - t < 1000)
-  assert.ok(result.plan.items.length <= 12)
+  assert.ok(result.plan.items.length <= result.plan.maxRows)
 })

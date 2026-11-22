@@ -146,6 +146,13 @@ export function runShapes(run, g) {
 }
 
 function breakText(item) {
+  if (item.repeat) {
+    const { count, start, end } = item.repeat
+    const unit = item.repeat.unit === 'regions' ? (count === 1 ? 'region' : 'regions') : count === 1 ? 'entry' : 'entries'
+    const what = `${formatCount(count)} more ${unit}`
+    const range = end > start ? ` (${hexOffset(start)}–${hexOffset(end - 1)})` : ''
+    return [`… ${what}, same layout${range} …`, `… ${what}, same layout …`, `… ${what} …`, `… ${formatCount(count)} more …`]
+  }
   const n = item.end - item.start
   const count = n === 1 ? '1 byte' : `${formatCount(n)} bytes`
   const range = `${hexOffset(item.start)}–${hexOffset(item.end - 1)}`
@@ -182,11 +189,14 @@ function hexDump(plan, bytes, colors, shadeOf, parentShade, ox, oy, out) {
     const color = shadeOf(label)
     const runs = fieldRuns(plan.items, bpr, label.start, label.end)
     runs.forEach((run, r) => {
+      // Regions of the file map (not fields) get a dashed outline and a lighter fill
+      const dash = label.region ? '5 3' : undefined
+      const fillOpacity = label.region ? colors.fillOpacity * 0.6 : colors.fillOpacity
       for (const shape of runShapes(run, g)) {
         if (shape.type === 'rect') {
-          el.push({ t: 'rect', x: ox + shape.x, y: oy + shape.y, w: shape.w, h: shape.h, rx: 3, fill: color, fillOpacity: colors.fillOpacity, stroke: color, sw: 1.3 })
+          el.push({ t: 'rect', x: ox + shape.x, y: oy + shape.y, w: shape.w, h: shape.h, rx: 3, fill: color, fillOpacity, stroke: color, sw: 1.3, dash })
         } else {
-          el.push({ t: 'poly', points: shape.points.map(([x, y]) => [ox + x, oy + y]), fill: color, fillOpacity: colors.fillOpacity, stroke: color, sw: 1.3 })
+          el.push({ t: 'poly', points: shape.points.map(([x, y]) => [ox + x, oy + y]), fill: color, fillOpacity, stroke: color, sw: 1.3, dash })
         }
       }
       for (const seg of run) {
@@ -367,8 +377,30 @@ function legendBlocks(plan, colors, shadeOf, parentShade, notes) {
     })
   }
 
+  // What the entries of each repeat share, just before the labels of its first entry
+  const repeatsAt = new Map()
+  for (const rep of plan.repeats || []) {
+    if (!repeatsAt.has(rep.firstLabel)) repeatsAt.set(rep.firstLabel, [])
+    repeatsAt.get(rep.firstLabel).push(rep)
+  }
   let chainKey = ''
   for (const label of plan.labels) {
+    for (const rep of repeatsAt.get(label.number) || []) {
+      const title = `Repeated: ${rep.first} to ${rep.last}`
+      const lines = wrapText(rep.text, charsFor(width - 12, 11.5)).slice(0, 6)
+      blocks.push({
+        type: 'repeat',
+        h: 20 + lines.length * 16 + 12,
+        draw(x, y, out) {
+          const h = 20 + lines.length * 16
+          out.elements.push({ t: 'rect', x, y: y + 4, w: 3, h: h - 4, fill: colors.accent2 })
+          out.elements.push({ t: 'text', x: x + 12, y: y + 16, size: 12, weight: 700, fill: colors.accent2, text: truncate(title, charsFor(width - 12, 12)) })
+          lines.forEach((line, i) => out.elements.push({ t: 'text', x: x + 12, y: y + 33 + i * 16, size: 11.5, fill: colors.muted, text: line }))
+          out.boxes.push({ role: 'legend', x, y: y + 4, w: width, h: h - 2 })
+        }
+      })
+      chainKey = null
+    }
     const key = label.parents.join('/')
     if (key !== chainKey && label.parents.length) {
       const parent = plan.parents.find(p => p.id === label.parents[label.parents.length - 1])
@@ -576,16 +608,36 @@ function summaryFacts(analysis) {
   return facts
 }
 
+const fieldsWord = n => `${formatCount(n)} field${n === 1 ? '' : 's'}`
+
+/** Plain-words notes on what the poster leaves out, and why. */
 function notesFor(plan) {
   const notes = []
+  const labels = plan.labels
   if (plan.size === 0) notes.push('This file is empty, so there are no bytes to show.')
   else if (plan.source === 'none') notes.push('hex.dance has no field map for this format, so the bytes are coloured by class only (see the key below).')
   else if (plan.source === 'regions') notes.push('This format has no field map, so the boxes show the coarse regions of the file instead.')
-  if (plan.size > 0 && plan.source !== 'none' && plan.labels.length === 0) notes.push('No fields fall inside the bytes shown here.')
+  if (plan.size > 0 && plan.source !== 'none' && labels.length === 0) notes.push('No fields fall inside the bytes shown here.')
+  const pins = plan.pins || { asked: 0, labelled: 0, ignored: 0 }
+  if (pins.ignored > 0) notes.push(`${formatCount(pins.ignored)} pinned range${pins.ignored === 1 ? ' does' : 's do'} not match a field, so ${pins.ignored === 1 ? 'it is' : 'they are'} left out.`)
+  const unplaced = pins.asked - pins.ignored - pins.labelled
+  if (plan.mode === 'tour' && unplaced > 0) notes.push(`${formatCount(unplaced)} pinned field${unplaced === 1 ? '' : 's'} did not fit on the poster.`)
+  if ((plan.repeats || []).length) notes.push('Runs of entries with the same layout show their first and last entry only; a note before each run says what the entries share.')
+  if (labels.some(l => l.merged)) notes.push('Neighbouring fields that are all zero or reserved share one box.')
+  if (labels.some(l => l.region)) notes.push('Dashed boxes are parts of the file that the field map describes only as a whole, such as the contents of a section.')
+  if (plan.rootsLeft > 0) notes.push(`${formatCount(plan.rootsLeft)} top-level part${plan.rootsLeft === 1 ? '' : 's'} of the file did not fit and ${plan.rootsLeft === 1 ? 'has' : 'have'} no box.`)
   if (plan.omittedLabels > 0) {
-    const where = plan.mode === 'auto' ? 'further into the file' : 'in this range'
-    notes.push(`${formatCount(plan.omittedLabels)} more field${plan.omittedLabels === 1 ? '' : 's'} ${where} ${plan.omittedLabels === 1 ? 'is' : 'are'} not labelled.`)
+    const n = plan.omittedLabels
+    const are = n === 1 ? 'is' : 'are'
+    if (plan.mode === 'tour') {
+      const limit = plan.limitedBy === 'rows' ? `to fit in ${formatCount(plan.maxRows)} rows` : `to keep to ${formatCount(plan.maxLabels ?? labels.length)} labels`
+      notes.push(`${fieldsWord(n)} ${are} not labelled, ${limit}; the least interesting (zero, reserved and padding fields) went first.`)
+    } else {
+      const where = plan.mode === 'auto' ? 'further into the file' : 'in this range'
+      notes.push(`${formatCount(n)} more field${n === 1 ? '' : 's'} ${where} ${are} not labelled.`)
+    }
   }
+  if (plan.partialTree) notes.push('The field map is very large, so only part of it was read for this poster.')
   return notes
 }
 
