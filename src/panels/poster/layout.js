@@ -4,7 +4,7 @@
 // has. The result is a flat scene (shapes and text with absolute
 // coordinates) plus the boxes of every label, which tests check for overlaps.
 
-import { truncate, textLength } from './escape.js'
+import { truncate, textLength, cleanText } from './escape.js'
 import { KIND_LABELS, BYTE_CLASSES, BYTE_CLASS_LABELS, byteClass, assignShades, kindOf, regionKindOf } from './palette.js'
 import { placeOnRows } from './measure.js'
 import { drawDumpPointers, drawMapArcs, mapLinks, railWidth, storyConnectors, ARC_ZONE } from './pointers.js'
@@ -167,6 +167,7 @@ function breakText(item) {
     if (item.where === 'before') return [`… first ${count}, ${all} (${range}) …`, `… ${count} before, ${all} …`, `… ${count} before …`]
     return [`… ${count}, ${all} (${range}) …`, `… ${count}, ${all} …`, `… ${formatSize(n)}, ${all} …`, `… ${all} …`]
   }
+  if (item.text) return [`… ${count} more of the text (${range}) …`, `… ${count} more of the text …`, `… ${formatSize(n)} more of the text …`, `… ${formatSize(n)} of text …`]
   if (item.where === 'after') return [`… ${count} more to the end of the file (${range}) …`, `… ${count} more …`]
   if (item.where === 'before') return [`… first ${count} not shown (${range}) …`, `… ${count} before …`]
   return [`… ${count} not shown (${range}) …`, `… ${count} not shown …`, `… ${formatSize(n)} …`]
@@ -321,20 +322,130 @@ function chainName(plan, ids) {
   return ids.map(id => byId.get(id)?.name ?? '').filter(Boolean).join(' › ')
 }
 
-function wrapText(text, maxChars) {
-  const words = String(text).split(/\s+/).filter(Boolean)
+// Lines a legend text may take before it is cut: text the poster or a parser
+// wrote is never that long; text from the file (names, strings) may be
+const NAME_LINES = 3
+const VALUE_LINES = 4
+const FILE_VALUE_LINES = 3
+const DESCRIPTION_LINES = 4
+const HEADING_LINES = 3
+const REPEAT_TITLE_LINES = 2
+const REPEAT_LINES = 12
+
+/** Splits one word into a piece of at most `max` characters and the rest, never inside a marker such as ⟨U+202E⟩. */
+function splitWord(word, max) {
+  const chars = Array.from(word)
+  let head = chars.slice(0, Math.max(1, max)).join('')
+  const open = head.lastIndexOf('⟨')
+  if (open > 0 && open > head.lastIndexOf('⟩')) head = head.slice(0, open)
+  return [head, chars.slice(Array.from(head).length).join('')]
+}
+
+/**
+ * Wraps text into lines of at most `maxChars` characters (the first line
+ * `firstChars`), at spaces; a word longer than a line is split. A ' › '
+ * stays with the name after it. Past `maxLines` the last line ends in '…'.
+ * The first line is empty when the first word only fits on a full line.
+ */
+function wrapText(text, maxChars, maxLines = Infinity, firstChars = maxChars) {
+  const words = []
+  for (const word of cleanText(text).split(' ')) {
+    if (!word) continue
+    if (words.length && words[words.length - 1] === '›') words[words.length - 1] += ' ' + word
+    else words.push(word)
+  }
   const lines = []
   let line = ''
-  for (const word of words) {
-    const candidate = line ? `${line} ${word}` : word
-    if (textLength(candidate) <= maxChars) line = candidate
-    else {
-      if (line) lines.push(line)
-      line = textLength(word) > maxChars ? truncate(word, maxChars) : word
+  const room = () => Math.max(1, lines.length === 0 ? firstChars : maxChars)
+  for (let word of words) {
+    while (word) {
+      const candidate = line ? `${line} ${word}` : word
+      if (textLength(candidate) <= room()) {
+        line = candidate
+        break
+      }
+      if (line) {
+        lines.push(line)
+        line = ''
+      } else if (lines.length === 0 && firstChars < maxChars && textLength(word) <= maxChars) {
+        lines.push('')
+      } else {
+        const [head, rest] = splitWord(word, room())
+        lines.push(head)
+        word = rest
+      }
+      if (lines.length > maxLines) break
     }
+    if (lines.length > maxLines) break
   }
-  if (line) lines.push(line)
+  if (line && lines.length <= maxLines) lines.push(line)
+  if (lines.length > maxLines) {
+    const kept = lines.slice(0, maxLines)
+    const width = maxLines === 1 ? Math.max(1, firstChars) : maxChars
+    kept[maxLines - 1] = truncate(kept[maxLines - 1], Math.max(1, width - 1)).replace(/…$/, '') + '…'
+    return kept
+  }
   return lines
+}
+
+/**
+ * Wraps a chain of names ("Optional header › Windows-specific fields")
+ * between its names where it can, and like wrapText where it cannot.
+ */
+function wrapChain(name, maxChars, maxLines, firstChars = maxChars) {
+  const parts = cleanText(name).split(' › ')
+  const plain = () => wrapText(name, maxChars, maxLines, firstChars)
+  if (parts.length < 2) return plain()
+  const lines = []
+  let line = ''
+  for (const [i, part] of parts.entries()) {
+    const unit = i ? `› ${part}` : part
+    const candidate = line ? `${line} ${unit}` : unit
+    if (textLength(candidate) <= (lines.length ? maxChars : firstChars)) {
+      line = candidate
+      continue
+    }
+    if (!line || textLength(unit) > maxChars) return plain()
+    lines.push(line)
+    line = unit
+  }
+  lines.push(line)
+  return lines.length > maxLines ? plain() : lines
+}
+
+/** The value an entry shows: for a box of text, how much text it is. */
+function entryValue(label, lineChars) {
+  const value = cleanText(label.value).trim()
+  if (!label.text) return value
+  if (value && label.length < 64 && textLength(value) <= lineChars) return value
+  return `${formatCount(label.length)} bytes of readable text`
+}
+
+/**
+ * Lines of a legend entry: the name (bold) with the value on its last line
+ * when it fits, or on lines of its own below; then the position, with the
+ * description after it wrapping onto further lines.
+ */
+function entryLines(label) {
+  const lineChars = charsFor(LEGEND_W - 28, LF)
+  const nameLines = wrapText(label.name || '(unnamed)', lineChars, NAME_LINES)
+  const value = entryValue(label, lineChars)
+  let inline = ''
+  let valueLines = []
+  if (value) {
+    const last = nameLines[nameLines.length - 1]
+    if (textLength(last) + 2 + textLength(value) <= lineChars) inline = value
+    else valueLines = wrapText(value, lineChars, label.kind === 'string' ? FILE_VALUE_LINES : VALUE_LINES)
+  }
+  const where = `${hexOffset(label.offset)} · ${formatCount(label.length)} B`
+  const description = cleanText(label.description).trim()
+  const descriptionLines = description
+    ? wrapText(description, charsFor(LEGEND_W - 28, 11), DESCRIPTION_LINES, charsFor(LEGEND_W - 28 - textWidth(where, 10.5) - 10, 11))
+    : []
+  const top = nameLines.length + valueLines.length
+  const whereY = 16 + (top - 1) * 16 + 15
+  const boxH = whereY + Math.max(0, descriptionLines.length - 1) * 14 + 4
+  return { nameLines, inline, valueLines, where, descriptionLines, whereY, boxH }
 }
 
 /** Blocks of the legend column, each with a height and a draw function. */
@@ -375,6 +486,117 @@ function legendBlocks(plan, colors, shadeOf, parentShade, notes) {
     })
   }
 
+  // What the entries of each repeat share, just before the labels of its first entry
+  const repeatsAt = new Map()
+  for (const rep of plan.repeats || []) {
+    if (!repeatsAt.has(rep.firstLabel)) repeatsAt.set(rep.firstLabel, [])
+    repeatsAt.get(rep.firstLabel).push(rep)
+  }
+  const byId = new Map(plan.parents.map(p => [p.id, p]))
+  const isPrefix = (a, b) => a.length <= b.length && a.every((id, i) => id === b[i])
+  // The chain of the last heading, and the chains headed since the last
+  // heading at the top of a chain (so a return to one reads "continued")
+  let chain = null
+  let headed = []
+  for (const label of plan.labels) {
+    for (const rep of repeatsAt.get(label.number) || []) {
+      const titleLines = wrapText(`Repeated: ${rep.first} to ${rep.last}`, charsFor(width - 12, 12), REPEAT_TITLE_LINES)
+      const lines = wrapText(rep.text, charsFor(width - 12, 11.5), REPEAT_LINES)
+      const h = 4 + titleLines.length * 16 + lines.length * 16
+      blocks.push({
+        type: 'repeat',
+        h: h + 12,
+        draw(x, y, out) {
+          out.elements.push({ t: 'rect', x, y: y + 4, w: 3, h: h - 4, fill: colors.accent2 })
+          titleLines.forEach((line, i) => out.elements.push({ t: 'text', x: x + 12, y: y + 16 + i * 16, size: 12, weight: 700, fill: colors.accent2, text: line }))
+          const top = y + 17 + titleLines.length * 16
+          lines.forEach((line, i) => out.elements.push({ t: 'text', x: x + 12, y: top + i * 16, size: 11.5, fill: colors.muted, text: line }))
+          out.boxes.push({ role: 'legend', x, y: y + 4, w: width, h: h - 2 })
+        }
+      })
+      chain = null
+      headed = []
+    }
+    const ids = label.parents
+    const key = ids.join('/')
+    if (ids.length && (chain === null || key !== chain.join('/'))) {
+      const parent = byId.get(ids[ids.length - 1])
+      const color = parent ? parentShade(parent) : colors.muted
+      const range = parent ? `${hexOffset(parent.offset)} · ${formatSize(parent.length)}` : ''
+      // Inside the chain headed just before: name only what is added.
+      // Back to a chain already headed: say it continues
+      let name
+      let indent = 0
+      let continued = false
+      if (chain && chain.length && ids.length > chain.length && isPrefix(chain, ids)) {
+        name = `› ${chainName(plan, ids.slice(chain.length))}`
+        indent = 12
+      } else if (headed.includes(key)) {
+        name = chainName(plan, ids)
+        continued = true
+      } else {
+        name = chainName(plan, ids)
+        if (!chain || !isPrefix(chain, ids)) headed = []
+      }
+      headed.push(key)
+      const rangeW = range ? textWidth(range, 10.5) + 12 : 0
+      const lineChars = charsFor(width - 12 - indent, 12.5)
+      const tail = continued ? 11 : 0
+      const lines = wrapChain(name, lineChars - tail, HEADING_LINES, charsFor(width - 12 - indent - rangeW, 12.5) - tail)
+      const extra = (lines.length - 1) * 16
+      blocks.push({
+        type: 'heading',
+        h: 30 + extra,
+        draw(x, y, out) {
+          out.elements.push({ t: 'rect', x: x + indent, y: y + 8, w: 4, h: 16 + extra, rx: 1, fill: color })
+          lines.forEach((line, i) => {
+            const spans = [{ text: line, fill: color, weight: 700 }]
+            if (continued && i === lines.length - 1) spans.push({ text: ', continued', fill: colors.faint })
+            out.elements.push({ t: 'text', x: x + indent + 12, y: y + 21 + i * 16, size: 12.5, fill: color, spans })
+          })
+          if (range) out.elements.push({ t: 'text', x: x + width, y: y + 21, size: 10.5, fill: colors.faint, anchor: 'end', text: range })
+          out.elements.push({ t: 'line', x1: x + indent + 12, y1: y + 27.5 + extra, x2: x + width, y2: y + 27.5 + extra, stroke: colors.rule, sw: 0.75 })
+          out.boxes.push({ role: 'legend', x, y: y + 6, w: width, h: 24 + extra })
+        }
+      })
+    }
+    chain = ids
+    const lines = entryLines(label)
+    blocks.push({
+      type: 'entry',
+      h: lines.boxH + 9,
+      draw(x, y, out) {
+        const color = shadeOf(label)
+        const number = String(label.number)
+        const tabW = Math.max(20, number.length * 10 * ADVANCE + 9)
+        out.elements.push({ t: 'tab', x, y: y + 4, w: tabW, h: 15, fill: color, round: 'all' })
+        out.elements.push({ t: 'text', x: x + tabW / 2, y: y + 15, size: 10, weight: 700, fill: colors.tabText, anchor: 'middle', text: number })
+
+        const textX = x + 28
+        let ly = y + 16
+        lines.nameLines.forEach((line, i) => {
+          const spans = [{ text: line, fill: colors.text, weight: 700 }]
+          if (i === lines.nameLines.length - 1 && lines.inline) spans.push({ text: '  ' + lines.inline, fill: color })
+          out.elements.push({ t: 'text', x: textX, y: ly, size: LF, fill: colors.text, spans, preserve: true })
+          ly += 16
+        })
+        for (const line of lines.valueLines) {
+          out.elements.push({ t: 'text', x: textX, y: ly, size: LF, fill: color, text: line })
+          ly += 16
+        }
+        const wy = y + lines.whereY
+        out.elements.push({ t: 'text', x: textX, y: wy, size: 10.5, fill: colors.faint, text: lines.where })
+        lines.descriptionLines.forEach((line, i) => {
+          if (!line) return
+          const dx = i === 0 ? textX + textWidth(lines.where, 10.5) + 10 : textX
+          out.elements.push({ t: 'text', x: dx, y: wy + i * 14, size: 11, fill: colors.muted, text: line })
+        })
+        out.boxes.push({ role: 'legend', x, y, w: width, h: lines.boxH, id: label.number })
+      }
+    })
+  }
+
+  // The notes on what the poster leaves out, and how to read it, come last
   for (const note of notes) {
     const lines = wrapText(note, charsFor(width - 12, 12))
     blocks.push({
@@ -384,85 +606,6 @@ function legendBlocks(plan, colors, shadeOf, parentShade, notes) {
         out.elements.push({ t: 'rect', x, y, w: 3, h: lines.length * 17 - 2, fill: colors.accent3 })
         lines.forEach((line, i) => out.elements.push({ t: 'text', x: x + 12, y: y + 12 + i * 17, size: 12, fill: colors.muted, text: line }))
         out.boxes.push({ role: 'legend', x, y, w: width, h: lines.length * 17 })
-      }
-    })
-  }
-
-  // What the entries of each repeat share, just before the labels of its first entry
-  const repeatsAt = new Map()
-  for (const rep of plan.repeats || []) {
-    if (!repeatsAt.has(rep.firstLabel)) repeatsAt.set(rep.firstLabel, [])
-    repeatsAt.get(rep.firstLabel).push(rep)
-  }
-  let chainKey = ''
-  for (const label of plan.labels) {
-    for (const rep of repeatsAt.get(label.number) || []) {
-      const title = `Repeated: ${rep.first} to ${rep.last}`
-      const lines = wrapText(rep.text, charsFor(width - 12, 11.5)).slice(0, 6)
-      blocks.push({
-        type: 'repeat',
-        h: 20 + lines.length * 16 + 12,
-        draw(x, y, out) {
-          const h = 20 + lines.length * 16
-          out.elements.push({ t: 'rect', x, y: y + 4, w: 3, h: h - 4, fill: colors.accent2 })
-          out.elements.push({ t: 'text', x: x + 12, y: y + 16, size: 12, weight: 700, fill: colors.accent2, text: truncate(title, charsFor(width - 12, 12)) })
-          lines.forEach((line, i) => out.elements.push({ t: 'text', x: x + 12, y: y + 33 + i * 16, size: 11.5, fill: colors.muted, text: line }))
-          out.boxes.push({ role: 'legend', x, y: y + 4, w: width, h: h - 2 })
-        }
-      })
-      chainKey = null
-    }
-    const key = label.parents.join('/')
-    if (key !== chainKey && label.parents.length) {
-      const parent = plan.parents.find(p => p.id === label.parents[label.parents.length - 1])
-      const name = chainName(plan, label.parents)
-      const color = parent ? parentShade(parent) : colors.muted
-      const range = parent ? `${hexOffset(parent.offset)} · ${formatSize(parent.length)}` : ''
-      blocks.push({
-        type: 'heading',
-        h: 30,
-        draw(x, y, out) {
-          const rangeW = textWidth(range, 10.5)
-          const text = truncate(name, charsFor(width - 14 - rangeW - 12, 12.5))
-          out.elements.push({ t: 'rect', x, y: y + 8, w: 4, h: 16, rx: 1, fill: color })
-          out.elements.push({ t: 'text', x: x + 12, y: y + 21, size: 12.5, weight: 700, fill: color, text })
-          if (range) out.elements.push({ t: 'text', x: x + width, y: y + 21, size: 10.5, fill: colors.faint, anchor: 'end', text: range })
-          out.elements.push({ t: 'line', x1: x + 12, y1: y + 27.5, x2: x + width, y2: y + 27.5, stroke: colors.rule, sw: 0.75 })
-          out.boxes.push({ role: 'legend', x, y: y + 6, w: width, h: 24 })
-        }
-      })
-    }
-    chainKey = key
-    const hasDescription = Boolean(label.description.trim())
-    blocks.push({
-      type: 'entry',
-      h: 44,
-      draw(x, y, out) {
-        const color = shadeOf(label)
-        const number = String(label.number)
-        const tabW = Math.max(20, number.length * 10 * ADVANCE + 9)
-        out.elements.push({ t: 'tab', x, y: y + 4, w: tabW, h: 15, fill: color, round: 'all' })
-        out.elements.push({ t: 'text', x: x + tabW / 2, y: y + 15, size: 10, weight: 700, fill: colors.tabText, anchor: 'middle', text: number })
-
-        const textX = x + 28
-        const total = charsFor(x + width - textX, LF)
-        const nameLen = textLength(label.name)
-        const valueLen = textLength(label.value)
-        let nameChars = nameLen
-        if (label.value && nameLen + 2 + valueLen > total) nameChars = Math.min(nameLen, Math.max(12, total - 2 - Math.max(10, valueLen)))
-        const name = truncate(label.name || '(unnamed)', Math.min(nameChars || total, total))
-        const spans = [{ text: name, fill: colors.text, weight: 700 }]
-        const left = total - textLength(name) - 2
-        if (label.value && left >= 3) spans.push({ text: '  ' + truncate(label.value, left), fill: color })
-        out.elements.push({ t: 'text', x: textX, y: y + 16, size: LF, fill: colors.text, spans, preserve: true })
-
-        const where = `${hexOffset(label.offset)} · ${formatCount(label.length)} B`
-        out.elements.push({ t: 'text', x: textX, y: y + 31, size: 10.5, fill: colors.faint, text: where })
-        if (hasDescription) {
-          const dx = textX + textWidth(where, 10.5) + 10
-          out.elements.push({ t: 'text', x: dx, y: y + 31, size: 11, fill: colors.muted, text: truncate(label.description, charsFor(x + width - dx, 11)) })
-        }
-        out.boxes.push({ role: 'legend', x, y, w: width, h: 35, id: label.number })
       }
     })
   }
@@ -664,16 +807,16 @@ function notesFor(plan) {
   if (pins.ignored > 0) notes.push(`${formatCount(pins.ignored)} pinned range${pins.ignored === 1 ? ' does' : 's do'} not match a field, so ${pins.ignored === 1 ? 'it is' : 'they are'} left out.`)
   const unplaced = pins.asked - pins.ignored - pins.labelled
   if (plan.mode === 'tour' && unplaced > 0) notes.push(`${formatCount(unplaced)} pinned field${unplaced === 1 ? '' : 's'} did not fit on the poster.`)
-  if ((plan.repeats || []).length) notes.push('Runs of entries with the same layout show their first and last entry only; a note before each run says what the entries share.')
-  if (labels.some(l => l.merged)) notes.push('Neighbouring fields that are all zero or reserved share one box.')
-  if (labels.some(l => l.region)) notes.push('Dashed boxes are parts of the file that the field map describes only as a whole, such as the contents of a section.')
+  if ((plan.repeats || []).length) notes.push('Runs of entries with the same layout show only their first and last entry; the note before each run says what they share.')
+  if (labels.some(l => l.merged)) notes.push('Neighbouring fields that hold nothing, or one repeated byte, share one box.')
+  if (labels.some(l => l.region)) notes.push('Dashed boxes are parts of the file described only as a whole, such as a section\'s contents.')
   if (plan.rootsLeft > 0) notes.push(`${formatCount(plan.rootsLeft)} top-level part${plan.rootsLeft === 1 ? '' : 's'} of the file did not fit and ${plan.rootsLeft === 1 ? 'has' : 'have'} no box.`)
   if (plan.omittedLabels > 0) {
     const n = plan.omittedLabels
     const are = n === 1 ? 'is' : 'are'
     if (plan.mode === 'tour') {
       const limit = plan.limitedBy === 'rows' ? `, to fit in ${formatCount(plan.maxRows)} rows` : plan.limitedBy === 'labels' ? `, to keep to ${formatCount(plan.maxLabels ?? labels.length)} labels` : ''
-      notes.push(`${fieldsWord(n)} ${are} not labelled${limit}; the least interesting (zero, reserved and padding fields) went first.`)
+      notes.push(`${fieldsWord(n)} ${are} not labelled${limit}; the dullest went first.`)
     } else {
       const where = plan.mode === 'auto' ? 'further into the file' : 'in this range'
       notes.push(`${formatCount(n)} more field${n === 1 ? '' : 's'} ${where} ${are} not labelled.`)
