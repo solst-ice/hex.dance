@@ -14,7 +14,7 @@
 // runs of entries with the same layout show only their first and last entry.
 
 import { kindOf } from './palette.js'
-import { createTree, validNode, VISIT_BUDGET } from './planTree.js'
+import { createTree, validNode, readableText, VISIT_BUDGET, TEXT_MIN } from './planTree.js'
 
 export const MAX_ROWS = 40
 export const COLLAPSE_MIN = 3
@@ -32,7 +32,7 @@ export const MAX_LINKS = 400
 const LEVEL_PENALTY = 4
 const KIND_SCORE = { magic: 8, count: 5, offset: 5, size: 4, flags: 3, checksum: 3, string: 3, header: 2, data: 1, other: 0, padding: -5 }
 const PIN_CAP = 64
-// Bytes looked at to tell rows of zeros, per poster
+// Bytes looked at to tell rows of one repeated byte, per poster
 const ZERO_ROW_BYTES = 1 << 20
 // Further entries shown per repeat when labels and rows allow, and rows kept back while doing it
 const MORE_ENTRIES = 2
@@ -45,6 +45,33 @@ const LOOK_AHEAD = 64
 // Bytes looked at to tell whether a break is all one value
 const FILL_PER_BREAK = 1 << 16
 const FILL_TOTAL = 1 << 20
+// Rows that hold readable strings: a run of at least STRING_RUN printable
+// characters, half of them letters, looked for at most STRING_REACH bytes
+// past the row's ends; rows of a box checked, rows added per box per round,
+// and bytes looked at per poster
+const STRING_RUN = 6
+const STRING_REACH = 32
+const STRING_ROWS_CHECKED = 256
+const STRING_ROWS_PER_BOX = 3
+const STRING_BYTES = 1 << 18
+// Rows a tour keeps for strings while it labels: per box, and per poster
+const STRING_NEED_BOX = 2
+const STRING_NEED_MIN = 4
+const STRING_NEED_SHARE = 1 / 10
+// Labels tried, and dropped at most, to make room for one box's string rows
+// (only for a string of STRING_DROP_RUN characters or more, and only
+// labels no more interesting than DROP_INTEREST)
+const DROP_TRIES = 24
+const DROP_MAX = 2
+const STRING_DROP_RUN = 16
+const DROP_INTEREST = 4
+// A box of text shows at most this many rows at its start, and its last two
+const TEXT_HEAD = 5
+const TEXT_TAIL = 2
+// Stretches of text named for the text band
+const TEXT_BAND_MIN = 64
+const TEXT_BAND_MAX = 3
+const TEXT_CHECKS = 200
 
 const isCount = n => Number.isSafeInteger(n) && n >= 0
 
@@ -177,7 +204,7 @@ function interest(tree, node) {
   else if (node.merged) s = -4
   else {
     s = KIND_SCORE[node.kind] ?? 0
-    if (tree.dull(node)) s -= 9
+    if (tree.isFiller(node)) s -= 9
     if (tree.pointerOf(node)) s += 5
     // Regions: code first, and the bigger the more it matters (up to a point)
     if (node.region) s += node.src.padding ? -6 : (node.src.value === 'code' ? 4 : 2) + Math.min(4, Math.max(0, Math.log2((node.end - node.offset) / 32)))
@@ -261,6 +288,7 @@ function rowNeeds(tree, labels, bpr) {
   forced.sort((a, b) => a.r1 - b.r1)
   const inForced = r => forced.some(f => r >= f.r1 && r <= f.r2)
   for (const r of targets) if (!inForced(r)) want.add(r)
+
   const rows = [...want].filter(r => !inForced(r)).sort((a, b) => a - b)
   return { rows, forced }
 }
@@ -271,10 +299,11 @@ function forcedIn(forced, a, b) {
 }
 
 /**
- * Whether a row's bytes are all zero, from a bounded cache. Without bytes
- * nothing counts as zero.
+ * Whether a row's bytes are all one value (zero, 0x0D, 0xFF...), from a
+ * bounded cache. Such rows are treated as filler: shown only where a box
+ * starts or ends. Without bytes no row counts.
  */
-function zeroRows(tree, bpr) {
+function blankRows(tree, bpr) {
   const bytes = tree.bytes
   const cache = new Map()
   let budget = ZERO_ROW_BYTES
@@ -287,13 +316,14 @@ function zeroRows(tree, bpr) {
     if (end - start > budget) return false
     budget -= end - start
     z = end > start
-    for (let i = start; i < end && z; i++) z = bytes[i] === 0
+    const v = bytes[start]
+    for (let i = start + 1; i < end && z; i++) z = bytes[i] === v
     cache.set(r, z)
     return z
   }
 }
 
-/** Whether a row repeats the bytes of the row above exactly (bounded, like zeroRows). */
+/** Whether a row repeats the bytes of the row above exactly (bounded, like blankRows). */
 function sameRows(tree, bpr) {
   const bytes = tree.bytes
   const cache = new Map()
@@ -314,12 +344,92 @@ function sameRows(tree, bpr) {
 }
 
 /**
+ * The length of the longest readable string a row holds part of (0 for
+ * none): a run of at least STRING_RUN printable characters with at least
+ * three different ones, half of them letters, at least three of them in the
+ * row (a run is followed at most STRING_REACH bytes past the row). Bounded
+ * like blankRows.
+ */
+function stringRows(tree, bpr) {
+  const bytes = tree.bytes
+  const cache = new Map()
+  let budget = STRING_BYTES
+  const isPrintable = b => b >= 0x20 && b < 0x7f
+  const isLetter = b => (b >= 0x41 && b <= 0x5a) || (b >= 0x61 && b <= 0x7a)
+  return r => {
+    if (!bytes) return 0
+    let found = cache.get(r)
+    if (found !== undefined) return found
+    const start = r * bpr
+    const end = Math.min(tree.size, start + bpr)
+    const from = Math.max(0, start - STRING_REACH)
+    const to = Math.min(tree.size, end + STRING_REACH)
+    if (to - from > budget) return 0
+    budget -= to - from
+    found = 0
+    let i = from
+    while (i < to) {
+      if (!isPrintable(bytes[i])) {
+        i++
+        continue
+      }
+      let j = i
+      let letters = 0
+      const seen = new Set()
+      while (j < to && isPrintable(bytes[j])) {
+        if (isLetter(bytes[j])) letters++
+        if (seen.size < 3) seen.add(bytes[j])
+        j++
+      }
+      const inRow = Math.min(j, end) - Math.max(i, start)
+      if (j - i >= STRING_RUN && seen.size >= 3 && letters * 2 >= j - i && inRow >= 3) found = Math.max(found, j - i)
+      i = j
+    }
+    cache.set(r, found)
+    return found
+  }
+}
+
+/**
+ * The rows of a box that a tour keeps for readable strings: the first run of
+ * consecutive string rows inside the box (not its first or last row), at
+ * most STRING_NEED_BOX of them; none for boxes of text or filler. At most
+ * `cap` rows per poster.
+ */
+function stringNeeds(tree, bpr, maxRows, textOf) {
+  const stringRow = stringRows(tree, bpr)
+  const cache = new Map()
+  return {
+    cap: Math.max(STRING_NEED_MIN, Math.floor(maxRows * STRING_NEED_SHARE)),
+    of(node) {
+      let rows = cache.get(node)
+      if (rows) return rows
+      rows = []
+      rows.best = 0
+      const first = Math.floor(node.offset / bpr)
+      const last = Math.floor((node.end - 1) / bpr)
+      if (last - first >= 2 && !node.merged && !tree.isFiller(node) && !textOf(node)) {
+        for (let r = first + 1; r < last && r <= first + STRING_ROWS_CHECKED && rows.length < STRING_NEED_BOX; r++) {
+          const run = stringRow(r)
+          if (run) {
+            rows.push(r)
+            rows.best = Math.max(rows.best, run)
+          } else if (rows.length) break
+        }
+      }
+      cache.set(node, rows)
+      return rows
+    }
+  }
+}
+
+/**
  * Items for a sorted set of kept rows: gaps of COLLAPSE_MIN rows or more,
  * and the skipped middle of a repeat, become one break; shorter gaps are
- * drawn row by row, except rows that are all zero, which become a break
+ * drawn row by row, except rows of one repeated byte, which become a break
  * (no box starts or ends on them: kept rows are never dropped).
  */
-function itemsFrom(rows, forced, bpr, size, zeroRow = () => false) {
+function itemsFrom(rows, forced, bpr, size, blankRow = () => false) {
   const window = { start: 0, end: size }
   const items = []
   const pushBreak = (start, end) => {
@@ -338,7 +448,7 @@ function itemsFrom(rows, forced, bpr, size, zeroRow = () => false) {
         else if (g >= COLLAPSE_MIN) pushBreak((a + 1) * bpr, b * bpr)
         else {
           for (let r = a + 1; r < b; r++) {
-            if (zeroRow(r)) pushBreak(r * bpr, (r + 1) * bpr)
+            if (blankRow(r)) pushBreak(r * bpr, (r + 1) * bpr)
             else items.push(rowItem(r, bpr, window))
           }
         }
@@ -349,7 +459,7 @@ function itemsFrom(rows, forced, bpr, size, zeroRow = () => false) {
   return items
 }
 
-function countItems(rows, forced, zeroRow = () => false) {
+function countItems(rows, forced, blankRow = () => false) {
   let n = rows.length
   for (let k = 1; k < rows.length; k++) {
     const a = rows[k - 1]
@@ -360,7 +470,7 @@ function countItems(rows, forced, zeroRow = () => false) {
     else {
       let inZero = false
       for (let r = a + 1; r < b; r++) {
-        const z = zeroRow(r)
+        const z = blankRow(r)
         if (!z || !inZero) n += 1
         inZero = z
       }
@@ -376,12 +486,14 @@ function planTour(tree, { depth, maxLabels, maxRows, bpr }) {
   const opened = new Set()
   const failed = new Set()
   const root = tree.root
-  const zeroRow = zeroRows(tree, bpr)
+  const blankRow = blankRows(tree, bpr)
+  const textOf = textChecker(tree)
+  const strings = stringNeeds(tree, bpr, maxRows, textOf)
   const inFrontier = unit => unitNodes(unit).some(n => shown.has(n) || opened.has(n))
   const fits = () => {
     if (shown.size > maxLabels) return false
     const { rows, forced } = rowNeeds(tree, shown, bpr)
-    return countItems(rows, forced, zeroRow) <= maxRows
+    return countItems(rows, forced, blankRow) <= maxRows
   }
   // Applies a change, keeping it only when it fits
   const attempt = change => {
@@ -520,17 +632,65 @@ function planTour(tree, { depth, maxLabels, maxRows, bpr }) {
       const entry = rep.members[index]
       shown.add(entry)
       const { rows, forced } = rowNeeds(tree, shown, bpr)
-      if (countItems(rows, forced, zeroRow) <= maxRows - ROW_RESERVE) continue
+      if (countItems(rows, forced, blankRow) <= maxRows - ROW_RESERVE) continue
       shown.delete(entry)
       tree.hideEntry(rep, index)
     }
   }
 
-  // 5. Use the rows that are left
+  // 5. Rows of the boxes that hold readable strings, a few per box, the
+  // longest strings first. When the rows of a long string do not fit, up to
+  // DROP_MAX labels of little interest that free rows make room (never a
+  // pin, a pointer, a top-level box or an entry of a repeat)
+  const keep = new Set()
+  let left = strings.cap
+  let drops = DROP_MAX
+  const withStrings = [...shown].filter(n => strings.of(n).length)
+  withStrings.sort((a, b) => strings.of(b).best - strings.of(a).best || interest(tree, b) - interest(tree, a) || a.offset - b.offset)
+  for (const node of withStrings) {
+    if (left <= 0) break
+    const want = strings.of(node).slice(0, left)
+    const needed = () => {
+      const { rows, forced } = rowNeeds(tree, shown, bpr)
+      const all = new Set(rows)
+      for (const r of keep) all.add(r)
+      const fresh = want.filter(r => !all.has(r) && !forced.some(f => r >= f.r1 && r <= f.r2))
+      for (const r of fresh) all.add(r)
+      return { fresh, count: countItems([...all].sort((a, b) => a - b), forced, blankRow) }
+    }
+    let { fresh, count } = needed()
+    if (!fresh.length) continue
+    const dropped = []
+    if (count > maxRows && drops > 0 && strings.of(node).best >= STRING_DROP_RUN) {
+      const droppable = [...shown]
+        .filter(n => n !== node && !n.pinned && !n.hasPin && !n.rep && n.level >= 2 && !tree.pointerOf(n) && interest(tree, n) <= DROP_INTEREST)
+        .sort((a, b) => interest(tree, a) - interest(tree, b) || b.offset - a.offset)
+        .slice(0, DROP_TRIES)
+      for (const n of droppable) {
+        if (count <= maxRows || dropped.length >= drops) break
+        shown.delete(n)
+        const next = needed().count
+        if (next < count) {
+          dropped.push(n)
+          count = next
+        } else shown.add(n)
+      }
+    }
+    if (count <= maxRows) {
+      for (const r of fresh) keep.add(r)
+      left -= fresh.length
+      drops -= dropped.length
+      if (dropped.length) rowLimited = true
+    } else for (const n of dropped) shown.add(n)
+  }
+
+  // 6. Use the rows that are left
   const labels = [...shown].sort((a, b) => a.offset - b.offset)
-  const { rows, forced } = rowNeeds(tree, shown, bpr)
-  const filled = fillRows(tree, rows, forced, labels, bpr, maxRows, zeroRow)
-  return { labels, rows: filled, forced, rootsLeft, pinsLabelled, rowLimited, zeroRow }
+  const needs = rowNeeds(tree, shown, bpr)
+  const forced = needs.forced
+  const rows = [...new Set([...needs.rows, ...keep])].sort((a, b) => a - b)
+  const filled = fillRows(tree, rows, forced, labels, bpr, maxRows, blankRow, textOf)
+  return { labels, rows: filled, forced, rootsLeft, pinsLabelled, rowLimited, blankRow }
 }
 
 function unitsCost(units) {
@@ -554,23 +714,24 @@ function holderUnit(tree, offset, shown, opened) {
 /**
  * Spends the rows left after labelling: a row or two more of each data box,
  * then short gaps (smallest first), then a bounded number of rows more at the
- * start of each long stretch, in turn. Rows whose bytes are all zero, or
+ * start of each long stretch, in turn. Rows of one repeated byte, or
  * that only repeat the row above, are never added: rows left over stay unused, as a shorter dump is better than
  * filler.
  */
-function fillRows(tree, rows, forced, labels, bpr, maxRows, zeroRow) {
+function fillRows(tree, rows, forced, labels, bpr, maxRows, blankRow, textOf) {
   const sameRow = sameRows(tree, bpr)
-  // Filler: rows of zeros, and rows that only repeat the row above
-  const filler = r => zeroRow(r) || sameRow(r)
+  const stringRow = stringRows(tree, bpr)
+  // Filler: rows of one repeated byte, and rows that only repeat the row above
+  const filler = r => blankRow(r) || sameRow(r)
   const set = new Set(rows)
   let current = [...rows]
-  let count = countItems(current, forced, zeroRow)
+  let count = countItems(current, forced, blankRow)
   const inForced = r => forced.some(f => r >= f.r1 && r <= f.r2)
   const tryAdd = add => {
     const fresh = add.filter(r => !set.has(r) && !inForced(r) && !filler(r))
     if (!fresh.length) return false
     const next = [...current, ...fresh].sort((a, b) => a - b)
-    const n = countItems(next, forced, zeroRow)
+    const n = countItems(next, forced, blankRow)
     if (n > maxRows) return false
     for (const r of fresh) set.add(r)
     current = next
@@ -578,9 +739,38 @@ function fillRows(tree, rows, forced, labels, bpr, maxRows, zeroRow) {
     return true
   }
   const rowOf = o => Math.floor(o / bpr)
+  const byInterest = (a, b) => interest(tree, b) - interest(tree, a) || a.offset - b.offset
+  // Boxes of text: the last rows too, as the end of a text often holds
+  // something else; the start comes with the other boxes below
+  const texts = labels.filter(n => textOf(n) && rowOf(n.end - 1) - rowOf(n.offset) >= TEXT_HEAD + TEXT_TAIL).sort(byInterest)
+  for (const n of texts) {
+    const last = rowOf(n.end - 1)
+    const tail = []
+    for (let r = last - TEXT_TAIL + 1; r < last; r++) tail.push(r)
+    if (!tryAdd(tail)) tryAdd([last - 1])
+  }
+  // Rows of other boxes that hold readable strings, a few per box in turn,
+  // the most interesting box first; consecutive rows go in together
+  const plain = labels.filter(n => !textOf(n) && !tree.isFiller(n) && rowOf(n.end - 1) - rowOf(n.offset) >= 2).sort(byInterest)
+  const stringsOf = new Map()
+  for (const n of plain) {
+    const found = []
+    const first = rowOf(n.offset)
+    const last = Math.min(rowOf(n.end - 1), first + STRING_ROWS_CHECKED)
+    for (let r = first + 1; r < last; r++) if (!set.has(r) && !inForced(r) && stringRow(r)) found.push(r)
+    if (found.length) stringsOf.set(n, found)
+  }
+  for (let round = 0; round < 2 && stringsOf.size; round++) {
+    for (const n of plain) {
+      const found = stringsOf.get(n)
+      if (!found || count >= maxRows) continue
+      const take = found.splice(0, STRING_ROWS_PER_BOX)
+      if (!tryAdd(take)) for (const r of take) tryAdd([r])
+    }
+  }
   const data = labels
-    .filter(n => (n.region || ['data', 'string', 'checksum', 'other'].includes(n.kind)) && !tree.dull(n) && rowOf(n.end - 1) - rowOf(n.offset) >= 2)
-    .sort((a, b) => interest(tree, b) - interest(tree, a))
+    .filter(n => (n.region || ['data', 'string', 'checksum', 'other'].includes(n.kind)) && !tree.isFiller(n) && rowOf(n.end - 1) - rowOf(n.offset) >= 2)
+    .sort(byInterest)
   for (const extra of [1, 2]) {
     for (const n of data) {
       if (count >= maxRows) break
@@ -604,8 +794,10 @@ function fillRows(tree, rows, forced, labels, bpr, maxRows, zeroRow) {
     // Only whole gaps: a gap with filler in it stays a break
     if (!add.some(filler)) tryAdd(add)
   }
-  // More of what long stretches hold: the next row that is not all zero,
-  // looking a few rows ahead only
+  // More of what long stretches hold: the next row that is not one repeated byte,
+  // looking a few rows ahead only; a box of text shows only its first rows
+  // (the text band shows more of it)
+  const textHead = a => texts.some(n => a >= rowOf(n.offset) && a < rowOf(n.end - 1) && a - rowOf(n.offset) + 1 >= TEXT_HEAD)
   const added = new Map()
   for (let pass = 0, passes = Math.max(CONTENT_ROWS, Math.floor(maxRows * CONTENT_SHARE)); pass < passes && count < maxRows; pass++) {
     let any = false
@@ -618,8 +810,9 @@ function fillRows(tree, rows, forced, labels, bpr, maxRows, zeroRow) {
     for (const [a, b] of gaps) {
       if (count >= maxRows) break
       if (pass > 0 && !added.has(a)) continue
+      if (textHead(a)) continue
       let r = a + 1
-      while (r < b - 1 && r - a <= LOOK_AHEAD && zeroRow(r)) r++
+      while (r < b - 1 && r - a <= LOOK_AHEAD && blankRow(r)) r++
       if (r >= b - 1 || filler(r)) continue
       if (tryAdd([r])) {
         added.set(r, true)
@@ -719,6 +912,18 @@ function annotateRepeats(items, leaves, bpr) {
 
 // --- Output ------------------------------------------------------------------
 
+/** Whether a node's bytes read as text, for a bounded number of nodes per poster. */
+function textChecker(tree) {
+  let checks = TEXT_CHECKS
+  return node => {
+    if (node.isText !== undefined) return node.isText
+    if (node.merged || node.end - node.offset < TEXT_MIN || checks <= 0) return false
+    checks--
+    node.isText = readableText(tree.bytes, node.offset, node.end)
+    return node.isText
+  }
+}
+
 function countLeaves(tree, depth) {
   let total = 0
   const stack = [tree.root]
@@ -792,7 +997,14 @@ function describeFill(items, bytes) {
   })
 }
 
-function describe(tree, nodes, items, window) {
+/** Marks the breaks that skip part of a box of text, so they can say so. */
+function markTextBreaks(items, labels) {
+  const texts = labels.filter(l => l.text)
+  if (!texts.length) return items
+  return items.map(item => (item.type === 'break' && !item.repeat && item.fill === undefined && texts.some(l => item.start >= l.start && item.end <= l.end) ? { ...item, text: true } : item))
+}
+
+function describe(tree, nodes, items, window, textOf) {
   // Parents: every node above a label, ordered by offset so that brackets
   // at one level alternate columns
   const parentNodes = new Set()
@@ -830,6 +1042,7 @@ function describe(tree, nodes, items, window) {
     if (node.region) label.region = true
     if (node.merged) label.merged = { ...node.merged }
     if (node.pinned) label.pinned = true
+    if (textOf(node)) label.text = true
     const repeat = repeatOf(node)
     if (repeat) label.repeat = repeat
     return label
@@ -884,7 +1097,14 @@ function describe(tree, nodes, items, window) {
     }
   }).sort((a, b) => a.start - b.start)
 
-  return { labels, parents, pointers, repeats }
+  // The longest stretches of text among the boxes, for the text band
+  const texts = labels
+    .filter(l => l.text && l.end - l.start >= TEXT_BAND_MIN)
+    .sort((a, b) => (b.end - b.start) - (a.end - a.start) || a.start - b.start)
+    .slice(0, TEXT_BAND_MAX)
+    .map(l => ({ offset: l.start, length: l.end - l.start, label: l.number, name: l.name }))
+
+  return { labels, parents, pointers, repeats, texts }
 }
 
 /**
@@ -934,7 +1154,7 @@ export function planPoster(input) {
     // every byte in it is drawn
     tour = planTour(tree, { depth, maxLabels, maxRows, bpr })
     nodes = tour.labels
-    items = itemsFrom(tour.rows, tour.forced, bpr, size, tour.zeroRow)
+    items = itemsFrom(tour.rows, tour.forced, bpr, size, tour.blankRow)
   } else {
     let base = tree.root
     if (mode === 'field') {
@@ -956,7 +1176,8 @@ export function planPoster(input) {
   }
 
   items = describeFill(items, tree.bytes)
-  const { labels, parents, pointers, repeats } = describe(tree, nodes, items, window)
+  const { labels, parents, pointers, repeats, texts } = describe(tree, nodes, items, window, textChecker(tree))
+  items = markTextBreaks(items, labels)
   // omittedLabels: fields within the depth limit that would get a label of
   // their own on a poster without limits but have none here. In tour mode
   // that is counted over the whole file; entries hidden in a collapsed repeat
@@ -980,6 +1201,7 @@ export function planPoster(input) {
     pointers,
     links: collectLinks(input.analysis, size),
     repeats,
+    texts,
     regionsAdded: tree.regionNodes,
     pins: { asked: pins.length, labelled: tour ? tour.pinsLabelled : 0, ignored: tree.pinsIgnored },
     rootsLeft: tour ? tour.rootsLeft : 0,
