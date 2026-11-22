@@ -34,7 +34,7 @@ const BODY_GAP = 48
 const MARGIN = 56
 const MIN_INNER_W = 920
 const FOOT_H = 44
-const BAND_GAP = 26
+const BAND_GAP = 24
 const DUMP_GAP = 40
 
 const HEX = Array.from({ length: 256 }, (_, v) => v.toString(16).toUpperCase().padStart(2, '0'))
@@ -668,11 +668,19 @@ export function layoutPoster({ plan, bytes, analysis, fileName, colors, proporti
   // The extra drawings, each only with its flag on and data to show
   const image = analysis?.image && typeof analysis.image === 'object' ? analysis.image : null
   const entryAt = Number.isSafeInteger(image?.entry?.offset) && image.entry.offset >= 0 && image.entry.offset < plan.size ? image.entry.offset : null
-  const links = flags.pointers ? mapLinks(plan) : []
-  const rail = flags.pointers && plan.items.length ? railWidth(plan) : 0
-  const tiles = flags.tiles || flags.unusual ? tilesBand({ analysis, bytes, colors }) : null
-  const unusual = flags.unusual ? unusualBand({ analysis, colors, facts: tiles?.fact ? [tiles.fact] : [] }) : null
-  const memory = flags.memory ? memoryBand({ analysis, colors, fileSize: plan.size }) : null
+  // Each is worked out once, whatever the flags, so `available` can say which
+  // switches would draw something
+  const allLinks = mapLinks(plan)
+  const allRail = plan.items.length ? railWidth(plan, entryAt) : 0
+  const tilesAll = tilesBand({ analysis, bytes, colors })
+  const unusualAll = unusualBand({ analysis, colors, facts: tilesAll?.fact ? [tilesAll.fact] : [] })
+  const memoryAll = memoryBand({ analysis, colors, fileSize: plan.size })
+  const available = { pointers: allLinks.length > 0 || allRail > 0, unusual: Boolean(unusualAll), tiles: Boolean(tilesAll), memory: Boolean(memoryAll) }
+  const links = flags.pointers ? allLinks : []
+  const rail = flags.pointers ? allRail : 0
+  const tiles = flags.tiles ? tilesAll : null
+  const unusual = flags.unusual ? unusualAll : null
+  const memory = flags.memory ? memoryAll : null
 
   const facts = summaryFacts(analysis)
   const regions = (Array.isArray(analysis?.regions) ? analysis.regions : [])
@@ -682,7 +690,7 @@ export function layoutPoster({ plan, bytes, analysis, fileName, colors, proporti
     { id: 'title', measure: () => (facts.length ? 84 : 62), draw: (x, y, w, out) => titleBlock({ x, y, w, out, fileName, analysis, plan, colors, facts }) },
     { id: 'map', measure: () => stripHeight(links), draw: (x, y, w, out) => overviewStrip(plan, regions, colors, x, y, w, out, { links, entryOffset: entryAt }) },
     unusual,
-    flags.tiles ? tiles : null,
+    tiles,
     memory
   ].filter(Boolean)
   const bandsHeight = w => bands.reduce((s, b) => s + b.measure(w) + BAND_GAP, 0)
@@ -692,7 +700,7 @@ export function layoutPoster({ plan, bytes, analysis, fileName, colors, proporti
   const rowsTotal = plan.items.length
   let best = null
   for (const dumpColumns of [1, 2, 3, 4]) {
-    if (dumpColumns > 1 && rowsTotal < dumpColumns * 12) break
+    if (dumpColumns > 1 && rowsTotal < dumpColumns * 20) break
     const split = splitItems(plan.items, dumpColumns)
     const dumpH = Math.max(0, ...split.map(([a, b]) => (b > a ? hexGeometry({ ...plan, items: plan.items.slice(a, b) }).height : 0)))
     const allDumpW = dumpColumns * dumpW + (dumpColumns - 1) * DUMP_GAP
@@ -721,13 +729,12 @@ export function layoutPoster({ plan, bytes, analysis, fileName, colors, proporti
   const innerW = width - 2 * MARGIN
   out.elements.push({ t: 'rect', x: 0, y: 0, w: width, h: height, fill: colors.background })
 
-  // Spare height (from the page's proportion) first widens the gaps between
-  // the bands, up to a point; the rest goes above and below the body
+  // Spare height (from the page's proportion) opens the gaps a little, all
+  // alike, and the rest goes below the body, so nothing opens a hole
   const heights = bands.map(b => b.measure(innerW))
-  const content = heights.reduce((s, h) => s + h + BAND_GAP, 0) + 8 + best.bodyH
+  const content = heights.reduce((s, h) => s + h + BAND_GAP, 0) + best.bodyH
   const spare = Math.max(0, height - MARGIN - FOOT_H - 20 - MARGIN - content)
-  const extraGap = Math.min(spare / (bands.length + 2), 28)
-  const rest = spare - extraGap * bands.length
+  const extraGap = Math.min(spare / (bands.length + 1), 14)
 
   // Bands, top to bottom, at the page's full inner width
   let y = MARGIN
@@ -738,8 +745,8 @@ export function layoutPoster({ plan, bytes, analysis, fileName, colors, proporti
     y += heights[i] + BAND_GAP + extraGap
   })
 
-  // Body, in the middle of what is left between the bands and the footer
-  const by = y + 8 + rest / 2
+  // Body, straight after the bands
+  const by = y
   const bx = innerX + Math.max(0, (innerW - best.bodyW) / 2)
   const allDumpW = best.dumpColumns * dumpW + (best.dumpColumns - 1) * DUMP_GAP
   let hexX = bx
@@ -754,7 +761,6 @@ export function layoutPoster({ plan, bytes, analysis, fileName, colors, proporti
     legendY = by
   }
   if (plan.items.length) {
-    const insertAt = out.elements.length
     const columns = []
     best.split.forEach(([a, b], i) => {
       if (b <= a) return
@@ -762,9 +768,10 @@ export function layoutPoster({ plan, bytes, analysis, fileName, colors, proporti
       const ox = hexX + i * (dumpW + DUMP_GAP)
       const g = hexDump(sub, bytes, colors, shadeOf, parentShade, ox, by, out) || hexGeometry(sub)
       columns.push({ start: a, end: b, ox, oy: by, g })
+      out.boxes.push({ role: 'dumptext', x: ox + g.hexX - 3, y: by + 30, w: g.asciiEnd - g.hexX + 3, h: Math.max(0, g.height - 36) })
       if (i > 0) out.elements.push({ t: 'line', x1: ox - DUMP_GAP / 2, y1: by + 4, x2: ox - DUMP_GAP / 2, y2: by + best.dumpH - 4, stroke: colors.rule, sw: 0.75, dash: '2 4' })
     })
-    if (rail) drawDumpPointers({ plan, columns, entryOffset: entryAt, shadeOf, colors, out, insertAt, fieldRuns })
+    if (rail) drawDumpPointers({ plan, columns, entryOffset: entryAt, shadeOf, colors, out })
   }
   best.flow.cols.forEach((col, i) => {
     let ly = legendY
@@ -811,7 +818,8 @@ export function layoutPoster({ plan, bytes, analysis, fileName, colors, proporti
     height,
     elements: out.elements,
     boxes: out.boxes,
-    arrangement: { stacked: best.stacked, columns: best.flow.cols.length, dumpColumns: best.dumpColumns, bands: bands.map(b => b.id) }
+    arrangement: { stacked: best.stacked, columns: best.flow.cols.length, dumpColumns: best.dumpColumns, bands: bands.map(b => b.id) },
+    available
   }
 }
 

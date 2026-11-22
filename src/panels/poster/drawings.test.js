@@ -45,8 +45,8 @@ function assertNoExternalRefs(svg) {
 }
 
 // Roles whose boxes must not overlap one another, within a role or across roles
-const SOLID = ['head', 'strip', 'arcs', 'unusual', 'tiles', 'memory', 'legend', 'ptag', 'rail']
-const SELF = ['legend', 'tab', 'break', 'unusual', 'ptag', 'rail', 'strip', 'head']
+const SOLID = ['head', 'strip', 'arcs', 'unusual', 'tiles', 'memory', 'legend', 'ptag', 'rail', 'pend']
+const SELF = ['legend', 'tab', 'break', 'unusual', 'ptag', 'rail', 'pend', 'strip', 'head']
 
 function assertTidy(scene) {
   for (const box of scene.boxes) {
@@ -71,6 +71,26 @@ function assertTidy(scene) {
     for (const b of scene.boxes.filter(x => ['unusual', 'tiles', 'memory', 'strip', 'arcs', 'legend', 'ptag', 'rail'].includes(x.role))) {
       assert.ok(!overlaps(a, b), `${a.role} and ${b.role} overlap: ${JSON.stringify([a, b])}`)
     }
+  }
+  // Connectors and tags stay in the rail: clear of the bytes and their text
+  const text = scene.boxes.filter(b => b.role === 'dumptext')
+  for (const b of scene.boxes.filter(x => ['rail', 'pend', 'ptag'].includes(x.role))) {
+    for (const t of text) assert.ok(!overlaps(b, t), `${b.role} over the dump: ${JSON.stringify([b, t])}`)
+  }
+  for (const el of scene.elements) {
+    if (el.t !== 'path' || !String(el.g).startsWith('pointer:')) continue
+    const nums = el.d.match(/-?[\d.]+/g).map(Number)
+    let x = 0
+    let y = 0
+    for (const cmd of el.d.match(/[MHVQ][^MHVQ]*/g)) {
+      const v = cmd.slice(1).trim().split(/[ ,]+/).map(Number)
+      if (cmd[0] === 'M') [x, y] = v
+      else if (cmd[0] === 'H') x = v[0]
+      else if (cmd[0] === 'V') y = v[0]
+      else [x, y] = v.slice(2)
+      for (const t of text) assert.ok(!(x > t.x && x < t.x + t.w && y > t.y && y < t.y + t.h), `connector point (${x}, ${y}) over the dump`)
+    }
+    assert.ok(nums.every(Number.isFinite))
   }
   for (const el of scene.elements) {
     if (el.t === 'text' || el.t === 'rect') {
@@ -233,7 +253,7 @@ test('hostile layouts, pointers and notes stay tidy and self-contained', () => {
     const kind = i % 6
     sections.push({
       name: i % 7 ? HOSTILE : '',
-      offset: [i * 3, size + i, NaN, -5, 2 ** 60, i][kind],
+      offset: [(i % 50) * 3, size + i, NaN, -5, 2 ** 60, i][kind],
       size: [3, 100, 5, 0, 7, Infinity][kind],
       address: [i * 0x1000, 2 ** 62 + i, NaN, 0, -1, 1e300][kind],
       memSize: [0x1000, 0, 2 ** 70, 0x10, 5, NaN][kind],
@@ -307,4 +327,64 @@ test('regions stand in for sections only with at least three data parts', () => 
   assert.equal(tileParts({ regions: regions(3) }, 100).kind, 'parts')
   assert.equal(tileParts({ category: 'executable', regions: regions(5) }, 100), null)
   assert.equal(tileParts({ image: { sections: [] }, regions: regions(5) }, 100), null)
+})
+
+test('pointers without a connector get paired tags', () => {
+  const size = 1024
+  const bytes = new Uint8Array(size)
+  const fields = []
+  for (let i = 0; i < 12; i++) {
+    fields.push({ name: `ptr${i}`, offset: i * 64, length: 4, kind: 'offset', target: i * 64 + 40 })
+    fields.push({ name: `data${i}`, offset: i * 64 + 40, length: 4, kind: 'data' })
+  }
+  const analysis = analysisWith(fields)
+  const plan = withPointers(planPoster({ analysis, size, mode: 'auto', maxRows: 200, maxLabels: 99, depth: 1 }), analysis)
+  assert.ok(plan.pointers.length >= 10)
+  for (const proportion of SHAPES) {
+    const { scene, svg } = check({ plan, bytes, analysis, proportion })
+    const connectors = scene.boxes.filter(b => b.role === 'rail')
+    assert.ok(connectors.length >= 1 && connectors.length <= MAX_CONNECTORS)
+    const tags = [...svg.matchAll(/data-id="ptag:\d+">([\s\S]*?)<\/g>/g)].map(m => m[1].replace(/<[^>]+>/g, ''))
+    const out = tags.flatMap(t => [...t.matchAll(/→ (\d+) · 0x[0-9A-F]+/g)].map(m => Number(m[1])))
+    const into = tags.flatMap(t => [...t.matchAll(/← ([\d, ]+)/g)].flatMap(m => m[1].split(',').map(Number)))
+    assert.equal(connectors.length + out.length, plan.pointers.length, proportion)
+    assert.equal(into.length, out.length)
+    // Every "→ n" names a label that a "← m" answers
+    for (const n of out) assert.ok(plan.labels.some(l => l.number === n))
+    for (const m of into) assert.ok(plan.pointers.some(p => p.from === m))
+  }
+})
+
+test('tiles appear only when some parts share their contents, and available says so', () => {
+  const bytes = Uint8Array.from({ length: 4096 }, (_, i) => (i * 31 + (i >> 9) * 7) & 0xff)
+  const distinct = Array.from({ length: 4 }, (_, i) => ({ name: `.s${i}`, offset: 1024 + i * 512, size: 512, address: 0x1000 * (i + 1), memSize: 512, flags: 'r--' }))
+  const image = { addressLabel: 'RVA', entry: null, sections: distinct, total: 4 }
+  const analysis = analysisWith([{ name: 'Magic', offset: 0, length: 2, kind: 'magic' }], { image, category: 'executable' })
+  const plan = planPoster({ analysis, size: bytes.length })
+  const plain = check({ plan, bytes, analysis })
+  assert.ok(!plain.scene.arrangement.bands.includes('tiles'))
+  assert.deepEqual(plain.scene.available, { pointers: false, unusual: false, tiles: false, memory: true })
+  // Two of them the same
+  const same = { ...image, sections: [...distinct, { ...distinct[1], name: '.copy', address: 0x9000 }] }
+  const withCopy = check({ plan, bytes, analysis: { ...analysis, image: same } })
+  assert.ok(withCopy.scene.arrangement.bands.includes('tiles'))
+  assert.equal(withCopy.scene.available.tiles, true)
+  assert.equal(withCopy.scene.available.unusual, true)
+  // Regions: three members, two identical
+  const zip = new Uint8Array(300)
+  zip.fill(7, 0, 100)
+  zip.fill(7, 100, 200)
+  const regions = [0, 1, 2].map(i => ({ name: `m${i}`, offset: i * 100, length: 100, kind: 'data' }))
+  const zipAnalysis = analysisWith([], { regions })
+  const z = check({ plan: planPoster({ analysis: zipAnalysis, size: 300 }), bytes: zip, analysis: zipAnalysis })
+  assert.ok(z.scene.arrangement.bands.includes('tiles'))
+})
+
+test('available ignores the show flags', () => {
+  const file = sectionsFile()
+  const plan = corkamiPlan(file)
+  const off = { pointers: false, unusual: false, tiles: false, memory: false }
+  const { scene } = check({ plan, bytes: file.bytes, analysis: file.analysis, show: off })
+  assert.deepEqual(scene.available, { pointers: true, unusual: true, tiles: true, memory: true })
+  assert.deepEqual(scene.arrangement.bands, ['title', 'map'])
 })

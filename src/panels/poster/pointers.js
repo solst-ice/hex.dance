@@ -1,65 +1,142 @@
 // Pointers: arcs on the file map from each pointer field to what it points
-// at, and connectors in the hex dump from a labelled pointer field to its
-// target row, routed through a rail of lanes to the right of the dump. Only
-// row gaps, the rail and the tag column are used, so a connector never runs
-// over the bytes or their text; they are drawn behind the boxes and tabs.
+// at, and connectors in the hex dump. A connector lives entirely in a rail to
+// the right of the dump's text column, so it never crosses bytes and can
+// never be mistaken for a field outline: a badge with the pointing label's
+// number at the right end of the source row, a line down (or up) its own
+// lane, and an arrowhead with the target's number at the right end of the
+// target row. Pointers without a connector get tags in a column after the
+// rail; a target on a drawn row gets a matching "← n" tag, the way
+// schematics pair off-sheet connectors.
 
+import { truncate } from './escape.js'
 import { textWidth, hex, whole } from './measure.js'
 
 export const MAX_CONNECTORS = 8
 export const MAX_LINKS = 400
 const LANE = 6
-const RAIL_GAP = 12
+const RAIL_GAP = 10
+const END_GAP = 4
 const TAG_F = 10.5
-const TAG_GAP = 8
+const TAG_GAP = 10
+const TAG_CHARS = 26
+const BADGE_F = 8.5
+const MARK_F = 9
+const ARROW = 6
 // Must match layout.js
 const BOX_H = 21
-const ROW_PITCH = 32
-const HEADER_H = 30
-const TAB_F = 8.5
-const ADVANCE = 0.6
-const CW = 14 * ADVANCE
 
 const fx = n => (Math.round(n * 100) / 100).toString()
 
-/** The pointers worth drawing: valid, with a label to start from, at most a few hundred. */
-function usablePointers(plan) {
+/** First drawn row (item index) holding any byte of [start, end), or -1. */
+function firstRowOf(items, start, end = start + 1) {
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i]
+    if (it.type === 'row' && it.start < end && start < it.end) return i
+  }
+  return -1
+}
+
+const badgeWidth = n => Math.max(14, String(n).length * BADGE_F * 0.62 + 7)
+const markText = p => (p.targetLabel !== null ? String(p.targetLabel) : hex(p.target))
+const markWidth = p => ARROW + 2 + textWidth(markText(p), MARK_F) + 2
+
+/**
+ * Every usable pointer with where it starts and ends on the dump, ranked by
+ * how much it tells about how the file hangs together.
+ */
+function pointerModel(plan, entryOffset = null) {
   const list = Array.isArray(plan?.pointers) ? plan.pointers.slice(0, MAX_LINKS) : []
-  const byNumber = new Map((plan?.labels || []).map(l => [l.number, l]))
+  const labels = Array.isArray(plan?.labels) ? plan.labels : []
+  const items = Array.isArray(plan?.items) ? plan.items : []
+  const byNumber = new Map(labels.map(l => [l.number, l]))
+  const structureOf = label => (label ? (label.parents?.length ? `p${label.parents[0]}` : `l${label.number}`) : null)
   const out = []
   for (const p of list) {
     if (!p) continue
     const target = whole(p.target)
     if (target === null || target >= plan.size) continue
-    const label = byNumber.get(p.from) || (plan.labels || []).find(l => l.offset === p.offset)
+    const label = byNumber.get(p.from) || labels.find(l => l.offset === p.offset)
     if (!label) continue
-    out.push({ label, target, targetLabel: p.targetLabel ?? null })
+    const sourceIndex = firstRowOf(items, label.start, label.end)
+    if (sourceIndex < 0) continue
+    const targetIndex = firstRowOf(items, target)
+    let targetLabel = Number.isSafeInteger(p.targetLabel) && byNumber.has(p.targetLabel) ? p.targetLabel : null
+    if (targetLabel === null) targetLabel = labels.find(l => target >= l.start && target < l.end)?.number ?? null
+    const tl = targetLabel === null ? null : byNumber.get(targetLabel)
+    // Entry point first; then pointers from one structure to another (a
+    // header to the next header, a header to the data it describes); hops
+    // inside one table last
+    const cross = structureOf(tl) !== structureOf(label)
+    const rank = entryOffset !== null && target === entryOffset ? 0 : cross ? (tl ? 1 : 2) : 3
+    out.push({ label, target, targetLabel, sourceIndex, targetIndex, rank })
   }
+  out.sort((a, b) => a.rank - b.rank || a.label.number - b.label.number)
   return out
 }
 
-function tagText(target, more) {
-  return `→ ${hex(target)}${more ? ` +${more}` : ''}`
+/** Tag pieces per row when the pointers in `tagged` get no connector. */
+function rowTags(model, tagged) {
+  const rows = new Map()
+  const at = index => {
+    let r = rows.get(index)
+    if (!r) rows.set(index, (r = { out: [], into: [] }))
+    return r
+  }
+  for (const p of model) {
+    if (!tagged.has(p)) continue
+    const paired = p.targetIndex >= 0
+    at(p.sourceIndex).out.push({ p, text: paired && p.targetLabel !== null ? `→ ${p.targetLabel} · ${hex(p.target)}` : `→ ${hex(p.target)}` })
+    if (paired) {
+      const r = at(p.targetIndex)
+      if (!r.into.some(q => q.label.number === p.label.number)) r.into.push(p)
+    }
+  }
+  return rows
+}
+
+/** The spans of one row's tag, cut to `chars` characters with a "+n" for what does not fit. */
+function tagSpans(row, chars, shadeOf, colors) {
+  const pieces = row.out.map(o => ({ text: o.text, fill: shadeOf(o.p.label) }))
+  if (row.into.length) {
+    const numbers = [...new Set(row.into.map(p => p.label.number))].sort((a, b) => a - b)
+    pieces.push({ text: `← ${numbers.join(', ')}`, fill: shadeOf(row.into[0].label) })
+  }
+  const spans = []
+  let used = 0
+  for (let i = 0; i < pieces.length; i++) {
+    const sep = spans.length ? '  ' : ''
+    const rest = pieces.length - i - 1
+    const more = rest ? ` +${rest}`.length : 0
+    const len = sep.length + pieces[i].text.length
+    if (used + len + more > chars) {
+      const left = pieces.length - i
+      if (spans.length) spans.push({ text: ` +${left}`, fill: colors.faint })
+      else spans.push({ text: truncate(pieces[i].text, chars), fill: pieces[i].fill })
+      break
+    }
+    spans.push({ text: sep + pieces[i].text, fill: pieces[i].fill })
+    used += len
+  }
+  return spans
+}
+
+function railGeometry(model) {
+  const eligible = model.filter(p => p.targetIndex >= 0 && p.targetIndex !== p.sourceIndex)
+  let endW = 0
+  for (const p of eligible) endW = Math.max(endW, badgeWidth(p.label.number), markWidth(p))
+  const lanes = Math.min(MAX_CONNECTORS, eligible.length)
+  const all = rowTags(model, new Set(model))
+  let tagChars = 0
+  for (const row of all.values()) tagChars = Math.max(tagChars, tagSpans(row, TAG_CHARS, () => '', {}).reduce((s, x) => s + x.text.length, 0))
+  const lanesW = lanes ? endW + END_GAP + lanes * LANE : 0
+  const tagW = tagChars * TAG_F * 0.62
+  return { endW, lanes, lanesW, tagChars, tagX: RAIL_GAP + lanesW + (lanes ? TAG_GAP : 0), width: RAIL_GAP + lanesW + (tagChars ? (lanes ? TAG_GAP : 0) + tagW : 0) + 4 }
 }
 
 /** Room to reserve to the right of the dump for the rail and tags (0 when there are no pointers). */
-export function railWidth(plan) {
-  const pointers = usablePointers(plan)
-  if (!pointers.length) return 0
-  const shown = pointers.filter(p => rowOf(plan.items, p.target) >= 0).length
-  const lanes = Math.min(MAX_CONNECTORS, shown)
-  let tagW = 0
-  for (const p of pointers) tagW = Math.max(tagW, textWidth(tagText(p.target, pointers.length > 1 ? 9 : 0), TAG_F))
-  return RAIL_GAP + lanes * LANE + TAG_GAP + tagW + 4
-}
-
-/** Index of the drawn row holding `offset`, or -1. */
-function rowOf(items, offset) {
-  for (let i = 0; i < items.length; i++) {
-    const it = items[i]
-    if (it.type === 'row' && offset >= it.start && offset < it.end) return i
-  }
-  return -1
+export function railWidth(plan, entryOffset = null) {
+  const model = pointerModel(plan, entryOffset)
+  return model.length ? railGeometry(model).width : 0
 }
 
 /**
@@ -72,159 +149,79 @@ function rowOf(items, offset) {
  * @param {(label: Object) => string} input.shadeOf
  * @param {Object} input.colors
  * @param {Object} input.out
- * @param {number} input.insertAt  index in out.elements to put the lines at (behind the dump)
- * @param {Function} input.fieldRuns  layout.js's fieldRuns (passed in to keep the modules acyclic)
  */
-export function drawDumpPointers({ plan, columns, entryOffset, shadeOf, colors, out, insertAt, fieldRuns }) {
-  const pointers = usablePointers(plan)
-  if (!pointers.length || !columns.length) return { connectors: 0, tags: 0 }
-  const items = plan.items
-  const bpr = plan.bytesPerRow
+export function drawDumpPointers({ plan, columns, entryOffset, shadeOf, colors, out }) {
+  const model = pointerModel(plan, entryOffset)
+  if (!model.length || !columns.length) return { connectors: 0, tags: 0 }
+  const rail = railGeometry(model)
   const columnOf = index => columns.findIndex(c => index >= c.start && index < c.end)
 
-  // Where each pointer starts and ends
-  const candidates = pointers.map(p => {
-    const runs = fieldRuns(items, bpr, p.label.start, p.label.end)
-    const run = runs[0]
-    const targetIndex = rowOf(items, p.target)
-    return { ...p, run, targetIndex }
-  }).filter(p => p.run)
-  const rank = p => (entryOffset !== null && p.target === entryOffset ? 0 : p.targetLabel !== null ? 1 : 2)
-  const drawable = candidates
-    .filter(p => p.targetIndex >= 0 && columnOf(p.targetIndex) === columnOf(p.run[0].index))
-    .sort((a, b) => rank(a) - rank(b) || a.label.number - b.label.number)
-
-  // Tabs per column, as obstacles in the row gaps
-  const tabs = columns.map(() => new Map())
-  for (const label of plan.labels) {
-    const runs = fieldRuns(items, bpr, label.start, label.end)
-    const first = runs[0]?.[0]
-    if (!first) continue
-    const ci = columnOf(first.index)
-    if (ci < 0) continue
-    const g = columns[ci].g
-    const w = Math.max(14, String(label.number).length * TAB_F * ADVANCE + 7)
-    const gap = first.index - columns[ci].start
-    const list = tabs[ci].get(gap) || []
-    list.push([g.left(first.c0), g.left(first.c0) + w])
-    tabs[ci].set(gap, list)
-  }
-
+  // Choose connectors: same column, not a same-row hop, and each row end
+  // holds one badge or one arrowhead
+  const ends = new Map()
   const chosen = []
-  const tracks = columns.map(() => new Map()) // gap -> [track0 intervals, track1 intervals]
-  const used = new Set()
-  for (const p of drawable) {
+  for (const p of model) {
     if (chosen.length >= MAX_CONNECTORS) break
-    const ci = columnOf(p.run[0].index)
-    const col = columns[ci]
-    const g = col.g
-    const laneEdge = g.asciiEnd + RAIL_GAP
-    const local = i => i - col.start
-    const tc = p.target - items[p.targetIndex].row * bpr
-    const cellRight = g.right(tc)
-    let best = null
-    for (const srcSide of ['below', 'above']) {
-      const seg = srcSide === 'below' ? p.run[p.run.length - 1] : p.run[0]
-      const sx = g.right(seg.c1) - 6
-      const sGap = local(seg.index) + (srcSide === 'below' ? 1 : 0)
-      for (const tgtSide of ['above', 'below']) {
-        const tGap = local(p.targetIndex) + (tgtSide === 'below' ? 1 : 0)
-        // Aim at the middle of the target byte, or past a tab sitting on it
-        let tx = g.colX(tc) + CW
-        const onTab = (tabs[ci].get(tGap) || []).find(([a, b]) => tx > a - 3 && tx < b + 3)
-        if (onTab && onTab[1] + 4 <= cellRight - 2) tx = onTab[1] + 4
-        for (const sTrack of [0, 1]) {
-          for (const tTrack of [0, 1]) {
-            if (sGap === tGap && sTrack === tTrack) continue
-            const sSpan = [Math.min(sx, laneEdge), laneEdge]
-            const tSpan = [Math.min(tx, laneEdge), laneEdge]
-            const busy = (gap, track, span) => (tracks[ci].get(gap)?.[track] || []).some(([a, b]) => span[0] < b + 3 && a < span[1] + 3)
-            if (busy(sGap, sTrack, sSpan) || busy(tGap, tTrack, tSpan)) continue
-            const crossings = (gap, span) => (tabs[ci].get(gap) || []).filter(([a, b]) => span[0] < b && a < span[1]).length
-            // The arrow's last stretch must not land on a tab
-            const tipBlocked = tgtSide === 'above' && (tabs[ci].get(tGap) || []).some(([a, b]) => tx > a - 3 && tx < b + 3)
-            const stubBlocked = srcSide === 'above' && (tabs[ci].get(sGap) || []).some(([a, b]) => sx > a - 2 && sx < b + 2)
-            // The arrowhead wants room: a far track for a tip from above, a near one from below
-            const tipRoom = tgtSide === 'above' ? (tTrack === 0 ? 0 : 1) : (tTrack === 1 ? 0 : 1)
-            const score = 0.6 * (crossings(sGap, sSpan) + crossings(tGap, tSpan)) + Math.min(3, Math.abs(tGap - sGap)) + (tipBlocked ? 100 : 0) + (stubBlocked ? 6 : 0) + tipRoom * 2 +
-              (tgtSide === 'below' ? 0.5 : 0) + (srcSide === 'above' ? 0.5 : 0)
-            if (!best || score < best.score) best = { score, srcSide, tgtSide, sGap, tGap, sTrack, tTrack, sx, tx, sSpan, tSpan, seg }
-          }
-        }
-      }
-    }
-    if (!best || best.score >= 100) continue
-    const mark = (gap, track, span) => {
-      const entry = tracks[ci].get(gap) || [[], []]
-      entry[track].push(span)
-      tracks[ci].set(gap, entry)
-    }
-    mark(best.sGap, best.sTrack, best.sSpan)
-    mark(best.tGap, best.tTrack, best.tSpan)
-    chosen.push({ p, ci, ...best })
-    used.add(p)
+    if (p.targetIndex < 0 || p.targetIndex === p.sourceIndex) continue
+    const ci = columnOf(p.sourceIndex)
+    if (ci < 0 || ci !== columnOf(p.targetIndex)) continue
+    if (ends.has(p.sourceIndex) || ends.has(p.targetIndex)) continue
+    ends.set(p.sourceIndex, p)
+    ends.set(p.targetIndex, p)
+    chosen.push({ p, ci })
   }
 
-  // Lanes: the shortest connectors nearest the dump, one lane each
-  const elements = []
-  const arrows = []
-  const lanesPerColumn = columns.map(() => 0)
-  const gapY = (gap, track) => HEADER_H + gap * ROW_PITCH + (track ? 7.5 : 3)
-  const byColumn = columns.map((_, ci) => chosen.filter(c => c.ci === ci).sort((a, b) => Math.abs(a.tGap - a.sGap) - Math.abs(b.tGap - b.sGap)))
-  byColumn.forEach((list, ci) => {
-    const col = columns[ci]
-    const g = col.g
-    list.forEach((c, lane) => {
-      lanesPerColumn[ci]++
-      const color = shadeOf(c.p.label)
-      const laneX = col.ox + g.asciiEnd + RAIL_GAP + lane * LANE + LANE / 2
-      const sEdge = col.oy + g.boxTop(c.seg.index - col.start) + (c.srcSide === 'below' ? BOX_H : 0)
-      const sY = col.oy + gapY(c.sGap, c.sTrack)
-      const tY = col.oy + gapY(c.tGap, c.tTrack)
-      const tRow = c.p.targetIndex - col.start
-      const tEdge = col.oy + g.boxTop(tRow) + (c.tgtSide === 'below' ? BOX_H : 0)
-      const sx = col.ox + c.sx
-      const tx = col.ox + c.tx
-      const head = 4.5
-      const dir = c.tgtSide === 'above' ? 1 : -1
-      const tipBase = tEdge - dir * head
-      const d = `M${fx(sx)} ${fx(sEdge)}V${fx(sY)}H${fx(laneX)}V${fx(tY)}H${fx(tx)}V${fx(tipBase)}`
-      elements.push({ t: 'path', d, stroke: color, sw: 1.4, g: `pointer:${c.p.label.number}` })
-      elements.push({ t: 'rect', x: sx - 1.8, y: sEdge - 1.8, w: 3.6, h: 3.6, rx: 1, fill: color, g: `pointer:${c.p.label.number}` })
-      arrows.push({ t: 'poly', points: [[tx, tEdge], [tx - 3.2, tipBase], [tx + 3.2, tipBase]], fill: color, g: `pointer:${c.p.label.number}` })
-      out.boxes.push({ role: 'rail', x: laneX - 0.7, y: Math.min(sY, tY) - 0.7, w: 1.4, h: Math.abs(tY - sY) + 1.4, id: c.p.label.number })
+  // Lanes: shortest spans nearest the rows, so connectors nest
+  const tops = []
+  const marks = []
+  const mid = (col, index) => col.oy + col.g.boxTop(index - col.start) + BOX_H / 2
+  columns.forEach((col, ci) => {
+    const mine = chosen.filter(c => c.ci === ci).sort((a, b) => Math.abs(a.p.targetIndex - a.p.sourceIndex) - Math.abs(b.p.targetIndex - b.p.sourceIndex) || a.p.sourceIndex - b.p.sourceIndex)
+    const x0 = col.ox + col.g.asciiEnd + RAIL_GAP
+    mine.forEach((c, lane) => {
+      const { p } = c
+      const g = `pointer:${p.label.number}`
+      const color = shadeOf(p.label)
+      const ys = mid(col, p.sourceIndex)
+      const yt = mid(col, p.targetIndex)
+      const lx = x0 + rail.endW + END_GAP + lane * LANE + LANE / 2
+      const bw = badgeWidth(p.label.number)
+      const mw = markWidth(p)
+      const dir = yt > ys ? 1 : -1
+      const r = Math.min(4, Math.abs(yt - ys) / 2)
+      const d = `M${fx(x0 + bw)} ${fx(ys)}H${fx(lx - r)}Q${fx(lx)} ${fx(ys)} ${fx(lx)} ${fx(ys + dir * r)}V${fx(yt - dir * r)}Q${fx(lx)} ${fx(yt)} ${fx(lx - r)} ${fx(yt)}H${fx(x0 + mw)}`
+      tops.push({ t: 'path', d, stroke: color, sw: 1.1, g })
+      // Source: the pointing label's number
+      marks.push({ t: 'rect', x: x0, y: ys - 6, w: bw, h: 12, rx: 3, fill: color, g })
+      marks.push({ t: 'text', x: x0 + bw / 2, y: ys + 3, size: BADGE_F, weight: 700, fill: colors.tabText, anchor: 'middle', text: String(p.label.number), g })
+      // Target: an arrowhead into the row and what it points at
+      marks.push({ t: 'poly', points: [[x0, yt], [x0 + ARROW, yt - 3.5], [x0 + ARROW, yt + 3.5]], fill: color, g })
+      marks.push({ t: 'text', x: x0 + ARROW + 2, y: yt + 3.2, size: MARK_F, weight: 700, fill: color, text: markText(p), g })
+      out.boxes.push({ role: 'pend', x: x0, y: ys - 6, w: bw, h: 12, id: p.label.number })
+      out.boxes.push({ role: 'pend', x: x0, y: yt - 6, w: mw, h: 12, id: p.label.number })
+      out.boxes.push({ role: 'rail', x: lx - 0.6, y: Math.min(ys, yt) - 0.6, w: 1.2, h: Math.abs(yt - ys) + 1.2, id: p.label.number })
     })
   })
+  out.elements.push(...tops, ...marks)
 
-  // Tags for the rest, one per row, after the rail
-  const tagRows = new Map()
-  for (const p of candidates) {
-    if (used.has(p)) continue
-    const index = p.run[0].index
-    const list = tagRows.get(index) || []
-    list.push(p)
-    tagRows.set(index, list)
-  }
+  // Tags for everything else, one line per row, after the rail
+  const connected = new Set(chosen.map(c => c.p))
+  const rows = rowTags(model, new Set(model.filter(p => !connected.has(p))))
   let tagCount = 0
-  for (const [index, list] of tagRows) {
+  for (const [index, row] of rows) {
     const ci = columnOf(index)
     if (ci < 0) continue
     const col = columns[ci]
-    const g = col.g
-    const x = col.ox + g.asciiEnd + RAIL_GAP + lanesPerColumn[ci] * LANE + TAG_GAP
-    const baseline = col.oy + g.boxTop(index - col.start) + BOX_H / 2 + TAG_F * 0.36
-    const first = list[0]
-    const spans = [{ text: `→ ${hex(first.target)}`, fill: shadeOf(first.label) }]
-    if (list.length > 1) spans.push({ text: ` +${list.length - 1}`, fill: colors.faint })
+    const spans = tagSpans(row, rail.tagChars || TAG_CHARS, shadeOf, colors)
+    if (!spans.length) continue
+    const x = col.ox + col.g.asciiEnd + rail.tagX
+    const y = mid(col, index) + TAG_F * 0.36
     const text = spans.map(s => s.text).join('')
-    out.elements.push({ t: 'text', x, y: baseline, size: TAG_F, fill: colors.muted, spans, preserve: true, g: `ptag:${index}` })
-    out.boxes.push({ role: 'ptag', x, y: baseline - 9, w: textWidth(text, TAG_F), h: 12 })
+    out.elements.push({ t: 'text', x, y, size: TAG_F, fill: colors.muted, spans, preserve: true, g: `ptag:${index}` })
+    out.boxes.push({ role: 'ptag', x, y: y - 9, w: textWidth(text, TAG_F), h: 12 })
     tagCount++
   }
-
-  out.elements.splice(insertAt, 0, ...elements)
-  out.elements.push(...arrows)
-  return { connectors: chosen.length, tags: tagCount, lanes: lanesPerColumn }
+  return { connectors: chosen.length, tags: tagCount }
 }
 
 /** Pointer links for the file map: valid and inside the file. */
@@ -251,27 +248,35 @@ export const ARC_ZONE = 58
 export function drawMapArcs({ links, x, width, barY, size, colors, out }) {
   if (!links.length || size <= 0) return
   const sx = n => x + (n / size) * width
-  const n = links.length
-  const sw = n <= 8 ? 1.4 : n <= 40 ? 1.1 : n <= 150 ? 0.8 : 0.55
-  const opacity = n <= 8 ? 0.95 : n <= 40 ? 0.7 : n <= 150 ? 0.45 : 0.32
-  const color = colors.shades.offset[0]
-  const heads = new Set()
-  const top = barY - 2
-  const arcs = []
-  const tips = []
+  // One arc per distinct pair of pixels, so duplicate links add nothing
+  const pairs = new Map()
   for (const l of links) {
     const x1 = sx(l.from)
     const x2 = sx(l.target)
+    const key = `${Math.round(x1)}:${Math.round(x2)}`
+    if (!pairs.has(key)) pairs.set(key, [x1, x2])
+  }
+  const n = pairs.size
+  const sw = n <= 8 ? 1.3 : n <= 40 ? 0.9 : n <= 150 ? 0.55 : 0.4
+  const opacity = n <= 8 ? 0.95 : n <= 40 ? 0.6 : n <= 150 ? 0.3 : 0.22
+  const color = colors.shades.offset[0]
+  const heads = new Set()
+  const top = barY - 2
+  // Height grows with distance, so arcs leaving one place nest inside one
+  // another and separate into rays as they go
+  const peak = ARC_ZONE - 8
+  const arcs = []
+  const tips = []
+  for (const [x1, x2] of pairs.values()) {
     const dx = Math.abs(x2 - x1)
     const tipKey = Math.round(x2 * 2)
     if (!heads.has(tipKey)) {
       heads.add(tipKey)
       const s = n <= 40 ? 3.4 : 2.4
-      tips.push({ t: 'poly', points: [[x2, top + 1], [x2 - s * 0.8, top - s * 1.3], [x2 + s * 0.8, top - s * 1.3]], fill: color, fillOpacity: Math.min(1, opacity + 0.2) })
+      tips.push({ t: 'poly', points: [[x2, top + 1], [x2 - s * 0.8, top - s * 1.3], [x2 + s * 0.8, top - s * 1.3]], fill: color, fillOpacity: Math.min(1, opacity + 0.35) })
     }
     if (dx < 2) continue
-    const h = 6 + (ARC_ZONE - 8) * Math.min(1, dx / width)
-    // A quadratic curve: arcs leaving one place spread out like a fan
+    const h = 4 + (peak - 4) * Math.min(1, dx / width)
     arcs.push({ t: 'path', d: `M${fx(x1)} ${fx(top)}Q${fx((x1 + x2) / 2)} ${fx(top - 2 * h)} ${fx(x2)} ${fx(top - 3)}`, stroke: color, sw, opacity })
   }
   out.elements.push(...arcs, ...tips)

@@ -209,6 +209,8 @@ export function tilesBand({ analysis, bytes, colors }) {
   const info = tileParts(analysis, size)
   if (!info) return null
   const grouped = contentGroups(info.parts, bytes)
+  // Tiles only say something when some parts share their contents
+  if (!grouped.groups.some(g => g.members > 1)) return null
   const palette = groupColors(grouped.groups, colors)
   const caption = tilesCaption(info, grouped)
   const t = tileSize(info.parts.length)
