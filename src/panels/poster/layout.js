@@ -417,7 +417,13 @@ function wrapChain(name, maxChars, maxLines, firstChars = maxChars) {
 function entryValue(label, lineChars) {
   const value = cleanText(label.value).trim()
   if (!label.text) return value
-  if (value && label.length < 64 && textLength(value) <= lineChars) return value
+  const fits = value && textLength(value) <= lineChars
+  if (fits && label.length < 64) return value
+  const amount = `${formatSize(label.length)} of text`
+  // A short value stays, with how much text the box holds; a long one (a
+  // sentence from the file) gives way to that
+  if (/^[\d,.]+ ?(bytes?|KB|MB|GB)$/i.test(value)) return amount
+  if (fits && textLength(`${value} · ${amount}`) <= lineChars) return `${value} · ${amount}`
   return `${formatCount(label.length)} bytes of readable text`
 }
 
