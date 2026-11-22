@@ -177,22 +177,21 @@
     flex: 1 0 auto;
   }
 
-  /* Several columns of sections: the sections area is as tall as the hex
+  /* Two columns of sections: the sections area is as tall as the hex
      column and its columns scroll on their own, so the page does not */
-  .workspace-side:has(> .section-stack[data-columns="2"]),
-  .workspace-side:has(> .section-stack[data-columns="3"]) {
+  .workspace-side:has(> .section-stack[data-columns="2"]) {
     height: calc(100vh - var(--workspace-top) - 12px);
     position: sticky;
     top: var(--workspace-top);
   }
 
-  /* Past three columns at their widest (MAX_SECTIONS_PX in lib/sections.js,
-     3,348px), the workspace stops growing and stays in the middle: the hex
+  /* Past two columns at their widest (MAX_SECTIONS_PX in lib/sections.js,
+     2,224px), the workspace stops growing and stays in the middle: the hex
      column at its widest, the gap and the sections (the gutters are padding) */
   .container.has-file {
     margin-left: auto;
     margin-right: auto;
-    max-width: calc(960px + 20px + 3348px);
+    max-width: calc(960px + 20px + 2224px);
   }
 }
 

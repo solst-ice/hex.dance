@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  COLLAPSED_KEY, COLUMN_GAP_PX, MAX_COLUMN_PX, MAX_SECTIONS_PX, MIN_COLUMN_PX, SECTION_GROUPS, allCollapsed, chooseCurrent,
+  COLLAPSED_KEY, COLUMN_GAP_PX, MAX_COLUMNS, MAX_COLUMN_PX, MAX_SECTIONS_PX, MIN_COLUMN_PX, SECTION_GROUPS, allCollapsed, chooseCurrent,
   chooseCurrentAcross, classifySections, columnCount, columnGroups, keepOnScreen, mountCandidates, nearestFirst, nextMounted,
   readCollapsed, sameSet, sectionGroup, setCollapsed, splitByGroup, toggleAll, writeCollapsed
 } from './sections.js'
@@ -177,28 +177,27 @@ test('compares sets by content', () => {
   assert.equal(sameSet(new Set([1, 3]), new Set([1, 2])), false)
 })
 
-test('fits one, two or three columns by the width of the sections area', () => {
+test('fits one or two columns by the width of the sections area', () => {
   assert.equal(columnCount(1168), 1)
   assert.equal(columnCount(MIN_COLUMN_PX * 2 + COLUMN_GAP_PX - 1), 1)
   assert.equal(columnCount(MIN_COLUMN_PX * 2 + COLUMN_GAP_PX), 2)
   // 2560px window with today's hex column
   assert.equal(columnCount(1548), 2)
-  assert.equal(columnCount(MIN_COLUMN_PX * 3 + COLUMN_GAP_PX * 2 - 1), 2)
-  assert.equal(columnCount(MIN_COLUMN_PX * 3 + COLUMN_GAP_PX * 2), 3)
-  // 3440px, and far wider: never more than three
-  assert.equal(columnCount(2428), 3)
-  assert.equal(columnCount(10000), 3)
+  // Room for three, on a 3440px window and far wider: never more than two beside the hex column
+  assert.equal(columnCount(MIN_COLUMN_PX * 3 + COLUMN_GAP_PX * 2), 2)
+  assert.equal(columnCount(2428), 2)
+  assert.equal(columnCount(10000), 2)
+  assert.equal(MAX_COLUMNS, 2)
   // Narrow screens, and nothing measured yet
   assert.equal(columnCount(5000, { wide: false }), 1)
   assert.equal(columnCount(0), 1)
   assert.equal(columnCount(NaN), 1)
-  assert.equal(MAX_SECTIONS_PX, MAX_COLUMN_PX * 3 + COLUMN_GAP_PX * 2)
+  assert.equal(MAX_SECTIONS_PX, MAX_COLUMN_PX * 2 + COLUMN_GAP_PX)
 })
 
 test('puts the first group in a column of its own, the others after it', () => {
   assert.deepEqual(columnGroups(1), [[1, 2, 3]])
   assert.deepEqual(columnGroups(2), [[1], [2, 3]])
-  assert.deepEqual(columnGroups(3), [[1], [2], [3]])
   assert.deepEqual(SECTION_GROUPS.map(group => group.id), [1, 2, 3])
 })
 

@@ -189,10 +189,11 @@ export function sameSet(a, b) {
 }
 
 /*
- * Columns. On wide screens the sections area holds one, two or three
- * columns, as many as fit at a readable width. What goes in which column is
- * by meaning, the same for every file: each 'tab' panel belongs to a group,
- * and the groups fill the columns in order.
+ * Columns. On wide screens the sections area holds one or two columns
+ * beside the hex column: two when both fit at a readable width. What goes
+ * in which column is by meaning, the same for every file: each 'tab' panel
+ * belongs to a group, the first group has the first column and the others
+ * share the second.
  */
 
 /** The groups of sections, in order; `label` names a group's column for assistive tech. */
@@ -205,34 +206,32 @@ export const SECTION_GROUPS = [
 // Narrowest a column may be, and the space between two columns
 export const MIN_COLUMN_PX = 640
 export const COLUMN_GAP_PX = 24
-// Widest a column may be; three of them, with the gaps, cap the sections area
+// The most columns of sections beside the hex column, however wide the screen
+export const MAX_COLUMNS = 2
+// Widest a column may be; MAX_COLUMNS of them, with the gap, cap the sections area
 export const MAX_COLUMN_PX = 1100
-export const MAX_SECTIONS_PX = MAX_COLUMN_PX * 3 + COLUMN_GAP_PX * 2
+export const MAX_SECTIONS_PX = MAX_COLUMN_PX * MAX_COLUMNS + COLUMN_GAP_PX * (MAX_COLUMNS - 1)
 
 /**
- * How many columns a sections area of `width` pixels holds: as many as fit
- * at `MIN_COLUMN_PX` each, from one to three. Narrow screens (where the
+ * How many columns a sections area of `width` pixels holds: two when both
+ * fit at `MIN_COLUMN_PX` each, otherwise one. Narrow screens (where the
  * sections run under the hex view) always get one.
  * @param {number} width  @param {{ wide?: boolean }} [options]
- * @returns {1|2|3}
+ * @returns {1|2}
  */
 export function columnCount(width, { wide = true } = {}) {
   if (!wide || !(width > 0)) return 1
-  for (const count of [3, 2]) {
-    if (width >= count * MIN_COLUMN_PX + (count - 1) * COLUMN_GAP_PX) return count
-  }
-  return 1
+  return width >= MAX_COLUMNS * MIN_COLUMN_PX + (MAX_COLUMNS - 1) * COLUMN_GAP_PX ? MAX_COLUMNS : 1
 }
 
 /**
- * Which groups each column shows: the first group always has a column of
- * its own; with two columns the others share the second.
+ * Which groups each column shows: with two columns the first group has a
+ * column of its own and the others share the second.
  * @param {number} count
  * @returns {number[][]}
  */
 export function columnGroups(count) {
-  if (count >= 3) return [[1], [2], [3]]
-  if (count === 2) return [[1], [2, 3]]
+  if (count >= 2) return [[1], [2, 3]]
   return [[1, 2, 3]]
 }
 

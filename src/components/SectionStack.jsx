@@ -169,8 +169,8 @@ function findAnchor(container, top, bottom, boxes, elements) {
 /**
  * Every available 'tab' panel, in registry order, as a collapsible section,
  * under a pinned index of the sections. On wide screens the sections fill
- * one, two or three columns, by group (see columnCount and columnGroups);
- * with several, each column scrolls on its own and the page does not.
+ * one or two columns, by group (see columnCount and columnGroups); with
+ * two, each column scrolls on its own and the page does not.
  * Sections mount when they come near the screen in their column and stop
  * reacting to changes while they are off screen (see PanelSection). Also
  * keeps `activePanelId` pointing at the current section and carries out
@@ -670,7 +670,7 @@ function SectionStack({ panels, analysis, file, status, footer = null }) {
   // up to data-columns; it is only named as a group when it is one.
   const renderGroup = (index) => {
     const group = SECTION_GROUPS[index]
-    const isColumn = columns === 3 || (columns === 2 && index === 0)
+    const isColumn = columns === 2 && index === 0
     return (
       <div
         className="section-column"

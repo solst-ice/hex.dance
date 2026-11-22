@@ -1,14 +1,14 @@
 /*
  * The sections area: a pinned index of the sections, then every panel as a
- * collapsible section, in one, two or three columns. Colours come from theme.css.
+ * collapsible section, in one or two columns. Colours come from theme.css.
  *
- *   .section-stack              the whole area; [data-columns] is 1, 2 or 3
+ *   .section-stack              the whole area; [data-columns] is 1 or 2
  *   .section-nav                index, sticky at the top of the area
  *   .section-nav-link           one chip per section; [aria-current="true"] marks the current one
  *   .section-nav-toggle-all     collapse / expand every section
  *   .section-columns            the sections, in three groups:
- *   .section-column             one group ([data-group]); a column of its own with three columns
- *   .section-column-rest        holds groups 2 and 3; one column with two columns
+ *   .section-column             one group ([data-group]); the first is a column of its own with two columns
+ *   .section-column-rest        holds groups 2 and 3; the second column with two columns
  *   .panel-section              one section; .is-current, [data-state], [data-mounted]
  *   .panel-section-toggle       its header bar (a button)
  *   .panel-section-body         the panel, or a placeholder until it mounts
@@ -45,8 +45,7 @@
 }
 
 .section-column-end[data-group="3"],
-.section-stack[data-columns="2"] .section-column-end[data-group="1"],
-.section-stack[data-columns="3"] .section-column-end {
+.section-stack[data-columns="2"] .section-column-end[data-group="1"] {
   display: block;
 }
 
@@ -62,31 +61,21 @@
  * not scroll; see workspace.css). The columns' padding leaves room for the
  * glow of a section header and for focus rings inside the scroll box.
  */
-.section-stack[data-columns="2"],
-.section-stack[data-columns="3"] {
+.section-stack[data-columns="2"] {
   height: 100%;
 }
 
-.section-stack[data-columns="2"] .section-columns,
-.section-stack[data-columns="3"] .section-columns {
+.section-stack[data-columns="2"] .section-columns {
   display: grid;
   flex: 1 1 0;
   gap: 4px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   margin: -8px -8px 0;
   min-height: 0;
 }
 
-.section-stack[data-columns="2"] .section-columns {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.section-stack[data-columns="3"] .section-columns {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
 .section-stack[data-columns="2"] .section-column[data-group="1"],
-.section-stack[data-columns="2"] .section-column-rest,
-.section-stack[data-columns="3"] .section-column {
+.section-stack[data-columns="2"] .section-column-rest {
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -104,8 +93,7 @@
 }
 
 .section-stack[data-columns="2"] .section-column[data-group="1"]:focus-visible,
-.section-stack[data-columns="2"] .section-column-rest:focus-visible,
-.section-stack[data-columns="3"] .section-column:focus-visible {
+.section-stack[data-columns="2"] .section-column-rest:focus-visible {
   outline: 1px dashed var(--hd-focus);
   outline-offset: -1px;
 }
@@ -260,8 +248,7 @@
 }
 
 /* Where one column ends and the next begins, between their chips */
-.section-stack[data-columns="2"] .section-nav-group-start[data-group="2"],
-.section-stack[data-columns="3"] .section-nav-group-start {
+.section-stack[data-columns="2"] .section-nav-group-start[data-group="2"] {
   border-left: 1px solid var(--hd-border-strong);
   margin-left: 4px;
   padding-left: 10px;
