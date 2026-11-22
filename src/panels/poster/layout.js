@@ -6,9 +6,14 @@
 
 import { truncate, textLength } from './escape.js'
 import { KIND_LABELS, BYTE_CLASSES, BYTE_CLASS_LABELS, byteClass, assignShades, kindOf, regionKindOf } from './palette.js'
+import { placeOnRows } from './measure.js'
+import { drawDumpPointers, drawMapArcs, mapLinks, railWidth, ARC_ZONE } from './pointers.js'
+import { unusualBand } from './unusual.js'
+import { tilesBand } from './tiles.js'
+import { memoryBand } from './memory.js'
 
 export const ADVANCE = 0.6
-export const PROPORTIONS = { landscape: Math.SQRT2, portrait: 1 / Math.SQRT2, square: 1 }
+export const PROPORTIONS = { landscape: Math.SQRT2, portrait: 1 / Math.SQRT2, square: 1, tall: 0.5 }
 
 const F = 14 // hex font size
 const CW = F * ADVANCE
@@ -28,8 +33,9 @@ const BODY_GAP = 48
 
 const MARGIN = 56
 const MIN_INNER_W = 920
-const HEAD_H = 196
 const FOOT_H = 44
+const BAND_GAP = 26
+const DUMP_GAP = 40
 
 const HEX = Array.from({ length: 256 }, (_, v) => v.toString(16).toUpperCase().padStart(2, '0'))
 
@@ -442,19 +448,45 @@ export function flowColumns(blocks, columns, minHeight = 0) {
 
 // --- Overview strip -------------------------------------------------------
 
-function overviewStrip(plan, regions, colors, x, y, width, out) {
+const STRIP_TITLE_H = 20
+const STRIP_BAR_H = 20
+const STRIP_BELOW = 46
+
+/** Height of the file map: taller when it carries pointer arcs. */
+function stripHeight(links) {
+  return STRIP_TITLE_H + (links.length ? ARC_ZONE : 8) + STRIP_BAR_H + STRIP_BELOW
+}
+
+/** Runs of consecutive drawn rows, as [start, end) byte ranges. */
+function shownParts(items) {
+  const parts = []
+  for (const item of items) {
+    if (item.type !== 'row') continue
+    const last = parts[parts.length - 1]
+    if (last && last[1] === item.start) last[1] = item.end
+    else parts.push([item.start, item.end])
+  }
+  return parts
+}
+
+function overviewStrip(plan, regions, colors, x, y, width, out, extras = {}) {
+  const links = extras.links || []
+  const entryOffset = extras.entryOffset ?? null
   const el = out.elements
   const size = plan.size
   el.push({ t: 'text', x, y: y + 12, size: 11, fill: colors.accent2, weight: 700, text: 'FILE MAP', ls: 1.5 })
-  const regionNote = regions.length ? `${formatCount(regions.length)} region${regions.length === 1 ? '' : 's'}, to scale` : 'no region map for this format'
+  const notes = [regions.length ? `${formatCount(regions.length)} region${regions.length === 1 ? '' : 's'}, to scale` : 'no region map for this format']
+  if (links.length) notes.push(`${formatCount(links.length)} pointer${links.length === 1 ? '' : 's'} drawn as arcs`)
+  const regionNote = truncate(notes.join(' · '), charsFor(width - 110, 11))
   el.push({ t: 'text', x: x + width, y: y + 12, size: 11, fill: colors.faint, anchor: 'end', text: regionNote })
+  out.boxes.push({ role: 'strip', x: x + width - textWidth(regionNote, 11), y, w: textWidth(regionNote, 11), h: 14 })
+  const barY = y + STRIP_TITLE_H + (links.length ? ARC_ZONE : 8)
+  const barH = STRIP_BAR_H
   if (size === 0) {
-    el.push({ t: 'rect', x, y: y + 44, w: width, h: 20, rx: 3, fill: colors.panel, stroke: colors.rule, sw: 1 })
-    el.push({ t: 'text', x: x + width / 2, y: y + 58, size: 11, fill: colors.muted, anchor: 'middle', text: 'empty file' })
+    el.push({ t: 'rect', x, y: barY, w: width, h: barH, rx: 3, fill: colors.panel, stroke: colors.rule, sw: 1 })
+    el.push({ t: 'text', x: x + width / 2, y: barY + 14, size: 11, fill: colors.muted, anchor: 'middle', text: 'empty file' })
     return
   }
-  const barY = y + 44
-  const barH = 20
   const sx = n => x + (n / size) * width
   el.push({ t: 'rect', x, y: barY, w: width, h: barH, rx: 3, fill: colors.panel, stroke: colors.rule, sw: 1 })
 
@@ -477,21 +509,56 @@ function overviewStrip(plan, regions, colors, x, y, width, out) {
     }
   })
 
-  // What this poster covers
-  const shown = plan.shown || plan.window
-  const c1 = sx(shown.start)
-  const c2 = Math.max(c1 + 3, sx(shown.end))
-  el.push({ t: 'rect', x: c1 - 1, y: barY - 3, w: Math.min(c2 - c1 + 2, x + width - c1 + 1), h: barH + 6, rx: 2, fill: 'none', stroke: colors.accent3, sw: 2 })
-  el.push({ t: 'path', d: `M${fx(c1)} ${fx(barY - 6)}V${fx(barY - 11)}H${fx(c2)}V${fx(barY - 6)}`, stroke: colors.accent3, sw: 1.5, fill: 'none' })
-  const coverage = `this poster: ${hexOffset(shown.start)}–${hexOffset(Math.max(shown.start, shown.end - 1))}`
-  const tw = textWidth(coverage, 10.5)
-  let tx = c1
-  if (tx + tw > x + width) tx = Math.max(x, c2 - tw)
-  el.push({ t: 'text', x: tx, y: barY - 15, size: 10.5, fill: colors.accent3, text: coverage })
-  out.boxes.push({ role: 'strip', x: tx, y: barY - 25, w: tw, h: 12 })
+  drawMapArcs({ links, x, width, barY, size, colors, out })
 
-  el.push({ t: 'text', x, y: barY + barH + 15, size: 10.5, fill: colors.faint, text: '0x0' })
-  el.push({ t: 'text', x: x + width, y: barY + barH + 15, size: 10.5, fill: colors.faint, anchor: 'end', text: `${hexOffset(size)} · ${formatSize(size)}` })
+  // Below the bar: what this poster covers, the scale and the entry point
+  const below = barY + barH
+  const rows = [[], []]
+  const baseline = r => below + 22 + r * 14
+  const place = (ax, text, fill, anchor) => {
+    const tw = textWidth(text, 10.5)
+    let left = anchor === 'end' ? ax - tw : anchor === 'middle' ? ax - tw / 2 : ax
+    left = Math.max(x, Math.min(x + width - tw, left))
+    const r = placeOnRows(rows, left, tw)
+    if (r < 0) return false
+    el.push({ t: 'text', x: left, y: baseline(r), size: 10.5, fill, text })
+    out.boxes.push({ role: 'strip', x: left, y: baseline(r) - 10, w: tw, h: 12 })
+    return true
+  }
+  place(x, '0x0', colors.faint)
+  place(x + width, `${hexOffset(size)} · ${formatSize(size)}`, colors.faint, 'end')
+
+  if (entryOffset !== null && entryOffset < size) {
+    const ex = sx(entryOffset)
+    el.push({ t: 'line', x1: ex, y1: barY - 2, x2: ex, y2: below + 9, stroke: colors.accent3, sw: 1.5 })
+    el.push({ t: 'poly', points: [[ex, below + 5], [ex - 4, below + 11], [ex + 4, below + 11]], fill: colors.accent3 })
+    if (!place(ex, `entry point ${hexOffset(entryOffset)}`, colors.accent3, 'middle')) place(ex, 'entry', colors.accent3, 'middle')
+  }
+
+  if (plan.mode === 'tour') {
+    // Where the rows on this poster come from
+    const parts = shownParts(plan.items)
+    let last = -Infinity
+    for (const [s, e] of parts.slice(0, 400)) {
+      const a = sx(s)
+      const b = Math.max(a + 2, sx(e))
+      if (b <= last + 0.5) continue
+      el.push({ t: 'rect', x: Math.max(x, Math.max(a, last + 0.5)), y: below + 2, w: Math.max(1, Math.min(b, x + width) - Math.max(a, last + 0.5)), h: 4, fill: colors.text, fillOpacity: 0.8 })
+      last = b
+    }
+    if (parts.length) {
+      const text = `rows from ${formatCount(parts.length)} place${parts.length === 1 ? '' : 's'} in the file (marked under the bar)`
+      place(x + width / 2, text, colors.muted, 'middle') || place(x + width / 2, `rows from ${formatCount(parts.length)} places`, colors.muted, 'middle')
+    }
+  } else {
+    const shown = plan.shown || plan.window
+    const c1 = sx(shown.start)
+    const c2 = Math.max(c1 + 3, sx(shown.end))
+    el.push({ t: 'rect', x: c1 - 1, y: barY - 3, w: Math.min(c2 - c1 + 2, x + width - c1 + 1), h: barH + 6, rx: 2, fill: 'none', stroke: colors.accent3, sw: 2 })
+    el.push({ t: 'path', d: `M${fx(c1)} ${fx(below + 6)}V${fx(below + 10)}H${fx(c2)}V${fx(below + 6)}`, stroke: colors.accent3, sw: 1.5, fill: 'none' })
+    const coverage = `this poster: ${hexOffset(shown.start)}–${hexOffset(Math.max(shown.start, shown.end - 1))}`
+    place(c1, coverage, colors.accent3) || place((c1 + c2) / 2, coverage, colors.accent3, 'middle')
+  }
 }
 
 // --- Page -----------------------------------------------------------------
@@ -529,11 +596,15 @@ function notesFor(plan) {
  * @param {import('../../analysis/types.js').Analysis|null} input.analysis
  * @param {string} input.fileName
  * @param {import('./palette.js').PosterColors} input.colors
- * @param {'landscape'|'portrait'|'square'} [input.proportion]
+ * @param {'landscape'|'portrait'|'square'|'tall'} [input.proportion]
+ * @param {{ pointers?: boolean, unusual?: boolean, tiles?: boolean, memory?: boolean }} [input.show]
+ *        which of the extra drawings to include (each only when there is data for it); all on by default
  * @param {string} [input.date]
  */
-export function layoutPoster({ plan, bytes, analysis, fileName, colors, proportion = 'landscape', date = '' }) {
+export function layoutPoster({ plan, bytes, analysis, fileName, colors, proportion = 'landscape', date = '', show }) {
   const ratio = PROPORTIONS[proportion] || PROPORTIONS.landscape
+  const flags = { pointers: true, unusual: true, tiles: true, memory: true }
+  if (show && typeof show === 'object') for (const key of Object.keys(flags)) if (show[key] === false) flags[key] = false
   const shades = assignShades(plan.labels)
   const shadeOf = label => colors.shades[label.kind][shades[label.number - 1] ?? 0]
   const parentShadeIdx = assignShades(plan.parents)
@@ -542,22 +613,52 @@ export function layoutPoster({ plan, bytes, analysis, fileName, colors, proporti
   const geometry = hexGeometry(plan)
   const blocks = legendBlocks(plan, colors, shadeOf, parentShade, notesFor(plan))
 
+  // The extra drawings, each only with its flag on and data to show
+  const image = analysis?.image && typeof analysis.image === 'object' ? analysis.image : null
+  const entryAt = Number.isSafeInteger(image?.entry?.offset) && image.entry.offset >= 0 && image.entry.offset < plan.size ? image.entry.offset : null
+  const links = flags.pointers ? mapLinks(plan) : []
+  const rail = flags.pointers && plan.items.length ? railWidth(plan) : 0
+  const tiles = flags.tiles || flags.unusual ? tilesBand({ analysis, bytes, colors }) : null
+  const unusual = flags.unusual ? unusualBand({ analysis, colors, facts: tiles?.fact ? [tiles.fact] : [] }) : null
+  const memory = flags.memory ? memoryBand({ analysis, colors, fileSize: plan.size }) : null
+
+  const facts = summaryFacts(analysis)
+  const regions = (Array.isArray(analysis?.regions) ? analysis.regions : [])
+    .filter(r => r && Number.isSafeInteger(r.offset) && r.offset >= 0 && r.offset < plan.size && r.length > 0)
+    .map(r => ({ name: r.name, offset: r.offset, length: Math.min(r.length, plan.size - r.offset), kind: regionKindOf(r.kind) }))
+  const bands = [
+    { id: 'title', measure: () => (facts.length ? 84 : 62), draw: (x, y, w, out) => titleBlock({ x, y, w, out, fileName, analysis, plan, colors, facts }) },
+    { id: 'map', measure: () => stripHeight(links), draw: (x, y, w, out) => overviewStrip(plan, regions, colors, x, y, w, out, { links, entryOffset: entryAt }) },
+    unusual,
+    flags.tiles ? tiles : null,
+    memory
+  ].filter(Boolean)
+  const bandsHeight = w => bands.reduce((s, b) => s + b.measure(w) + BAND_GAP, 0)
+
   // Pick the arrangement that wastes the least page for this proportion
+  const dumpW = geometry.width + rail
+  const rowsTotal = plan.items.length
   let best = null
-  for (const stacked of [false, true]) {
-    for (let k = 1; k <= 4; k++) {
-      const flow = flowColumns(blocks, k, stacked ? 0 : geometry.height)
-      const legendW = flow.cols.length * LEGEND_W + (flow.cols.length - 1) * COL_GAP
-      const bodyW = stacked ? Math.max(geometry.width, legendW) : geometry.width + BODY_GAP + legendW
-      const bodyH = stacked ? geometry.height + 36 + flow.height : Math.max(geometry.height, flow.height)
-      const innerW = Math.max(MIN_INNER_W, bodyW)
-      let w = innerW + 2 * MARGIN
-      let h = HEAD_H + bodyH + FOOT_H + 2 * MARGIN + 40
-      if (w / h < ratio) w = h * ratio
-      else h = w / ratio
-      const area = w * h
-      if (!best || area < best.area * 0.97) best = { stacked, flow, legendW, bodyW, bodyH, w, h, area }
-      if (flow.cols.length < k) break
+  for (const dumpColumns of [1, 2, 3, 4]) {
+    if (dumpColumns > 1 && rowsTotal < dumpColumns * 12) break
+    const split = splitItems(plan.items, dumpColumns)
+    const dumpH = Math.max(0, ...split.map(([a, b]) => (b > a ? hexGeometry({ ...plan, items: plan.items.slice(a, b) }).height : 0)))
+    const allDumpW = dumpColumns * dumpW + (dumpColumns - 1) * DUMP_GAP
+    for (const stacked of [false, true]) {
+      for (let k = 1; k <= 4; k++) {
+        const flow = flowColumns(blocks, k, stacked ? 0 : dumpH)
+        const legendW = flow.cols.length * LEGEND_W + (flow.cols.length - 1) * COL_GAP
+        const bodyW = stacked ? Math.max(allDumpW, legendW) : allDumpW + (flow.cols.length ? BODY_GAP + legendW : 0)
+        const bodyH = stacked ? dumpH + (flow.height ? 36 + flow.height : 0) : Math.max(dumpH, flow.height)
+        const innerW = Math.max(MIN_INNER_W, bodyW)
+        let w = innerW + 2 * MARGIN
+        let h = 2 * MARGIN + bandsHeight(innerW) + bodyH + FOOT_H + 20
+        if (w / h < ratio) w = h * ratio
+        else h = w / ratio
+        const area = w * h
+        if (!best || area < best.area * 0.97) best = { stacked, flow, legendW, bodyW, bodyH, w, h, area, split, dumpH, dumpColumns }
+        if (flow.cols.length < k) break
+      }
     }
   }
 
@@ -568,70 +669,60 @@ export function layoutPoster({ plan, bytes, analysis, fileName, colors, proporti
   const innerW = width - 2 * MARGIN
   out.elements.push({ t: 'rect', x: 0, y: 0, w: width, h: height, fill: colors.background })
 
-  // Title block
-  const title = truncate(fileName || 'untitled', charsFor(innerW, 30))
-  out.elements.push({ t: 'text', x: innerX, y: MARGIN + 26, size: 30, weight: 700, fill: colors.accent, text: title, cls: 'title' })
-  out.boxes.push({ role: 'head', x: innerX, y: MARGIN, w: textWidth(title, 30), h: 34 })
-  const formatName = analysis?.formatName || 'Unknown format'
-  const sizeText = plan.size < 1024 ? formatSize(plan.size) : `${formatSize(plan.size)} (${formatCount(plan.size)} bytes)`
-  const subtitle = truncate(`${formatName} · ${sizeText}`, charsFor(innerW, 15))
-  out.elements.push({ t: 'text', x: innerX, y: MARGIN + 54, size: 15, fill: colors.text, text: subtitle })
-  out.boxes.push({ role: 'head', x: innerX, y: MARGIN + 41, w: textWidth(subtitle, 15), h: 17 })
+  // Spare height (from the page's proportion) first widens the gaps between
+  // the bands, up to a point; the rest goes above and below the body
+  const heights = bands.map(b => b.measure(innerW))
+  const content = heights.reduce((s, h) => s + h + BAND_GAP, 0) + 8 + best.bodyH
+  const spare = Math.max(0, height - MARGIN - FOOT_H - 20 - MARGIN - content)
+  const extraGap = Math.min(spare / (bands.length + 2), 28)
+  const rest = spare - extraGap * bands.length
 
-  const facts = summaryFacts(analysis)
-  if (facts.length) {
-    const budget = charsFor(innerW, 12.5)
-    const spans = []
-    let used = 0
-    for (const fact of facts) {
-      const sep = spans.length ? '   ' : ''
-      const piece = textLength(sep + fact.label + ' ' + fact.value)
-      if (used + piece > budget) {
-        const room = budget - used - textLength(sep + fact.label + ' ')
-        if (room >= 6) {
-          spans.push({ text: sep + fact.label + ' ', fill: colors.faint })
-          spans.push({ text: truncate(fact.value, room), fill: colors.text })
-        }
-        break
-      }
-      spans.push({ text: sep + fact.label + ' ', fill: colors.faint })
-      spans.push({ text: fact.value, fill: colors.text })
-      used += piece
-    }
-    if (spans.length) out.elements.push({ t: 'text', x: innerX, y: MARGIN + 78, size: 12.5, fill: colors.text, spans, preserve: true })
-  }
+  // Bands, top to bottom, at the page's full inner width
+  let y = MARGIN
+  bands.forEach((band, i) => {
+    const first = out.elements.length
+    band.draw(innerX, y, innerW, out)
+    for (let e = first; e < out.elements.length; e++) if (!out.elements[e].g) out.elements[e].g = `band:${band.id}`
+    y += heights[i] + BAND_GAP + extraGap
+  })
 
-  const regions = (Array.isArray(analysis?.regions) ? analysis.regions : [])
-    .filter(r => r && Number.isSafeInteger(r.offset) && r.offset >= 0 && r.offset < plan.size && r.length > 0)
-    .map(r => ({ name: r.name, offset: r.offset, length: Math.min(r.length, plan.size - r.offset), kind: regionKindOf(r.kind) }))
-  overviewStrip(plan, regions, colors, innerX, MARGIN + 100, innerW, out)
-
-  // Body, centred in the space between the header and the footer
-  const bodyTop = MARGIN + HEAD_H
-  const bodyArea = height - MARGIN - FOOT_H - 20 - bodyTop
-  const by = bodyTop + Math.max(0, (bodyArea - best.bodyH) / 2)
+  // Body, in the middle of what is left between the bands and the footer
+  const by = y + 8 + rest / 2
   const bx = innerX + Math.max(0, (innerW - best.bodyW) / 2)
+  const allDumpW = best.dumpColumns * dumpW + (best.dumpColumns - 1) * DUMP_GAP
   let hexX = bx
   let legendX
   let legendY
   if (best.stacked) {
-    hexX = bx + (best.bodyW - geometry.width) / 2
+    hexX = bx + (best.bodyW - allDumpW) / 2
     legendX = bx + (best.bodyW - best.legendW) / 2
-    legendY = by + geometry.height + 36
+    legendY = by + best.dumpH + 36
   } else {
-    legendX = bx + geometry.width + BODY_GAP
+    legendX = bx + allDumpW + BODY_GAP
     legendY = by
   }
-  if (plan.items.length) hexDump(plan, bytes, colors, shadeOf, parentShade, hexX, by, out)
+  if (plan.items.length) {
+    const insertAt = out.elements.length
+    const columns = []
+    best.split.forEach(([a, b], i) => {
+      if (b <= a) return
+      const sub = best.split.length > 1 ? { ...plan, items: plan.items.slice(a, b) } : plan
+      const ox = hexX + i * (dumpW + DUMP_GAP)
+      const g = hexDump(sub, bytes, colors, shadeOf, parentShade, ox, by, out) || hexGeometry(sub)
+      columns.push({ start: a, end: b, ox, oy: by, g })
+      if (i > 0) out.elements.push({ t: 'line', x1: ox - DUMP_GAP / 2, y1: by + 4, x2: ox - DUMP_GAP / 2, y2: by + best.dumpH - 4, stroke: colors.rule, sw: 0.75, dash: '2 4' })
+    })
+    if (rail) drawDumpPointers({ plan, columns, entryOffset: entryAt, shadeOf, colors, out, insertAt, fieldRuns })
+  }
   best.flow.cols.forEach((col, i) => {
-    let y = legendY
+    let ly = legendY
     const x = legendX + i * (LEGEND_W + COL_GAP)
     for (const block of col) {
       const first = out.elements.length
-      block.draw(x, y, out)
+      block.draw(x, ly, out)
       const g = `legend:${blocks.indexOf(block)}`
       for (let e = first; e < out.elements.length; e++) out.elements[e].g = g
-      y += block.h
+      ly += block.h
     }
   })
   if (!best.stacked && best.flow.cols.length && blocks.length) {
@@ -645,8 +736,9 @@ export function layoutPoster({ plan, bytes, analysis, fileName, colors, proporti
   if (date) credit.push({ text: ` · ${date}`, fill: colors.muted })
   out.elements.push({ t: 'text', x: innerX, y: fy, size: 12, fill: colors.muted, spans: credit })
   const shown = plan.shown
+  const what = plan.mode === 'tour' ? 'showing rows from across the file' : shown ? `showing ${hexOffset(shown.start)}–${hexOffset(shown.end - 1)}` : ''
   const coverage = shown
-    ? `showing ${hexOffset(shown.start)}–${hexOffset(shown.end - 1)} · ${plan.bytesPerRow} bytes per row · ${plan.labels.length} label${plan.labels.length === 1 ? '' : 's'}`
+    ? `${what} · ${plan.bytesPerRow} bytes per row · ${plan.labels.length} label${plan.labels.length === 1 ? '' : 's'}`
     : 'nothing to show'
   out.elements.push({ t: 'text', x: innerX, y: fy + 17, size: 10.5, fill: colors.faint, text: truncate(coverage, charsFor(innerW / 2, 10.5)) })
 
@@ -662,5 +754,64 @@ export function layoutPoster({ plan, bytes, analysis, fileName, colors, proporti
   }
   out.elements.push({ t: 'text', x: kx, y: fy, size: 11, fill: colors.faint, anchor: 'end', text: 'bytes outside fields' })
 
-  return { width, height, elements: out.elements, boxes: out.boxes, arrangement: { stacked: best.stacked, columns: best.flow.cols.length } }
+  return {
+    width,
+    height,
+    elements: out.elements,
+    boxes: out.boxes,
+    arrangement: { stacked: best.stacked, columns: best.flow.cols.length, dumpColumns: best.dumpColumns, bands: bands.map(b => b.id) }
+  }
+}
+
+/** Splits the dump's items into `n` columns of about the same length, preferring to end a column on a break. */
+function splitItems(items, n) {
+  if (n <= 1) return [[0, items.length]]
+  const out = []
+  let start = 0
+  for (let c = 1; c < n; c++) {
+    let cut = Math.round((items.length * c) / n)
+    for (let d = 0; d <= 4; d++) {
+      if (items[cut + d - 1]?.type === 'break') { cut += d; break }
+      if (items[cut - d - 1]?.type === 'break' && cut - d > start + 1) { cut -= d; break }
+    }
+    cut = Math.max(start + 1, Math.min(items.length, cut))
+    out.push([start, cut])
+    start = cut
+  }
+  out.push([start, items.length])
+  return out
+}
+
+function titleBlock({ x, y, w, out, fileName, analysis, plan, colors, facts }) {
+  const title = truncate(fileName || 'untitled', charsFor(w, 30))
+  out.elements.push({ t: 'text', x, y: y + 26, size: 30, weight: 700, fill: colors.accent, text: title, cls: 'title' })
+  out.boxes.push({ role: 'head', x, y, w: textWidth(title, 30), h: 34 })
+  const formatName = analysis?.formatName || 'Unknown format'
+  const sizeText = plan.size < 1024 ? formatSize(plan.size) : `${formatSize(plan.size)} (${formatCount(plan.size)} bytes)`
+  const subtitle = truncate(`${formatName} · ${sizeText}`, charsFor(w, 15))
+  out.elements.push({ t: 'text', x, y: y + 54, size: 15, fill: colors.text, text: subtitle })
+  out.boxes.push({ role: 'head', x, y: y + 41, w: textWidth(subtitle, 15), h: 17 })
+  if (!facts.length) return
+  const budget = charsFor(w, 12.5)
+  const spans = []
+  let used = 0
+  for (const fact of facts) {
+    const sep = spans.length ? '   ' : ''
+    const piece = textLength(sep + fact.label + ' ' + fact.value)
+    if (used + piece > budget) {
+      const room = budget - used - textLength(sep + fact.label + ' ')
+      if (room >= 6) {
+        spans.push({ text: sep + fact.label + ' ', fill: colors.faint })
+        spans.push({ text: truncate(fact.value, room), fill: colors.text })
+      }
+      break
+    }
+    spans.push({ text: sep + fact.label + ' ', fill: colors.faint })
+    spans.push({ text: fact.value, fill: colors.text })
+    used += piece
+  }
+  if (spans.length) {
+    out.elements.push({ t: 'text', x, y: y + 78, size: 12.5, fill: colors.text, spans, preserve: true })
+    out.boxes.push({ role: 'head', x, y: y + 67, w: Math.min(w, used * 12.5 * MEASURE), h: 14 })
+  }
 }
