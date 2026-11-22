@@ -11,6 +11,7 @@ import { drawDumpPointers, drawMapArcs, mapLinks, railWidth, storyConnectors, AR
 import { unusualBand } from './unusual.js'
 import { tilesBand } from './tiles.js'
 import { memoryBand } from './memory.js'
+import { textBand } from './readable.js'
 
 export const ADVANCE = 0.6
 export const PROPORTIONS = { landscape: Math.SQRT2, portrait: 1 / Math.SQRT2, square: 1, tall: 0.5 }
@@ -468,10 +469,8 @@ function legendBlocks(plan, colors, shadeOf, parentShade, notes) {
   return blocks
 }
 
-/** Splits blocks into at most `columns` columns no taller than needed; headings stay with their first entry. */
-export function flowColumns(blocks, columns, minHeight = 0) {
-  const total = blocks.reduce((s, b) => s + b.h, 0)
-  const target = Math.max(minHeight, total / columns)
+/** Greedy fill: a new column whenever the next block (a heading with its first entry) would pass `target`. */
+function fillColumns(blocks, target, columns) {
   const cols = [[]]
   let height = 0
   blocks.forEach((block, i) => {
@@ -484,8 +483,41 @@ export function flowColumns(blocks, columns, minHeight = 0) {
     cols[cols.length - 1].push(block)
     height += block.h
   })
-  const heights = cols.map(col => col.reduce((s, b) => s + b.h, 0))
-  return { cols, height: Math.max(0, ...heights) }
+  return cols
+}
+
+const columnHeight = col => col.reduce((s, b) => s + b.h, 0)
+
+/**
+ * Splits blocks into at most `columns` columns no taller than needed;
+ * headings stay with their first entry. Columns may be as tall as
+ * `minHeight`; beyond that, the shortest height at which the blocks fit
+ * the columns is found by bisection, so blocks of very different heights
+ * do not pile up in the last column.
+ */
+export function flowColumns(blocks, columns, minHeight = 0) {
+  const total = blocks.reduce((s, b) => s + b.h, 0)
+  let low = Math.max(minHeight, total / columns)
+  let cols = fillColumns(blocks, low, columns)
+  let height = Math.max(0, ...cols.map(columnHeight))
+  if (columns > 1 && height > low + 0.5) {
+    // The greedy fill overflowed into the last column: look for the lowest
+    // target whose tallest column is lowest
+    let high = height
+    for (let step = 0; step < 24 && high - low > 1; step++) {
+      const mid = (low + high) / 2
+      const trial = fillColumns(blocks, mid, columns)
+      const h = Math.max(0, ...trial.map(columnHeight))
+      if (h <= mid + 0.5 || h < height) {
+        if (h < height) {
+          cols = trial
+          height = h
+        }
+        high = Math.min(mid, h)
+      } else low = mid
+    }
+  }
+  return { cols, height: Math.max(0, ...cols.map(columnHeight)) }
 }
 
 // --- Overview strip -------------------------------------------------------
@@ -662,13 +694,14 @@ function notesFor(plan) {
  * @param {string} input.fileName
  * @param {import('./palette.js').PosterColors} input.colors
  * @param {'landscape'|'portrait'|'square'|'tall'} [input.proportion]
- * @param {{ pointers?: boolean, unusual?: boolean, tiles?: boolean, memory?: boolean }} [input.show]
+ * @param {{ pointers?: boolean, unusual?: boolean, tiles?: boolean, memory?: boolean, text?: boolean }} [input.show]
  *        which of the extra drawings to include (each only when there is data for it); all on by default
  * @param {string} [input.date]
+ * @param {Array<{ type: string, h: number, draw: Function }>} [input.legend]  for tests: legend blocks to lay out instead of the plan's
  */
-export function layoutPoster({ plan, bytes, analysis, fileName, colors, proportion = 'landscape', date = '', show }) {
+export function layoutPoster({ plan, bytes, analysis, fileName, colors, proportion = 'landscape', date = '', show, legend }) {
   const ratio = PROPORTIONS[proportion] || PROPORTIONS.landscape
-  const flags = { pointers: true, unusual: true, tiles: true, memory: true }
+  const flags = { pointers: true, unusual: true, tiles: true, memory: true, text: true }
   if (show && typeof show === 'object') for (const key of Object.keys(flags)) if (show[key] === false) flags[key] = false
   const shades = assignShades(plan.labels)
   const shadeOf = label => colors.shades[label.kind][shades[label.number - 1] ?? 0]
@@ -676,7 +709,7 @@ export function layoutPoster({ plan, bytes, analysis, fileName, colors, proporti
   const parentShade = parent => colors.shades[parent.kind][(parentShadeIdx[plan.parents.indexOf(parent)] ?? 0)]
 
   const geometry = hexGeometry(plan)
-  const blocks = legendBlocks(plan, colors, shadeOf, parentShade, notesFor(plan))
+  const blocks = Array.isArray(legend) ? legend : legendBlocks(plan, colors, shadeOf, parentShade, notesFor(plan))
 
   // The extra drawings, each only with its flag on and data to show
   const image = analysis?.image && typeof analysis.image === 'object' ? analysis.image : null
@@ -685,45 +718,71 @@ export function layoutPoster({ plan, bytes, analysis, fileName, colors, proporti
   // switches would draw something
   const allLinks = mapLinks(plan)
   const allRail = plan.items.length ? railWidth(plan, entryAt) : 0
+  // The numbered box on the poster for a label number, and the smallest drawn box that holds an offset
+  const labelByNumber = new Map(plan.labels.map(l => [l.number, l]))
+  const drawn = new Set(plan.labels.filter(l => fieldRuns(plan.items, plan.bytesPerRow, l.start, l.end).length).map(l => l.number))
+  const tabFor = number => {
+    const label = labelByNumber.get(number)
+    return label && drawn.has(number) ? { number, color: shadeOf(label) } : null
+  }
+  const boxAt = offset => {
+    let found = null
+    for (const l of plan.labels) {
+      if (offset >= l.start && offset < l.end && drawn.has(l.number) && (!found || l.end - l.start < found.end - found.start)) found = l
+    }
+    return found ? tabFor(found.number) : null
+  }
   const tilesAll = tilesBand({ analysis, bytes, colors })
-  const unusualAll = unusualBand({ analysis, colors, facts: tilesAll?.fact ? [tilesAll.fact] : [] })
+  const unusualAll = unusualBand({ analysis, colors, facts: tilesAll?.fact ? [tilesAll.fact] : [], boxAt })
   const memoryAll = memoryBand({ analysis, colors, fileSize: plan.size })
-  const available = { pointers: allLinks.length > 0 || allRail > 0, unusual: Boolean(unusualAll), tiles: Boolean(tilesAll), memory: Boolean(memoryAll) }
+  const textAll = textBand({ plan, bytes, colors, tabFor })
+  const available = { pointers: allLinks.length > 0 || allRail > 0, unusual: Boolean(unusualAll), tiles: Boolean(tilesAll), memory: Boolean(memoryAll), text: Boolean(textAll) }
   const links = flags.pointers ? allLinks : []
   const rail = flags.pointers ? allRail : 0
   const tiles = flags.tiles ? tilesAll : null
   // The tiles' caption already says how many sections are identical; the
   // unusual box repeats it only when the tiles are not drawn
-  const unusual = flags.unusual ? (tiles && tilesAll?.fact ? unusualBand({ analysis, colors }) || unusualAll : unusualAll) : null
+  const unusual = flags.unusual ? (tiles && tilesAll?.fact ? unusualBand({ analysis, colors, boxAt }) || unusualAll : unusualAll) : null
   const memory = flags.memory ? memoryAll : null
+  const text = flags.text ? textAll : null
 
   const facts = summaryFacts(analysis)
   const regions = (Array.isArray(analysis?.regions) ? analysis.regions : [])
     .filter(r => r && Number.isSafeInteger(r.offset) && r.offset >= 0 && r.offset < plan.size && r.length > 0)
     .map(r => ({ name: r.name, offset: r.offset, length: Math.min(r.length, plan.size - r.offset), kind: regionKindOf(r.kind) }))
-  const titleBand = { id: 'title', measure: () => (facts.length ? 84 : 62), draw: (x, y, w, out) => titleBlock({ x, y, w, out, fileName, analysis, plan, colors, facts }) }
+  const titleBand = { id: 'title', measure: w => titleHeight(facts, w), draw: (x, y, w, out) => titleBlock({ x, y, w, out, fileName, analysis, plan, colors, facts }) }
   const mapBand = { id: 'map', measure: () => stripHeight(links), draw: (x, y, w, out) => overviewStrip(plan, regions, colors, x, y, w, out, { links, entryOffset: entryAt }) }
   const pair = unusual && tiles ? pairBand(unusual, tiles) : null
   const pairTM = tiles && memory ? pairBand(tiles, memory) : null
   const headBand = pairBand(titleBand, mapBand, { share: 0.34, min: 1500 })
   const pairWidth = w => (w < PAIR_MIN ? w : Math.floor((w - PAIR_GAP) / 2))
-  const middle = paired => (paired === 'UT' ? [pair, memory] : paired === 'TM' ? [unusual, pairTM] : [unusual, tiles, memory]).filter(Boolean)
+  // The readable text comes right after the unusual box, unless it leads, just under the title
+  const middle = (paired, lead) => {
+    const after = lead ? [] : [text]
+    return (paired === 'UT' ? [pair, ...after, memory] : paired === 'TM' ? [unusual, ...after, pairTM] : [unusual, ...after, tiles, memory]).filter(Boolean)
+  }
   const stackHeight = (list, w) => list.reduce((s, b) => s + b.measure(w) + BAND_GAP, 0)
 
   // The arrangements tried. 'stack': every band across the page above the
   // body. 'side': the dump on the left at full height, and on its right a
   // column with the bands above the legend; the file map either heads that
   // column or spans the page under the title.
+  // The readable text either leads (right under the title) or follows the
+  // unusual box; leading is tried first, so it wins a tie
   const specs = []
-  for (const paired of [false, ...(pair ? ['UT'] : []), ...(pairTM ? ['TM'] : [])]) {
-    specs.push({ layout: 'stack', paired, top: [titleBand, mapBand, ...middle(paired)], side: [] })
-    if (plan.items.length) {
-      specs.push({ layout: 'side', paired, top: [titleBand], side: [mapBand, ...middle(paired)] })
-      specs.push({ layout: 'side-map', paired, top: [titleBand, mapBand], side: middle(paired) })
-      // The title beside the file map: one header band instead of two
-      specs.push({ layout: 'side-head', paired, top: [headBand], side: middle(paired) })
-      // The column on the left with the title at its head, the dump on the right
-      specs.push({ layout: 'left', paired, top: [], side: [titleBand, mapBand, ...middle(paired)] })
+  for (const lead of text ? [true, false] : [false]) {
+    const first = lead ? [text] : []
+    for (const paired of [false, ...(pair ? ['UT'] : []), ...(pairTM ? ['TM'] : [])]) {
+      const mid = middle(paired, lead)
+      specs.push({ layout: 'stack', paired, lead, top: [titleBand, ...first, mapBand, ...mid], side: [] })
+      if (plan.items.length) {
+        specs.push({ layout: 'side', paired, lead, top: [titleBand, ...first], side: [mapBand, ...mid] })
+        specs.push({ layout: 'side-map', paired, lead, top: [titleBand, ...first, mapBand], side: mid })
+        // The title beside the file map: one header band instead of two
+        specs.push({ layout: 'side-head', paired, lead, top: [headBand, ...first], side: mid })
+        // The column on the left with the title at its head, the dump on the right
+        specs.push({ layout: 'left', paired, lead, top: [], side: [titleBand, ...first, mapBand, ...mid] })
+      }
     }
   }
 
@@ -896,7 +955,8 @@ export function layoutPoster({ plan, bytes, analysis, fileName, colors, proporti
       stacked: Boolean(best.stacked),
       columns: best.flow.cols.length,
       dumpColumns: best.dumpColumns,
-      bands: [titleBand, mapBand, unusual, tiles, memory].filter(Boolean).map(b => b.id)
+      textLeads: Boolean(text && best.spec.lead),
+      bands: [titleBand, mapBand, unusual, text, tiles, memory].filter(Boolean).map(b => b.id)
     },
     available
   }
@@ -950,6 +1010,43 @@ function splitItems(items, n) {
   return out
 }
 
+const FACT_F = 12.5
+const FACT_LINE = 17
+const FACT_SEP = '   '
+
+/**
+ * The summary facts broken into lines of width `w`: each fact whole on one
+ * line; only a value longer than a line by itself is cut.
+ * @returns {Array<Array<{ label: string, value: string }>>}
+ */
+export function factLines(facts, w) {
+  const budget = charsFor(w, FACT_F)
+  const lines = []
+  let line = []
+  let used = 0
+  for (const fact of facts) {
+    const label = truncate(fact.label, Math.max(1, Math.floor(budget / 2)))
+    const piece = textLength(label + ' ' + fact.value)
+    const sep = line.length ? FACT_SEP.length : 0
+    if (line.length && used + sep + piece > budget) {
+      lines.push(line)
+      line = []
+      used = 0
+    }
+    const value = piece > budget ? truncate(fact.value, Math.max(1, budget - textLength(label) - 1)) : fact.value
+    line.push({ label, value })
+    used += (line.length > 1 ? FACT_SEP.length : 0) + textLength(label + ' ' + value)
+  }
+  if (line.length) lines.push(line)
+  return lines
+}
+
+/** Height of the title block at width `w`. */
+function titleHeight(facts, w) {
+  if (!facts.length) return 62
+  return 84 + (factLines(facts, w).length - 1) * FACT_LINE
+}
+
 function titleBlock({ x, y, w, out, fileName, analysis, plan, colors, facts }) {
   const title = truncate(fileName || 'untitled', charsFor(w, 30))
   out.elements.push({ t: 'text', x, y: y + 26, size: 30, weight: 700, fill: colors.accent, text: title, cls: 'title' })
@@ -959,27 +1056,17 @@ function titleBlock({ x, y, w, out, fileName, analysis, plan, colors, facts }) {
   const subtitle = truncate(`${formatName} · ${sizeText}`, charsFor(w, 15))
   out.elements.push({ t: 'text', x, y: y + 54, size: 15, fill: colors.text, text: subtitle })
   out.boxes.push({ role: 'head', x, y: y + 41, w: textWidth(subtitle, 15), h: 17 })
-  if (!facts.length) return
-  const budget = charsFor(w, 12.5)
-  const spans = []
-  let used = 0
-  for (const fact of facts) {
-    const sep = spans.length ? '   ' : ''
-    const piece = textLength(sep + fact.label + ' ' + fact.value)
-    if (used + piece > budget) {
-      const room = budget - used - textLength(sep + fact.label + ' ')
-      if (room >= 6) {
-        spans.push({ text: sep + fact.label + ' ', fill: colors.faint })
-        spans.push({ text: truncate(fact.value, room), fill: colors.text })
-      }
-      break
-    }
-    spans.push({ text: sep + fact.label + ' ', fill: colors.faint })
-    spans.push({ text: fact.value, fill: colors.text })
-    used += piece
-  }
-  if (spans.length) {
-    out.elements.push({ t: 'text', x, y: y + 78, size: 12.5, fill: colors.text, spans, preserve: true })
-    out.boxes.push({ role: 'head', x, y: y + 67, w: Math.min(w, used * 12.5 * MEASURE), h: 14 })
-  }
+  factLines(facts, w).forEach((line, i) => {
+    const spans = []
+    let used = 0
+    line.forEach((fact, k) => {
+      const sep = k ? FACT_SEP : ''
+      spans.push({ text: sep + fact.label + ' ', fill: colors.faint })
+      spans.push({ text: fact.value, fill: colors.text })
+      used += textLength(sep + fact.label + ' ' + fact.value)
+    })
+    const baseline = y + 78 + i * FACT_LINE
+    out.elements.push({ t: 'text', x, y: baseline, size: FACT_F, fill: colors.text, spans, preserve: true })
+    out.boxes.push({ role: 'head', x, y: baseline - 11, w: Math.min(w, used * FACT_F * MEASURE), h: 14 })
+  })
 }

@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { DEFAULT_SHOW, TALL_MAX_ROWS, describePlan, hasPointerField, includeChoices, posterOptions, shownPlaces } from './controls.js'
+import { DEFAULT_SHOW, INCLUDE, TALL_MAX_ROWS, describePlan, hasPointerField, includeChoices, posterOptions, shownPlaces } from './controls.js'
 import { buildPoster } from './render.js'
 import { planPoster } from './plan.js'
 
@@ -19,7 +19,7 @@ test('the options handed to buildPoster, per mode', () => {
     style: 'dark',
     proportion: 'landscape',
     pins: [{ offset: 0x3c, length: 4 }],
-    show: { pointers: true, unusual: true, tiles: true, memory: true }
+    show: { pointers: true, unusual: true, text: true, tiles: true, memory: true }
   })
   assert.equal('maxRows' in tour, false, 'the planner keeps its default row limit')
 
@@ -46,11 +46,11 @@ test('a tall page asks for more rows; switches that are off reach the layout', (
     range: null,
     fieldIndex: 0,
     pins: [],
-    show: { pointers: false, unusual: true, tiles: false, memory: true }
+    show: { pointers: false, unusual: true, text: false, tiles: false, memory: true }
   })
   assert.equal(tall.proportion, 'tall')
   assert.equal(tall.maxRows, TALL_MAX_ROWS)
-  assert.deepEqual(tall.show, { pointers: false, unusual: true, tiles: false, memory: true })
+  assert.deepEqual(tall.show, { pointers: false, unusual: true, text: false, tiles: false, memory: true })
   assert.deepEqual(posterOptions({ options: OPTIONS, mode: 'tour', pins: [] }).show, DEFAULT_SHOW, 'missing switches are on')
 })
 
@@ -65,8 +65,9 @@ test('the tall row limit reaches the planner through buildPoster', () => {
 })
 
 test('which Include switches apply to a file', () => {
-  assert.deepEqual(includeChoices(null), { pointers: false, unusual: false, tiles: false, memory: false })
-  assert.deepEqual(includeChoices({ fields: [], regions: [], unusual: [], image: null }), { pointers: false, unusual: false, tiles: false, memory: false })
+  const none = { pointers: false, unusual: false, text: false, tiles: false, memory: false }
+  assert.deepEqual(includeChoices(null), none)
+  assert.deepEqual(includeChoices({ fields: [], regions: [], unusual: [], image: null }), none)
   const nested = [{ name: 'a', offset: 0, length: 8, children: [{ name: 'b', offset: 0, length: 4, children: [{ name: 'c', offset: 0, length: 4, target: 0x200 }] }] }]
   assert.equal(includeChoices({ fields: nested }).pointers, true)
   assert.equal(includeChoices({ fields: [{ offset: 0, length: 4, target: -1 }] }).pointers, false)
@@ -75,8 +76,14 @@ test('which Include switches apply to a file', () => {
   assert.equal(includeChoices({ regions: regions(2) }).tiles, false)
   assert.equal(includeChoices({ regions: regions(3) }).tiles, true)
   const image = { addressLabel: 'RVA', entry: null, sections: [{ name: '.text', offset: 0x400, size: 0x200, address: 0x1000, memSize: 0x200, flags: 'r-x' }], total: 1 }
-  assert.deepEqual(includeChoices({ image, regions: [] }), { pointers: false, unusual: false, tiles: true, memory: true })
+  // One section: tiles, but no disk-versus-memory diagram
+  assert.deepEqual(includeChoices({ image, regions: [] }), { pointers: false, unusual: false, text: false, tiles: true, memory: false })
   assert.equal(includeChoices({ image: { sections: [] } }).memory, false)
+  const two = { ...image, sections: [...image.sections, { name: '.data', offset: 0x600, size: 0x200, address: 0x2000, memSize: 0x200, flags: 'rw-' }] }
+  assert.equal(includeChoices({ image: two }).memory, true)
+  // A second section that takes no memory does not count
+  const bss = { ...image, sections: [...image.sections, { name: '.x', offset: 0x600, size: 0x200, address: 0x2000, memSize: 0, flags: 'r--' }] }
+  assert.equal(includeChoices({ image: bss }).memory, false)
 })
 
 test('the pointer search is bounded', () => {
@@ -141,4 +148,20 @@ test('the summary uses the planner\'s count of pinned fields, and leaves pins ou
   assert.match(describePlan(tour, { pins }), /The pinned field is labelled\.$/)
   const start = planPoster({ analysis: { fields }, size: bytes.length, bytes, mode: 'auto', pins })
   assert.doesNotMatch(describePlan(start, { pins }), /pinned/)
+})
+
+test('the readable text switch is offered only when the poster can draw it', () => {
+  assert.ok(INCLUDE.some(([id, text]) => id === 'text' && text === 'Readable text'))
+  assert.equal(DEFAULT_SHOW.text, true)
+  // The order of the switches follows the order of the bands
+  assert.deepEqual(INCLUDE.map(([id]) => id), ['pointers', 'unusual', 'text', 'tiles', 'memory'])
+  // Text is the planner's finding, so it is never guessed from the analysis
+  assert.equal(includeChoices({ regions: [{ name: 'Text', offset: 0, length: 100, kind: 'string' }] }).text, false)
+  assert.equal(posterOptions({ options: OPTIONS, mode: 'tour', pins: [], show: { ...DEFAULT_SHOW, text: false } }).show.text, false)
+  // buildPoster reports it: no text in the plan, nothing available
+  const bytes = new TextEncoder().encode('hello world, this is some readable text. '.repeat(10))
+  const analysis = { formatName: 'Text', fields: [], regions: [], summary: [], warnings: [] }
+  const { scene, plan } = buildPoster({ bytes, analysis, fileName: 'x.txt', options: posterOptions({ options: OPTIONS, mode: 'tour', pins: [], show: DEFAULT_SHOW }) })
+  // Before the planner marks text (and for files without any) there is nothing to switch
+  assert.equal(scene.available.text, Array.isArray(plan.texts) && plan.texts.length > 0)
 })

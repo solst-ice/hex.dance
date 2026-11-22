@@ -56,6 +56,9 @@ export function memoryBand({ analysis, colors, fileSize }) {
   const image = analysis?.image
   const info = memoryParts(image, fileSize)
   if (!info || fileSize <= 0) return null
+  // One section is one wedge that says nothing: draw the diagram only when
+  // at least two sections take up memory
+  if (info.parts.filter(p => p.memSize > 0).length < 2) return null
   const label = image.addressLabel === 'RVA' ? 'RVA ' : ''
   const entry = image.entry || null
   const entryAddress = whole(entry?.address)
