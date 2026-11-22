@@ -258,7 +258,8 @@
 .sx-pin {
   border: 1px dashed color-mix(in srgb, var(--neon-pink) 60%, transparent);
   border-radius: 4px;
-  color: var(--neon-pink);
+  /* The row's own text colour, which keeps its contrast on hover and active tints */
+  color: inherit;
   flex: none;
   font-size: 0.75em;
   line-height: 1.3;
